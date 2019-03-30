@@ -1,0 +1,31 @@
+{
+  "parser": "babel-eslint",
+  "extends": "formio",
+  "parserOptions": {
+    "ecmaVersion": 2015,
+    "sourceType": "module"
+  },
+  "env": {
+    "browser": true,
+    "es6": true,
+    "node": true,
+    "mocha": true
+  },
+  "rules": {
+    "max-len": [
+      "warn",
+      {
+        "code": 123,
+        "ignoreComments": true,
+        "ignoreStrings": true
+      }
+    ],
+    "no-console": "off",
+    "prefer-const": "error",
+    "prefer-template": "error",
+    "object-curly-spacing": [
+      "error",
+      "always"
+    ]
+  }
+}
