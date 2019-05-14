@@ -1,14 +1,14 @@
-import baseEditForm from '../base/Base.form';
-
-import FileEditFile from './editForm/File.edit.file';
-
-export default function(...extend) {
-  return baseEditForm([
-    {
-      label: 'File',
-      key: 'file',
-      weight: 5,
-      components: FileEditFile
-    }
-  ], ...extend);
-}
+define([
+    '../base/Base.form',
+    './editForm/File.edit.file'
+], function (baseEditForm, FileEditFile) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([{
+                label: 'File',
+                key: 'file',
+                weight: 5,
+                components: FileEditFile
+            }], ...extend);
+    };
+});

@@ -1,6 +1,10 @@
-import InputWidget from './InputWidget';
-import CalendarWidget from './CalendarWidget';
-export default {
-  input: InputWidget,
-  calendar: CalendarWidget
-};
+define([
+    './InputWidget',
+    './CalendarWidget'
+], function (InputWidget, CalendarWidget) {
+    'use strict';
+    return {
+        input: InputWidget,
+        calendar: CalendarWidget
+    };
+});

@@ -1,2 +1,10 @@
-export comp1 from './comp1';
-export comp2 from './comp2';
+define([
+    './comp1',
+    './comp2'
+], function (comp1, comp2) {
+    'use strict';
+    return {
+        comp1,
+        comp2
+    };
+});

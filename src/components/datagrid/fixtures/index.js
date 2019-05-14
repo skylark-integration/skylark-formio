@@ -1,4 +1,14 @@
-export comp1 from './comp1';
-export comp2 from './comp2';
-export { default as withDefValue } from './comp-with-def-value.json';
-export { default as withRowGroupsAndDefValue } from './comp-row-groups-with-def-value.json';
+define([
+    './comp1',
+    './comp2',
+    './comp-with-def-value.json',
+    './comp-row-groups-with-def-value.json'
+], function (comp1, comp2, withDefValue, withRowGroupsAndDefValue) {
+    'use strict';
+    return {
+        comp1,
+        comp2,
+        withDefValue,
+        withRowGroupsAndDefValue
+    };
+});

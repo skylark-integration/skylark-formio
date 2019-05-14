@@ -1,12 +1,12 @@
-import baseEditForm from '../base/Base.form';
-
-import ResourceEditDisplay from './editForm/Resource.edit.display';
-
-export default function(...extend) {
-  return baseEditForm([
-    {
-      key: 'display',
-      components: ResourceEditDisplay
-    }
-  ], ...extend);
-}
+define([
+    '../base/Base.form',
+    './editForm/Resource.edit.display'
+], function (baseEditForm, ResourceEditDisplay) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([{
+                key: 'display',
+                components: ResourceEditDisplay
+            }], ...extend);
+    };
+});

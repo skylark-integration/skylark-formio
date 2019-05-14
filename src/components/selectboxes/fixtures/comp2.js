@@ -1,52 +1,53 @@
-export default {
-  'conditional': {
-    'eq': '',
-    'when': null,
-    'show': ''
-  },
-  'type': 'selectboxes',
-  'validate': {
-    'required': true
-  },
-  'persistent': true,
-  'protected': false,
-  'inline': false,
-  'values': [
-    {
-      'label': 'Red',
-      'value': 'red'
-    },
-    {
-      'label': 'Blue',
-      'value': 'blue'
-    },
-    {
-      'label': 'Green',
-      'value': 'green'
-    },
-    {
-      'label': 'Orange',
-      'value': 'orange'
-    },
-    {
-      'label': 'Yellow',
-      'value': 'yellow'
-    },
-    {
-      'label': 'Purple',
-      'value': 'purple'
-    },
-    {
-      'label': 'Black',
-      'value': 'black'
-    },
-    {
-      'label': 'White',
-      'value': 'white'
-    }
-  ],
-  'key': 'favoriteColors',
-  'label': 'Favorite Colors',
-  'tableView': true,
-  'input': true
-};
+define(function () {
+    'use strict';
+    return {
+        'conditional': {
+            'eq': '',
+            'when': null,
+            'show': ''
+        },
+        'type': 'selectboxes',
+        'validate': { 'required': true },
+        'persistent': true,
+        'protected': false,
+        'inline': false,
+        'values': [
+            {
+                'label': 'Red',
+                'value': 'red'
+            },
+            {
+                'label': 'Blue',
+                'value': 'blue'
+            },
+            {
+                'label': 'Green',
+                'value': 'green'
+            },
+            {
+                'label': 'Orange',
+                'value': 'orange'
+            },
+            {
+                'label': 'Yellow',
+                'value': 'yellow'
+            },
+            {
+                'label': 'Purple',
+                'value': 'purple'
+            },
+            {
+                'label': 'Black',
+                'value': 'black'
+            },
+            {
+                'label': 'White',
+                'value': 'white'
+            }
+        ],
+        'key': 'favoriteColors',
+        'label': 'Favorite Colors',
+        'tableView': true,
+        'input': true
+    };
+});

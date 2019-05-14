@@ -1,17 +1,19 @@
-import baseEditForm from '../base/Base.form';
-
-import NumberEditData from './editForm/Number.edit.data';
-import NumberEditValidation from './editForm/Number.edit.validation';
-
-export default function(...extend) {
-  return baseEditForm([
-    {
-      key: 'data',
-      components: NumberEditData
-    },
-    {
-      key: 'validation',
-      components: NumberEditValidation
-    }
-  ], ...extend);
-}
+define([
+    '../base/Base.form',
+    './editForm/Number.edit.data',
+    './editForm/Number.edit.validation'
+], function (baseEditForm, NumberEditData, NumberEditValidation) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([
+            {
+                key: 'data',
+                components: NumberEditData
+            },
+            {
+                key: 'validation',
+                components: NumberEditValidation
+            }
+        ], ...extend);
+    };
+});

@@ -1,12 +1,12 @@
-import baseEditForm from '../base/Base.form';
-
-import TagsEditDisplay from './editForm/Tags.edit.display';
-
-export default function(...extend) {
-  return baseEditForm([
-    {
-      key: 'display',
-      components: TagsEditDisplay
-    }
-  ], ...extend);
-}
+define([
+    '../base/Base.form',
+    './editForm/Tags.edit.display'
+], function (baseEditForm, TagsEditDisplay) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([{
+                key: 'display',
+                components: TagsEditDisplay
+            }], ...extend);
+    };
+});

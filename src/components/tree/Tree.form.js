@@ -1,5 +1,6 @@
-import baseEditForm from '../base/Base.form';
-
-export default function(...extend) {
-  return baseEditForm(...extend);
-}
+define(['../base/Base.form'], function (baseEditForm) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm(...extend);
+    };
+});

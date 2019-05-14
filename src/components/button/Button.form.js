@@ -1,12 +1,12 @@
-import baseEditForm from '../base/Base.form';
-
-import ButtonEditDisplay from './editForm/Button.edit.display';
-
-export default function(...extend) {
-  return baseEditForm([
-    {
-      key: 'display',
-      components: ButtonEditDisplay
-    }
-  ], ...extend);
-}
+define([
+    '../base/Base.form',
+    './editForm/Button.edit.display'
+], function (baseEditForm, ButtonEditDisplay) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([{
+                key: 'display',
+                components: ButtonEditDisplay
+            }], ...extend);
+    };
+});

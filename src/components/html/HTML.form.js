@@ -1,17 +1,19 @@
-import baseEditForm from '../base/Base.form';
-
-import HTMLEditDisplay from './editForm/HTML.edit.display';
-import HTMLEditLogic from './editForm/HTML.edit.logic';
-
-export default function(...extend) {
-  return baseEditForm([
-    {
-      key: 'display',
-      components: HTMLEditDisplay,
-    },
-    {
-      key: 'logic',
-      components: HTMLEditLogic,
-    },
-  ], ...extend);
-}
+define([
+    '../base/Base.form',
+    './editForm/HTML.edit.display',
+    './editForm/HTML.edit.logic'
+], function (baseEditForm, HTMLEditDisplay, HTMLEditLogic) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([
+            {
+                key: 'display',
+                components: HTMLEditDisplay
+            },
+            {
+                key: 'logic',
+                components: HTMLEditLogic
+            }
+        ], ...extend);
+    };
+});

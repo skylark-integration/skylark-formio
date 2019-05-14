@@ -1,4 +1,14 @@
-export comp1 from './comp1';
-export comp2 from './comp2';
-export comp3 from './comp3';
-export comp4 from './comp4';
+define([
+    './comp1',
+    './comp2',
+    './comp3',
+    './comp3'
+], function (comp1, comp2, comp3, comp4) {
+    'use strict';
+    return {
+        comp1,
+        comp2,
+        comp3,
+        comp4
+    };
+});

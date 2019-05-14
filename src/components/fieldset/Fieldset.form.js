@@ -1,10 +1,12 @@
-import nestedComponentForm from '../nested/NestedComponent.form';
-import FieldSetEditDisplay from './editForm/Fieldset.edit.display';
-export default function(...extend) {
-  return nestedComponentForm([
-    {
-      key: 'display',
-      components: FieldSetEditDisplay
-    }
-  ], ...extend);
-}
+define([
+    '../nested/NestedComponent.form',
+    './editForm/Fieldset.edit.display'
+], function (nestedComponentForm, FieldSetEditDisplay) {
+    'use strict';
+    return function (...extend) {
+        return nestedComponentForm([{
+                key: 'display',
+                components: FieldSetEditDisplay
+            }], ...extend);
+    };
+});

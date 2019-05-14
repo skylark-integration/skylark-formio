@@ -1,16 +1,19 @@
-import baseEditForm from '../base/Base.form';
-import CurrencyEditDisplay from './editForm/Currency.edit.display';
-import CurrencyEditData from './editForm/Currency.edit.data';
-
-export default function(...extend) {
-  return baseEditForm([
-    {
-      key: 'display',
-      components: CurrencyEditDisplay
-    },
-    {
-      key: 'data',
-      components: CurrencyEditData
-    }
-  ], ...extend);
-}
+define([
+    '../base/Base.form',
+    './editForm/Currency.edit.display',
+    './editForm/Currency.edit.data'
+], function (baseEditForm, CurrencyEditDisplay, CurrencyEditData) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([
+            {
+                key: 'display',
+                components: CurrencyEditDisplay
+            },
+            {
+                key: 'data',
+                components: CurrencyEditData
+            }
+        ], ...extend);
+    };
+});

@@ -1,5 +1,7 @@
-import * as FormioUtils from './utils';
-if (typeof global === 'object') {
-  global.FormioUtils = FormioUtils;
-}
-export default FormioUtils;
+define(['./utils'], function (FormioUtils) {
+    'use strict';
+    if (typeof global === 'object') {
+        global.FormioUtils = FormioUtils;
+    }
+    return FormioUtils;
+});

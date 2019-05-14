@@ -1,1 +1,4 @@
-export { default as comp1 } from './comp1';
+define(function () {
+    'use strict';
+    return { default };
+});

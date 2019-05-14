@@ -1,17 +1,19 @@
-import nestedComponentForm from '../nested/NestedComponent.form';
-
-import PanelEditDisplay from './editForm/Panel.edit.display';
-import PanelEditConditional from './editForm/Panel.edit.conditional';
-
-export default function(...extend) {
-  return nestedComponentForm([
-    {
-      key: 'display',
-      components: PanelEditDisplay
-    },
-    {
-      key: 'conditional',
-      components: PanelEditConditional,
-    }
-  ], ...extend);
-}
+define([
+    '../nested/NestedComponent.form',
+    './editForm/Panel.edit.display',
+    './editForm/Panel.edit.conditional'
+], function (nestedComponentForm, PanelEditDisplay, PanelEditConditional) {
+    'use strict';
+    return function (...extend) {
+        return nestedComponentForm([
+            {
+                key: 'display',
+                components: PanelEditDisplay
+            },
+            {
+                key: 'conditional',
+                components: PanelEditConditional
+            }
+        ], ...extend);
+    };
+});

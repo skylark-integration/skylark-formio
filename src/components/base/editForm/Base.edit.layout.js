@@ -1,6 +1,4 @@
-export default [
-  {
-    type: 'textfield',
-
-  }
-];
+define(function () {
+    'use strict';
+    return [{ type: 'textfield' }];
+});

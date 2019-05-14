@@ -1,3 +1,12 @@
-export comp1 from './comp1';
-export comp2 from './comp2';
-export multipleWithDraggableRows from './multipleWithDraggableRows';
+define([
+    './comp1',
+    './comp2',
+    './multipleWithDraggableRows'
+], function (comp1, comp2, multipleWithDraggableRows) {
+    'use strict';
+    return {
+        comp1,
+        comp2,
+        multipleWithDraggableRows
+    };
+});

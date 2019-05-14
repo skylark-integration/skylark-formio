@@ -1,22 +1,24 @@
-import baseEditForm from '../base/Base.form';
-
-import TextFieldEditData from './editForm/TextField.edit.data';
-import TextFieldEditDisplay from './editForm/TextField.edit.display';
-import TextFieldEditValidation from './editForm/TextField.edit.validation';
-
-export default function(...extend) {
-  return baseEditForm([
-    {
-      key: 'display',
-      components: TextFieldEditDisplay
-    },
-    {
-      key: 'data',
-      components: TextFieldEditData
-    },
-    {
-      key: 'validation',
-      components: TextFieldEditValidation
-    }
-  ], ...extend);
-}
+define([
+    '../base/Base.form',
+    './editForm/TextField.edit.data',
+    './editForm/TextField.edit.display',
+    './editForm/TextField.edit.validation'
+], function (baseEditForm, TextFieldEditData, TextFieldEditDisplay, TextFieldEditValidation) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([
+            {
+                key: 'display',
+                components: TextFieldEditDisplay
+            },
+            {
+                key: 'data',
+                components: TextFieldEditData
+            },
+            {
+                key: 'validation',
+                components: TextFieldEditValidation
+            }
+        ], ...extend);
+    };
+});

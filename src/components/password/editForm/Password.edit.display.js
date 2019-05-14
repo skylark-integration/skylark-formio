@@ -1,10 +1,13 @@
-export default [
-  {
-    key: 'inputMask',
-    ignore: true
-  },
-  {
-    key: 'allowMultipleMasks',
-    ignore: true
-  }
-];
+define(function () {
+    'use strict';
+    return [
+        {
+            key: 'inputMask',
+            ignore: true
+        },
+        {
+            key: 'allowMultipleMasks',
+            ignore: true
+        }
+    ];
+});

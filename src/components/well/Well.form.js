@@ -1,4 +1,6 @@
-import nestedComponentForm from '../nested/NestedComponent.form';
-export default function(...extend) {
-  return nestedComponentForm(...extend);
-}
+define(['../nested/NestedComponent.form'], function (nestedComponentForm) {
+    'use strict';
+    return function (...extend) {
+        return nestedComponentForm(...extend);
+    };
+});

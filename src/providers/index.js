@@ -1,1 +1,4 @@
-export storage from './storage';
+define(['./storage'], function (storage) {
+    'use strict';
+    return storage;
+});

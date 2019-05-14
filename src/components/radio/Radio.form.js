@@ -1,12 +1,12 @@
-import baseEditForm from '../base/Base.form';
-
-import RadioEditDisplay from './editForm/Radio.edit.display';
-
-export default function(...extend) {
-  return baseEditForm([
-    {
-      key: 'display',
-      components: RadioEditDisplay
-    }
-  ], ...extend);
-}
+define([
+    '../base/Base.form',
+    './editForm/Radio.edit.display'
+], function (baseEditForm, RadioEditDisplay) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([{
+                key: 'display',
+                components: RadioEditDisplay
+            }], ...extend);
+    };
+});

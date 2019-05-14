@@ -1,12 +1,12 @@
-import baseEditForm from '../base/Base.form';
-
-import SignatureEditDisplay from './editForm/Signature.edit.display';
-
-export default function(...extend) {
-  return baseEditForm([
-    {
-      key: 'display',
-      components: SignatureEditDisplay
-    }
-  ], ...extend);
-}
+define([
+    '../base/Base.form',
+    './editForm/Signature.edit.display'
+], function (baseEditForm, SignatureEditDisplay) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([{
+                key: 'display',
+                components: SignatureEditDisplay
+            }], ...extend);
+    };
+});

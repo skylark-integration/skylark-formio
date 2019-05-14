@@ -1,17 +1,19 @@
-import baseEditForm from '../base/Base.form';
-
-import DayEditDisplay from './editForm/Day.edit.display';
-import DayEditValidation from './editForm/Day.edit.validation';
-
-export default function(...extend) {
-  return baseEditForm([
-    {
-      key: 'display',
-      components: DayEditDisplay
-    },
-    {
-      key: 'validation',
-      components: DayEditValidation
-    }
-  ], ...extend);
-}
+define([
+    '../base/Base.form',
+    './editForm/Day.edit.display',
+    './editForm/Day.edit.validation'
+], function (baseEditForm, DayEditDisplay, DayEditValidation) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([
+            {
+                key: 'display',
+                components: DayEditDisplay
+            },
+            {
+                key: 'validation',
+                components: DayEditValidation
+            }
+        ], ...extend);
+    };
+});

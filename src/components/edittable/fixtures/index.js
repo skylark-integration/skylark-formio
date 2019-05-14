@@ -1,1 +1,4 @@
-export { default as basic } from './basic';
+define(function () {
+    'use strict';
+    return { default };
+});
