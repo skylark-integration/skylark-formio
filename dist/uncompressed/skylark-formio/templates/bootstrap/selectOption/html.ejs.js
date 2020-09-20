@@ -1,0 +1,1 @@
+define([], function() { return "{% if (ctx.selected) { %}{{ctx.t(ctx.option.label)}}{% } %}\n"; });

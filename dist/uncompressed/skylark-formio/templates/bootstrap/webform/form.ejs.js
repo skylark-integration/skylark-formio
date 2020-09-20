@@ -1,0 +1,1 @@
+define([], function() { return "<div class=\"{{ctx.classes}}\" ref=\"webform\" novalidate>{{ctx.children}}</div>\n"; });

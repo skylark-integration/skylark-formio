@@ -1,0 +1,1 @@
+{"version":3,"sources":["components/textarea/fixtures/values.js"],"names":["define"],"mappings":";;;;;;;AAAAA,OAAO,WACH,aACA,OACI,cACA","file":"../../../../components/textarea/fixtures/values.js","sourcesContent":["define(function () {\n    'use strict';\n    return [\n        '<p>asdf</p>',\n        '<div>foobar</div>'\n    ];\n});"]}

@@ -1,0 +1,1 @@
+{"version":3,"sources":["components/url/editForm/Url.edit.data.js"],"names":["define","key","ignore"],"mappings":";;;;;;;AAAAA,OAAO,WACH,aACA,QACQC,IAAK,OACLC,QAAQ","file":"../../../../components/url/editForm/Url.edit.data.js","sourcesContent":["define(function () {\n    'use strict';\n    return [{\n            key: 'case',\n            ignore: true\n        }];\n});"]}

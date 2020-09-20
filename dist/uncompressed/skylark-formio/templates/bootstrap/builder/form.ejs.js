@@ -1,0 +1,1 @@
+define([], function() { return "<div class=\"formio builder row formbuilder\">\n  <div class=\"col-xs-4 col-sm-3 col-md-2 formcomponents\">\n    {{ctx.sidebar}}\n  </div>\n  <div class=\"col-xs-8 col-sm-9 col-md-10 formarea\" ref=\"form\">\n    {{ctx.form}}\n  </div>\n</div>\n"; });

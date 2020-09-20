@@ -1,0 +1,1 @@
+{"version":3,"sources":["templates/bootstrap/map/form.ejs.js"],"names":["define"],"mappings":";;;;;;;AAAAA,UAAW,WAAa,MAAO","file":"../../../../templates/bootstrap/map/form.ejs.js","sourcesContent":["define([], function() { return \"<div id=\\\"{{ctx.mapId}}\\\" style=\\\"min-height: 300px; height: calc(100vh - 600px);\\\" ref=\\\"gmapElement\\\"></div>\\n\"; });"]}

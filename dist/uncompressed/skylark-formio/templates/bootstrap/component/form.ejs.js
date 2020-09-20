@@ -1,0 +1,1 @@
+define([], function() { return "<div id=\"{{ctx.id}}\" class=\"{{ctx.classes}}\"{% if (ctx.styles) { %} styles=\"{{ctx.styles}}\"{% } %} ref=\"component\">\n  {% if (ctx.visible) { %}\n  {{ctx.children}}\n  <div ref=\"messageContainer\" class=\"formio-errors invalid-feedback\"></div>\n  {% } %}\n</div>\n"; });

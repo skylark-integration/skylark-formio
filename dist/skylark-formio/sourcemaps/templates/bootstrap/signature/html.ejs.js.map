@@ -1,0 +1,1 @@
+{"version":3,"sources":["templates/bootstrap/signature/html.ejs.js"],"names":["define"],"mappings":";;;;;;;AAAAA,UAAW,WAAa,MAAO","file":"../../../../templates/bootstrap/signature/html.ejs.js","sourcesContent":["define([], function() { return \"<img style=\\\"width: 100%;\\\" ref=\\\"signatureImage\\\">\\n\"; });"]}

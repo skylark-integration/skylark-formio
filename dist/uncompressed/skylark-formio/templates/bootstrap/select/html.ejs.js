@@ -1,0 +1,1 @@
+define([], function() { return "<div ref=\"value\">{% if (ctx.value) { %}{{ ctx.self.itemValueForHTMLMode(ctx.value) }}{% } else { %}-{% } %}</div>\n"; });

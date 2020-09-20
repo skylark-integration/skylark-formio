@@ -1,0 +1,475 @@
+define([
+    'skylark-lodash',
+    '../field/Field',
+    '../../Components',
+    '../../../vendors/getify/npo'
+], function (_, Field, Components, NativePromise) {
+    'use strict';
+    'use strict';
+    return class NestedComponent extends Field {
+        static schema(...extend) {
+            return Field.schema({ tree: false }, ...extend);
+        }
+        constructor(component, options, data) {
+            super(component, options, data);
+            this.type = 'components';
+            this._collapsed = !!this.component.collapsed;
+        }
+        get defaultSchema() {
+            return NestedComponent.schema();
+        }
+        get schema() {
+            const schema = super.schema;
+            const components = _.uniqBy(this.getComponents(), 'component.key');
+            schema.components = _.map(components, 'schema');
+            return schema;
+        }
+        get collapsed() {
+            return this._collapsed;
+        }
+        set collapsed(value) {
+            this._collapsed = value;
+            this.redraw();
+        }
+        set visible(value) {
+            super.visible = value;
+            const isVisible = this.visible;
+            const forceShow = this.options.show && this.options.show[this.component.key];
+            const forceHide = this.options.hide && this.options.hide[this.component.key];
+            this.components.forEach(component => {
+                const conditionallyVisible = component.conditionallyVisible();
+                if (forceShow || conditionallyVisible) {
+                    component.visible = true;
+                } else if (forceHide || !isVisible || !conditionallyVisible) {
+                    component.visible = false;
+                }
+                if (!component.visible) {
+                    component.error = '';
+                }
+                component.parentVisible = isVisible;
+            });
+        }
+        get visible() {
+            return super.visible;
+        }
+        set parentVisible(value) {
+            super.parentVisible = value;
+            this.components.forEach(component => {
+                component.parentVisible = this.visible;
+            });
+        }
+        get parentVisible() {
+            return super.parentVisible;
+        }
+        get disabled() {
+            return super.disabled;
+        }
+        set disabled(disabled) {
+            super.disabled = disabled;
+            this.components.forEach(component => component.parentDisabled = disabled);
+        }
+        set parentDisabled(value) {
+            super.parentDisabled = value;
+            this.components.forEach(component => {
+                component.parentDisabled = this.disabled;
+            });
+        }
+        get parentDisabled() {
+            return super.parentDisabled;
+        }
+        get ready() {
+            return NativePromise.all(this.getComponents().map(component => component.ready));
+        }
+        get currentForm() {
+            return super.currentForm;
+        }
+        set currentForm(instance) {
+            super.currentForm = instance;
+            this.getComponents().forEach(component => {
+                component.currentForm = instance;
+            });
+        }
+        get rowIndex() {
+            return this._rowIndex;
+        }
+        set rowIndex(value) {
+            this._rowIndex = value;
+            this.eachComponent(component => {
+                component.rowIndex = value;
+            });
+        }
+        componentContext() {
+            return this._data;
+        }
+        get data() {
+            return this._data;
+        }
+        set data(value) {
+            this._data = value;
+            this.eachComponent(component => {
+                component.data = this.componentContext(component);
+            });
+        }
+        getComponents() {
+            return this.components || [];
+        }
+        everyComponent(fn) {
+            const components = this.getComponents();
+            _.each(components, (component, index) => {
+                if (fn(component, components, index) === false) {
+                    return false;
+                }
+                if (typeof component.everyComponent === 'function') {
+                    if (component.everyComponent(fn) === false) {
+                        return false;
+                    }
+                }
+            });
+        }
+        hasComponent(component) {
+            let result = false;
+            this.everyComponent(comp => {
+                if (comp === component) {
+                    result = true;
+                    return false;
+                }
+            });
+            return result;
+        }
+        flattenComponents() {
+            const result = {};
+            this.everyComponent(component => {
+                result[component.component.flattenAs || component.key] = component;
+            });
+            return result;
+        }
+        eachComponent(fn) {
+            _.each(this.getComponents(), (component, index) => {
+                if (fn(component, index) === false) {
+                    return false;
+                }
+            });
+        }
+        getComponent(path, fn) {
+            path = Array.isArray(path) ? path : [path];
+            const [key, ...remainingPath] = path;
+            let comp = null;
+            if (!_.isString(key)) {
+                return comp;
+            }
+            this.everyComponent((component, components) => {
+                if (component.component.key === key) {
+                    comp = component;
+                    if (remainingPath.length > 0 && 'getComponent' in component) {
+                        comp = component.getComponent(remainingPath, fn);
+                    } else if (fn) {
+                        fn(component, components);
+                    }
+                    return false;
+                }
+            });
+            return comp;
+        }
+        getComponentById(id, fn) {
+            let comp = null;
+            this.everyComponent((component, components) => {
+                if (component.id === id) {
+                    comp = component;
+                    if (fn) {
+                        fn(component, components);
+                    }
+                    return false;
+                }
+            });
+            return comp;
+        }
+        createComponent(component, options, data, before) {
+            if (!component) {
+                return;
+            }
+            options = options || this.options;
+            data = data || this.data;
+            options.parent = this;
+            options.parentVisible = this.visible;
+            options.root = this.root || this;
+            options.skipInit = true;
+            const comp = Components.create(component, options, data, true);
+            if (component.key) {
+                let thisPath = this;
+                while (thisPath && !thisPath.allowData && thisPath.parent) {
+                    thisPath = thisPath.parent;
+                }
+                comp.path = thisPath.path ? `${ thisPath.path }.` : '';
+                comp.path += component.key;
+            }
+            comp.init();
+            if (component.internal) {
+                return comp;
+            }
+            if (before) {
+                const index = _.findIndex(this.components, { id: before.id });
+                if (index !== -1) {
+                    this.components.splice(index, 0, comp);
+                } else {
+                    this.components.push(comp);
+                }
+            } else {
+                this.components.push(comp);
+            }
+            return comp;
+        }
+        getContainer() {
+            return this.element;
+        }
+        get componentComponents() {
+            return this.component.components || [];
+        }
+        get nestedKey() {
+            return `nested-${ this.key }`;
+        }
+        get templateName() {
+            return 'container';
+        }
+        init() {
+            this.components = this.components || [];
+            this.addComponents();
+            return super.init();
+        }
+        addComponents(data, options) {
+            data = data || this.data;
+            options = options || this.options;
+            if (options.components) {
+                this.components = options.components;
+            } else {
+                const components = this.hook('addComponents', this.componentComponents, this) || [];
+                components.forEach(component => this.addComponent(component, data));
+            }
+        }
+        addComponent(component, data, before, noAdd) {
+            data = data || this.data;
+            component = this.hook('addComponent', component, data, before, noAdd);
+            const comp = this.createComponent(component, this.options, data, before ? before : null);
+            if (noAdd) {
+                return comp;
+            }
+            return comp;
+        }
+        render(children) {
+            return super.render(children || this.renderTemplate(this.templateName, {
+                children: this.renderComponents(),
+                nestedKey: this.nestedKey,
+                collapsed: this.collapsed
+            }));
+        }
+        renderComponents(components) {
+            components = components || this.getComponents();
+            const children = components.map(component => component.render());
+            return this.renderTemplate('components', {
+                children,
+                components
+            });
+        }
+        attach(element) {
+            const superPromise = super.attach(element);
+            this.loadRefs(element, {
+                header: 'single',
+                collapsed: this.collapsed,
+                [this.nestedKey]: 'single'
+            });
+            let childPromise = NativePromise.resolve();
+            if (this.refs[this.nestedKey]) {
+                childPromise = this.attachComponents(this.refs[this.nestedKey]);
+            }
+            if (this.component.collapsible && this.refs.header) {
+                this.addEventListener(this.refs.header, 'click', () => {
+                    this.collapsed = !this.collapsed;
+                });
+            }
+            return NativePromise.all([
+                superPromise,
+                childPromise
+            ]);
+        }
+        attachComponents(element, components, container) {
+            components = components || this.components;
+            container = container || this.component.components;
+            element = this.hook('attachComponents', element, components, container, this);
+            if (!element) {
+                return new NativePromise(() => {
+                });
+            }
+            let index = 0;
+            const promises = [];
+            Array.prototype.slice.call(element.children).forEach(child => {
+                if (!child.getAttribute('data-noattach') && components[index]) {
+                    promises.push(components[index].attach(child));
+                    index++;
+                }
+            });
+            return NativePromise.all(promises);
+        }
+        removeComponent(component, components) {
+            components = components || this.components;
+            component.destroy();
+            _.remove(components, { id: component.id });
+        }
+        removeComponentByKey(key, fn) {
+            const comp = this.getComponent(key, (component, components) => {
+                this.removeComponent(component, components);
+                if (fn) {
+                    fn(component, components);
+                }
+            });
+            if (!comp) {
+                if (fn) {
+                    fn(null);
+                }
+                return null;
+            }
+        }
+        removeComponentById(id, fn) {
+            const comp = this.getComponentById(id, (component, components) => {
+                this.removeComponent(component, components);
+                if (fn) {
+                    fn(component, components);
+                }
+            });
+            if (!comp) {
+                if (fn) {
+                    fn(null);
+                }
+                return null;
+            }
+        }
+        updateValue(value, flags = {}) {
+            return this.components.reduce((changed, comp) => {
+                return comp.updateValue(null, flags) || changed;
+            }, super.updateValue(value, flags));
+        }
+        shouldSkipValidation(data, dirty, row) {
+            if (!this.component.input) {
+                return true;
+            } else {
+                return super.shouldSkipValidation(data, dirty, row);
+            }
+        }
+        checkData(data, flags, row, components) {
+            if (this.builderMode) {
+                return true;
+            }
+            data = data || this.rootValue;
+            flags = flags || {};
+            row = row || this.data;
+            components = components || this.getComponents();
+            return components.reduce((valid, comp) => {
+                return comp.checkData(data, flags, row) && valid;
+            }, super.checkData(data, flags, row));
+        }
+        checkConditions(data, flags, row) {
+            this.getComponents().forEach(comp => comp.checkConditions(data, flags, row));
+            return super.checkConditions(data, flags, row);
+        }
+        clearOnHide(show) {
+            super.clearOnHide(show);
+            if (this.component.clearOnHide) {
+                if (this.allowData && !this.hasValue()) {
+                    this.dataValue = this.defaultValue;
+                }
+                if (this.hasValue()) {
+                    this.restoreComponentsContext();
+                }
+            }
+            this.getComponents().forEach(component => component.clearOnHide(show));
+        }
+        restoreComponentsContext() {
+            this.getComponents().forEach(component => component.data = this.dataValue);
+        }
+        beforePage(next) {
+            return NativePromise.all(this.getComponents().map(comp => comp.beforePage(next)));
+        }
+        beforeSubmit() {
+            return NativePromise.all(this.getComponents().map(comp => comp.beforeSubmit()));
+        }
+        calculateValue(data, flags, row) {
+            if (!this.conditionallyVisible()) {
+                return false;
+            }
+            return this.getComponents().reduce((changed, comp) => comp.calculateValue(data, flags, row) || changed, super.calculateValue(data, flags, row));
+        }
+        isLastPage() {
+            return this.pages.length - 1 === this.page;
+        }
+        isValid(data, dirty) {
+            return this.getComponents().reduce((valid, comp) => comp.isValid(data, dirty) && valid, super.isValid(data, dirty));
+        }
+        checkValidity(data, dirty, row) {
+            if (!this.checkCondition(row, data)) {
+                this.setCustomValidity('');
+                return true;
+            }
+            return this.getComponents().reduce((check, comp) => comp.checkValidity(data, dirty, row) && check, super.checkValidity(data, dirty, row));
+        }
+        checkAsyncValidity(data, dirty, row) {
+            const promises = [super.checkAsyncValidity(data, dirty, row)];
+            this.eachComponent(component => promises.push(component.checkAsyncValidity(data, dirty, row)));
+            return NativePromise.all(promises).then(results => results.reduce((valid, result) => valid && result, true));
+        }
+        setPristine(pristine) {
+            super.setPristine(pristine);
+            this.getComponents().forEach(comp => comp.setPristine(pristine));
+        }
+        detach() {
+            this.components.forEach(component => {
+                component.detach();
+            });
+            super.detach();
+        }
+        destroy() {
+            this.destroyComponents();
+            super.destroy();
+        }
+        destroyComponents() {
+            const components = this.getComponents().slice();
+            components.forEach(comp => this.removeComponent(comp, this.components));
+            this.components = [];
+        }
+        get errors() {
+            const thisErrors = this.error ? [this.error] : [];
+            return this.getComponents().reduce((errors, comp) => errors.concat(comp.errors || []), thisErrors);
+        }
+        getValue() {
+            return this.data;
+        }
+        resetValue() {
+            this.getComponents().forEach(comp => comp.resetValue());
+            this.unset();
+            this.setPristine(true);
+        }
+        get dataReady() {
+            return NativePromise.all(this.getComponents().map(component => component.dataReady));
+        }
+        setNestedValue(component, value, flags = {}) {
+            component._data = this.componentContext(component);
+            if (component.type === 'button') {
+                return false;
+            }
+            if (component.type === 'components') {
+                return component.setValue(value, flags);
+            } else if (value && component.hasValue(value)) {
+                return component.setValue(_.get(value, component.key), flags);
+            } else if (!this.rootPristine || component.visible) {
+                flags.noValidate = !flags.dirty;
+                flags.resetValue = true;
+                return component.setValue(component.defaultValue, flags);
+            }
+        }
+        setValue(value, flags = {}) {
+            if (!value) {
+                return false;
+            }
+            return this.getComponents().reduce((changed, component) => {
+                return this.setNestedValue(component, value, flags, changed) || changed;
+            }, false);
+        }
+    };
+});

@@ -1,0 +1,1 @@
+define([], function() { return "<div class=\"card card-body bg-light\">\n  <div ref=\"{{ctx.nestedKey}}\">\n    {{ctx.children}}\n  </div>\n</div>\n"; });

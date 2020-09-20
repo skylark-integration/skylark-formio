@@ -1,0 +1,9 @@
+/**
+ * skylark-formio - A version of formio.js that ported to running on skylarkjs.
+ * @author Hudaokeji, Inc.
+ * @version v0.9.0
+ * @link https://github.com/skylark-integration/skylark-formio/
+ * @license MIT
+ */
+define(["./address/Address","./button/Button","./checkbox/Checkbox","./columns/Columns","./_classes/component/Component","./container/Container","./content/Content","./currency/Currency","./datagrid/DataGrid","./datamap/DataMap","./datetime/DateTime","./day/Day","./editgrid/EditGrid","./email/Email","./fieldset/Fieldset","./file/File","./form/Form","./hidden/Hidden","./_classes/input/Input","./_classes/multivalue/Multivalue","./_classes/field/Field","./html/HTML","./_classes/nested/NestedComponent","./_classes/nesteddata/NestedDataComponent","./_classes/nestedarray/NestedArrayComponent","./number/Number","./panel/Panel","./password/Password","./phonenumber/PhoneNumber","./radio/Radio","./recaptcha/ReCaptcha","./resource/Resource","./selectboxes/SelectBoxes","./select/Select","./signature/Signature","./survey/Survey","./table/Table","./tabs/Tabs","./tags/Tags","./textarea/TextArea","./textfield/TextField","./time/Time","./tree/Tree","./unknown/Unknown","./url/Url","./well/Well"],function(e,t,a,n,s,r,d,l,i,o,c,u,m,p,b,h,f,x,y,g,C,T,w,_,k,v,N,D,F,S,A,M,P,R,B,E,G,H,U,I,L,W,j,q,z,J){"use strict";return{address:e,base:s,component:s,button:t,checkbox:a,columns:n,container:r,content:d,currency:l,datagrid:i,datamap:o,datetime:c,day:u,editgrid:m,email:p,input:y,field:C,multivalue:g,fieldset:b,file:h,form:f,hidden:x,htmlelement:T,nested:w,nesteddata:_,nestedarray:k,number:v,panel:N,password:D,phoneNumber:F,radio:S,recaptcha:A,resource:M,select:R,selectboxes:P,signature:B,survey:E,table:G,tabs:H,tags:U,textarea:I,textfield:L,time:W,tree:j,unknown:q,url:z,well:J}});
+//# sourceMappingURL=../sourcemaps/components/index.js.map

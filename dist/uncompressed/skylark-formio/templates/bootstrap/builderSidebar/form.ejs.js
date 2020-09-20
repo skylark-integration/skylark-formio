@@ -1,0 +1,1 @@
+define([], function() { return "<div id=\"{{ctx.groupId}}\" class=\"accordion builder-sidebar{{ctx.scrollEnabled ? ' builder-sidebar_scroll' : ''}}\" ref=\"sidebar\">\n  {% ctx.groups.forEach(function(group) { %}\n    {{ group }}\n  {% }) %}\n</div>\n"; });

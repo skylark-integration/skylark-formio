@@ -1,0 +1,51 @@
+<div id="" class="field formio-component formio-component-form  formio-component-label-hidden" ref="component">
+  <div class="formio-form ui form" ref="webform" novalidate>
+    <div id="files" class="field form-group has-feedback formio-component formio-component-file formio-component-files " ref="component">
+      <label class="">
+        Files
+      </label>
+      <div class="ui celled list">
+        <div class="item">
+          <div class="ui grid">
+            <div class="one wide column"></div>
+            <div class="twelve wide column"><strong>File Name</strong></div>
+            <div class="three wide column"><strong>Size</strong></div>
+          </div>
+        </div>
+      </div>
+      <div class="fileSelector" ref="fileDrop">
+        <i class="fa fa-cloud-upload"></i> Drop files to attach,
+        or <a href="#" ref="fileBrowse" class="browse">browse</a>
+      </div>
+      <div ref="messageContainer"></div>
+    </div>
+    <div id="file" class="field form-group has-feedback formio-component formio-component-file formio-component-file formio-component-multiple  formio-component-label-hidden" ref="component">
+      <div>
+      </div>
+      <div class="fileSelector" ref="fileDrop">
+        <i class="fa fa-cloud-upload"></i> Drop files to attach,
+        <a href="#" ref="toggleCameraMode"><i class="fa fa-camera"></i> Use Camera,</a>
+        or <a href="#" ref="fileBrowse" class="browse">browse</a>
+      </div>
+      <div ref="messageContainer"></div>
+    </div>
+    <div id="formField" class="field form-group has-feedback formio-component formio-component-form formio-component-formField  formio-component-label-hidden" ref="component">
+      Loading...
+      <div ref="messageContainer"></div>
+    </div>
+    <div id="custom" class="field form-group has-feedback formio-component formio-component-custom formio-component-custom  formio-component-label-hidden" ref="component">
+      Unknown component: custom
+      <div ref="messageContainer"></div>
+    </div>
+    <div id="submit" class="field form-group has-feedback formio-component formio-component-button formio-component-submit  form-group" ref="component">
+      <button ref="button" class="ui button primary " name="data[submit]" type="submit" class="btn btn-primary btn-md" lang="en">
+        Submit
+      </button>
+      <div ref="buttonMessageContainer">
+        <span class="help-block" ref="buttonMessage"></span>
+      </div>
+      <div ref="messageContainer"></div>
+    </div>
+  </div>
+  <div ref="messageContainer"></div>
+</div>

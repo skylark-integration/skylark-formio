@@ -1,0 +1,1 @@
+define([], function() { return "<i ref=\"{{ctx.ref}}\" class=\"{{ctx.className}}\" style=\"{{ctx.styles}}\">{{ctx.content}}</i>\n"; });

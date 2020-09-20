@@ -1,0 +1,1 @@
+{"version":3,"sources":["components/tags/fixtures/values.js"],"names":["define"],"mappings":";;;;;;;AAAAA,OAAO,WACH,aACA,OACI,WAEI,IACA,IACA","file":"../../../../components/tags/fixtures/values.js","sourcesContent":["define(function () {\n    'use strict';\n    return [\n        'a, b, c',\n        [\n            'a',\n            'b',\n            'c'\n        ]\n    ];\n});"]}

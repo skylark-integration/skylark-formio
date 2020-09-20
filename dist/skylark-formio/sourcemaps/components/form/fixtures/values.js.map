@@ -1,0 +1,1 @@
+{"version":3,"sources":["components/form/fixtures/values.js"],"names":["define","data","foo"],"mappings":";;;;;;;AAAAA,OAAO,WACH,aACA,QAAUC,MAAQC,IAAK","file":"../../../../components/form/fixtures/values.js","sourcesContent":["define(function () {\n    'use strict';\n    return [{ data: { foo: 'bar' } }];\n});"]}

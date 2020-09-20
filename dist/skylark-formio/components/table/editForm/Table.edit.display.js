@@ -1,0 +1,9 @@
+/**
+ * skylark-formio - A version of formio.js that ported to running on skylarkjs.
+ * @author Hudaokeji, Inc.
+ * @version v0.9.0
+ * @link https://github.com/skylark-integration/skylark-formio/
+ * @license MIT
+ */
+define(function(){"use strict";return[{key:"labelPosition",ignore:!0},{key:"placeholder",ignore:!0},{key:"description",ignore:!0},{key:"hideLabel",ignore:!0},{key:"autofocus",ignore:!0},{key:"tooltip",ignore:!0},{key:"tabindex",ignore:!0},{key:"disabled",ignore:!0},{type:"number",label:"Number of Rows",key:"numRows",input:!0,weight:1,placeholder:"Number of Rows",tooltip:"Enter the number or rows that should be displayed by this table."},{type:"number",label:"Number of Columns",key:"numCols",input:!0,weight:2,placeholder:"Number of Columns",tooltip:"Enter the number or columns that should be displayed by this table."},{type:"checkbox",label:"Clone Row Components",key:"cloneRows",input:!0,weight:3,tooltip:'Check this if you would like to "clone" the first row of components to all additional empty rows of the table.'},{type:"select",label:"Cell Alignment",key:"cellAlignment",input:!0,tooltip:"Horizontal alignment for cells of the table.",dataSrc:"values",data:{values:[{label:"Left",value:"left"},{label:"Center",value:"center"},{label:"Right",value:"right"}]},defaultValue:"left",weight:3},{type:"checkbox",label:"Striped",key:"striped",tooltip:"This will stripe the table if checked.",input:!0,weight:701},{type:"checkbox",label:"Bordered",key:"bordered",input:!0,tooltip:"This will border the table if checked.",weight:702},{type:"checkbox",label:"Hover",key:"hover",input:!0,tooltip:"Highlight a row on hover.",weight:703},{type:"checkbox",label:"Condensed",key:"condensed",input:!0,tooltip:"Condense the size of the table.",weight:704}]});
+//# sourceMappingURL=../../../sourcemaps/components/table/editForm/Table.edit.display.js.map

@@ -1,0 +1,1 @@
+{"version":3,"sources":["templates/bootstrap/icon/form.ejs.js"],"names":["define"],"mappings":";;;;;;;AAAAA,UAAW,WAAa,MAAO","file":"../../../../templates/bootstrap/icon/form.ejs.js","sourcesContent":["define([], function() { return \"<i ref=\\\"{{ctx.ref}}\\\" class=\\\"{{ctx.className}}\\\" style=\\\"{{ctx.styles}}\\\">{{ctx.content}}</i>\\n\"; });"]}

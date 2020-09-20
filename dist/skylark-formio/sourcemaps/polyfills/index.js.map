@@ -1,0 +1,1 @@
+{"version":3,"sources":["polyfills/index.js"],"names":["define"],"mappings":";;;;;;;AAAAA,QACI,0BACA,qBACD,WACC","file":"../../polyfills/index.js","sourcesContent":["define([\n    './custom-event-polyfill',\n    './ElementPolyfill'\n], function () {\n    'use strict';\n});"]}

@@ -1,0 +1,1 @@
+{"version":3,"sources":["templates/bootstrap/builderComponent/index.js"],"names":["define","form"],"mappings":";;;;;;;AAAAA,QAAQ,cAAe,SAAUC,GAC7B,aACA,OAASA,KAAAA","file":"../../../../templates/bootstrap/builderComponent/index.js","sourcesContent":["define(['./form.ejs'], function (form) {\n    'use strict';\n    return { form };\n});"]}

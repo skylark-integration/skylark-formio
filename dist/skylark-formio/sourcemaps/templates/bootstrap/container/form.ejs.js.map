@@ -1,0 +1,1 @@
+{"version":3,"sources":["templates/bootstrap/container/form.ejs.js"],"names":["define"],"mappings":";;;;;;;AAAAA,UAAW,WAAa,MAAO","file":"../../../../templates/bootstrap/container/form.ejs.js","sourcesContent":["define([], function() { return \"<div ref=\\\"{{ctx.nestedKey}}\\\">\\n  {{ctx.children}}\\n</div>\\n\"; });"]}

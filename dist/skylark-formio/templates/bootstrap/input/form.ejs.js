@@ -1,0 +1,9 @@
+/**
+ * skylark-formio - A version of formio.js that ported to running on skylarkjs.
+ * @author Hudaokeji, Inc.
+ * @version v0.9.0
+ * @link https://github.com/skylark-integration/skylark-formio/
+ * @license MIT
+ */
+define([],function(){return'{% if (ctx.component.prefix || ctx.component.suffix) { %}\n<div class="input-group">\n{% } %}\n{% if (ctx.component.prefix) { %}\n<div class="input-group-prepend" ref="prefix">\n  <span class="input-group-text">\n    {{ctx.component.prefix}}\n  </span>\n</div>\n{% } %}\n<{{ctx.input.type}}\n  ref="{{ctx.input.ref ? ctx.input.ref : \'input\'}}"\n  {% for (var attr in ctx.input.attr) { %}\n  {{attr}}="{{ctx.input.attr[attr]}}"\n  {% } %}\n>{{ctx.input.content}}</{{ctx.input.type}}>\n{% if (ctx.component.showCharCount) { %}\n<span class="text-muted pull-right" ref="charcount"></span>\n{% } %}\n{% if (ctx.component.showWordCount) { %}\n<span class="text-muted pull-right" ref="wordcount"></span>\n{% } %}\n{% if (ctx.component.suffix) { %}\n<div class="input-group-append" ref="suffix">\n  <span class="input-group-text">\n    {{ctx.component.suffix}}\n  </span>\n</div>\n{% } %}\n{% if (ctx.component.prefix || ctx.component.suffix) { %}\n</div>\n{% } %}\n'});
+//# sourceMappingURL=../../../sourcemaps/templates/bootstrap/input/form.ejs.js.map

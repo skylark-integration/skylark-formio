@@ -1,0 +1,1 @@
+define([], function() { return "<div class=\"form-text {{ctx.level}}\">{{ctx.message}}</div>\n"; });

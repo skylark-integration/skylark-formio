@@ -10,8 +10,14 @@
   "homepage": "https://github.com/skylark-integration/skylark-formio/",
   "author": "Hudaokeji, Inc.",
   "scripts": {
-    "build": "sbundle build ."
+    "build": "slib build ."
   },
+  "files": [
+    "demo/",
+    "dist/",
+    "src/",
+    "skins/"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/skylark-integration/skylark-formio.git"
@@ -22,8 +28,38 @@
   "license": "MIT",
   "dependencies": {
     "skylark-langx": "git+https://github.com/skylarklangx/skylark-langx.git#master",
-    "skylark-utils-dom": "git+https://github.com/skylarkutils/skylark-utils-dom.git#master"
+    "skylark-jquery": "git+https://github.com/skylark-integration/skylark-jquery.git#master",
+    "skylark-textmask": "git+https://github.com/skylark-integration/skylark-textmask.git#master",
+    "skylark-moment": "git+https://github.com/skylark-integration/skylark-moment.git#master",
+    "skylark-dragula": "git+https://github.com/skylark-integration/skylark-dragula.git#master",
+    "skylark-popper": "git+https://github.com/skylark-integration/skylark-popper.git#master",
+    "skylark-i18next": "git+https://github.com/skylark-integration/skylark-i18next.git#master",
+    "skylark-lodash": "git+https://github.com/skylark-integration/skylark-lodash.git#master"
   },
+  "skylarkjs": {
+    "directories": {
+      "dependencies": "./node_modules"
+    },
+    "secondaries": {
+    },
+    "build": {
+      "prepare": {
+        "texttojs": [
+          "html",
+          "json",
+          "css",
+          "ejs"
+        ],
+        "jsxtojs": false,
+        "es6toamd": false,
+        "cjstoamd": false
+      },
+      "bundles": {
+        "all": true
+      }
+    }
+  },
+
   "engines": {
     "node": ">=0.10.1"
   }

@@ -1,0 +1,1 @@
+define([], function() { return "<div\n  class=\"drag-and-drop-alert alert alert-info no-drag\"\n  style=\"text-align:center;\"\n  role=\"alert\"\n  data-noattach=\"true\"\n  data-position=\"{{ctx.position}}\"\n>\n  {{ctx.t('Drag and Drop a form component')}}\n</div>\n"; });

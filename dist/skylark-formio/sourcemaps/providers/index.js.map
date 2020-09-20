@@ -1,0 +1,1 @@
+{"version":3,"sources":["providers/index.js"],"names":["define","Providers"],"mappings":";;;;;;;AAAAA,QAAQ,eAAgB,SAAUC,GAC9B,aACA,OAAOA","file":"../../providers/index.js","sourcesContent":["define(['./Providers'], function (Providers) {\n    'use strict';\n    return Providers;\n});"]}

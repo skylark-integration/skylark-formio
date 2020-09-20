@@ -1,0 +1,1 @@
+{"version":3,"sources":["components/email/fixtures/values.js"],"names":["define"],"mappings":";;;;;;;AAAAA,OAAO,WACH,aACA,OACI,oBACA","file":"../../../../components/email/fixtures/values.js","sourcesContent":["define(function () {\n    'use strict';\n    return [\n        'admin@example.com',\n        'test@example.com'\n    ];\n});"]}

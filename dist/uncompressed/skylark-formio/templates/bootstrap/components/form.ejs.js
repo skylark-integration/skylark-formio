@@ -1,0 +1,1 @@
+define([], function() { return "{{ ctx.children.join('') }}\n"; });

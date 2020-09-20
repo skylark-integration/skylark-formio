@@ -1,0 +1,1 @@
+{"version":3,"sources":["components/hidden/fixtures/values.js"],"names":["define"],"mappings":";;;;;;;AAAAA,OAAO,WACH,aACA,OACI,MACA","file":"../../../../components/hidden/fixtures/values.js","sourcesContent":["define(function () {\n    'use strict';\n    return [\n        'one',\n        1\n    ];\n});"]}

@@ -1,0 +1,1 @@
+define([], function() { return "<div class=\"builder-components drag-container formio-builder-{{ctx.type}}\" ref=\"{{ctx.key}}-container\">\n  {{ctx.html}}\n</div>\n"; });

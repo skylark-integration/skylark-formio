@@ -1,0 +1,9 @@
+/**
+ * skylark-formio - A version of formio.js that ported to running on skylarkjs.
+ * @author Hudaokeji, Inc.
+ * @version v0.9.0
+ * @link https://github.com/skylark-integration/skylark-formio/
+ * @license MIT
+ */
+define([],function(){var r=this&&this.__extends||function(r,e){for(var t in e)e.hasOwnProperty(t)&&(r[t]=e[t]);function n(){this.constructor=r}r.prototype=null===e?Object.create(e):(n.prototype=e.prototype,new n)},e=Object.prototype.hasOwnProperty;function t(r,t){return e.call(r,t)}function n(r){if(Array.isArray(r)){for(var e=new Array(r.length),n=0;n<e.length;n++)e[n]=""+n;return e}if(Object.keys)return Object.keys(r);e=[];for(var o in r)t(r,o)&&e.push(o);return e}function o(r){return-1===r.indexOf("/")&&-1===r.indexOf("~")?r:r.replace(/~/g,"~0").replace(/\//g,"~1")}function i(r,e){var n;for(var f in r)if(t(r,f)){if(r[f]===e)return o(f)+"/";if("object"==typeof r[f]&&""!=(n=i(r[f],e)))return o(f)+"/"+n}return""}return exports.hasOwnProperty=t,{PatchError:function(e){function t(r,t,n,o,i){e.call(this,r),this.message=r,this.name=t,this.index=n,this.operation=o,this.tree=i}return r(t,e),t}(Error),hasUndefined:function r(e){if(void 0===e)return!0;if(e)if(Array.isArray(e)){for(var t=0,o=e.length;t<o;t++)if(r(e[t]))return!0}else if("object"==typeof e){var i=n(e),f=i.length;for(t=0;t<f;t++)if(r(e[i[t]]))return!0}return!1},getPath:function(r,e){if(r===e)return"/";var t=i(r,e);if(""===t)throw new Error("Object not found in root");return"/"+t},unescapePathComponent:function(r){return r.replace(/~1/g,"/").replace(/~0/g,"~")},escapePathComponent:o,isInteger:function(r){for(var e,t=0,n=r.length;t<n;){if(!((e=r.charCodeAt(t))>=48&&e<=57))return!1;t++}return!0},_objectKeys:n,_deepClone:function(r){switch(typeof r){case"object":return JSON.parse(JSON.stringify(r));case"undefined":return null;default:return r}},_getPathRecursive:i}});
+//# sourceMappingURL=../../sourcemaps/vendors/fast-json-patch/helpers.js.map

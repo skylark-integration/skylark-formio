@@ -1,0 +1,1 @@
+{"version":3,"sources":["templates/bootstrap/loading/form.ejs.js"],"names":["define"],"mappings":";;;;;;;AAAAA,UAAW,WAAa,MAAO","file":"../../../../templates/bootstrap/loading/form.ejs.js","sourcesContent":["define([], function() { return \"Loading...\\n\"; });"]}

@@ -1,0 +1,1 @@
+{"version":3,"sources":["components/checkbox/fixtures/values.js"],"names":["define"],"mappings":";;;;;;;AAAAA,OAAO,WACH,aACA,QACI,GACA","file":"../../../../components/checkbox/fixtures/values.js","sourcesContent":["define(function () {\n    'use strict';\n    return [\n        true,\n        false\n    ];\n});"]}
