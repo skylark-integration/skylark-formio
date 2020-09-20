@@ -2,7 +2,7 @@ define([
     './vendors/getify/npo',
     './vendors/fetch-ponyfill/fetch',
     './EventEmitter',
-    '../vendors/browser-cookies/cookies',
+    './vendors/browser-cookies/cookies',
     './providers/index',
     "skylark-lodash",
     './utils/utils',

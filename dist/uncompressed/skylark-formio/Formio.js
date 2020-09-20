@@ -2,11 +2,11 @@ define([
     './vendors/getify/npo',
     './vendors/fetch-ponyfill/fetch',
     './EventEmitter',
-    '../vendors/browser-cookies/cookies',
+    './vendors/browser-cookies/cookies',
     './providers/index',
     "skylark-lodash",
     './utils/utils',
-    '../vendors/jwt-decode/decode',
+    './vendors/jwt-decode/decode',
     './polyfills/index'
 ], function (NativePromise, fetchPonyfill, EventEmitter, cookies, Providers, _ , utils, jwtDecode) {
     'use strict';

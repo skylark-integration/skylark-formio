@@ -5,7 +5,7 @@ define([
     './utils/utils'
 ], function (NativePromise, Formio, Webform, a) {
     'use strict';
-    return class PDF extends Webform {
+    class PDF extends Webform {
         constructor(element, options) {
             super(element, options);
             this.components = [];
@@ -231,4 +231,7 @@ define([
             Formio.forms[eventData.formId].emit(`iframe-${ eventData.name }`, eventData.data);
         }
     });
+
+
+    return PDF;
 });

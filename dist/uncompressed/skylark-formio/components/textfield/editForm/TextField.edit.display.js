@@ -1,5 +1,5 @@
 define([
-    '../../../widgets',
+    '../../../widgets/index',
     'skylark-lodash'
 ], function (Widgets, _) {
     'use strict';

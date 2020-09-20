@@ -1,5 +1,5 @@
 define([
-    '.',
+    './index',
     './address/Address.form',
     './button/Button.form',
     './checkbox/Checkbox.form',

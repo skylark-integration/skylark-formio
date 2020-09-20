@@ -29987,7 +29987,7 @@ define('skylark-formio/EventEmitter',[
         }
     };
 });
-define('vendors/browser-cookies/cookies',[],function(){
+define('skylark-formio/vendors/browser-cookies/cookies',[],function(){
   var exports = {
 
   };
@@ -31396,7 +31396,7 @@ define('skylark-formio/Formio',[
     './vendors/getify/npo',
     './vendors/fetch-ponyfill/fetch',
     './EventEmitter',
-    '../vendors/browser-cookies/cookies',
+    './vendors/browser-cookies/cookies',
     './providers/index',
     "skylark-lodash",
     './utils/utils',

@@ -13,7 +13,6 @@ define([],function(){
     function hasOwnProperty(obj, key) {
         return _hasOwnProperty.call(obj, key);
     }
-    exports.hasOwnProperty = hasOwnProperty;
     function _objectKeys(obj) {
         if (Array.isArray(obj)) {
             var keys = new Array(obj.length);
@@ -151,6 +150,7 @@ define([],function(){
     }(Error));
 
     return {
+        hasOwnProperty,
         PatchError,
         hasUndefined,
         getPath,

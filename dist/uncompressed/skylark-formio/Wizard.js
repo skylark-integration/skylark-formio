@@ -6,7 +6,7 @@ define([
     './utils/utils'
 ], function (NativePromise, _, Webform, Formio, a) {
     'use strict';
-    return class Wizard extends Webform {
+    class Wizard extends Webform {
         constructor() {
             let element, options;
             if (arguments[0] instanceof HTMLElement || arguments[1]) {
@@ -538,4 +538,6 @@ define([
     Wizard.setBaseUrl = Formio.setBaseUrl;
     Wizard.setApiUrl = Formio.setApiUrl;
     Wizard.setAppUrl = Formio.setAppUrl;
+
+    return Wizard;
 });

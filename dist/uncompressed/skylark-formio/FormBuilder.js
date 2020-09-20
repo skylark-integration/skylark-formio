@@ -1,10 +1,11 @@
 define([
     './Formio',
-    './builders',
+    './builders/index',
     './Form'
 ], function (Formio, Builders, Form) {
     'use strict';
-    return class FormBuilder extends Form {
+
+    class FormBuilder extends Form {
         constructor(element, form, options) {
             form = form || {};
             options = options || {};
@@ -18,9 +19,13 @@ define([
             }
         }
     };
+
     FormBuilder.options = {};
     Formio.builder = (...args) => {
         return new FormBuilder(...args).ready;
     };
-    Formio.FormBuilder = FormBuilder;
+    
+
+    return Formio.FormBuilder = FormBuilder;
+
 });

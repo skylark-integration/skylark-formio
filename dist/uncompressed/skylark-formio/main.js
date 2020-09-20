@@ -1,6 +1,7 @@
 define([
 	"./Formio",
 	"./Form",
+	"./FormBuilder",
 	"./Webform",
 	"./WebformBuilder",
 	"./PDF",
@@ -8,6 +9,6 @@ define([
 	"./Wizard",
 	"./WizardBuilder"
 
-],function(){
-	
+],function(Formio){
+	return Formio;
 });

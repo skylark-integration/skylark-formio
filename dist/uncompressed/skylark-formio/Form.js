@@ -7,7 +7,8 @@ define([
     './vendors/getify/npo'
 ], function (Element, Formio, Displays, templates, FormioUtils, NativePromise) {
     'use strict';
-    return class Form extends Element {
+    
+    class Form extends Element {
         constructor(...args) {
             let options = args[0] instanceof HTMLElement ? args[2] : args[1];
             if (Formio.options && Formio.options.form) {
@@ -203,5 +204,6 @@ define([
     Formio.createForm = (...args) => {
         return new Form(...args).ready;
     };
-    Formio.Form = Form;
+    
+    return Formio.Form = Form;
 });

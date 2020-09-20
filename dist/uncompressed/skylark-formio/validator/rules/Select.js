@@ -1,13 +1,12 @@
 define([
+    "./Rule",
     '../../utils/utils',
     '../../vendors/getify/npo',
-    'fetch-ponyfill',
+    '../../vendors/fetch-ponyfill/fetch',
     'skylark-lodash'
-], function (a, NativePromise, fetchPonyfill, _) {
-    'use strict';
+], function (Rule,a, NativePromise, fetchPonyfill, _) {
     const {fetch, Headers, Request} = fetchPonyfill({ Promise: NativePromise });
-    const Rule = require('./Rule');
-    module.exports = class Select extends Rule {
+    class Select extends Rule {
         check(value, data, row, async) {
             if (!value || _.isEmpty(value)) {
                 return true;
@@ -63,4 +62,6 @@ define([
         }
     };
     Select.prototype.defaultMessage = '{{field}} contains an invalid selection';
+
+    return Select;
 });

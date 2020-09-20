@@ -1,7 +1,9 @@
-define(['skylark-lodash'], function (_) {
+define([
+    'skylark-lodash',
+    './Rule'
+], function (_, Rule) {
     'use strict';
-    const Rule = require('./Rule');
-    module.exports = class Max extends Rule {
+    class Max extends Rule {
         check(value) {
             const max = parseFloat(this.settings.limit);
             if (Number.isNaN(max) || !_.isNumber(value)) {
@@ -11,4 +13,7 @@ define(['skylark-lodash'], function (_) {
         }
     };
     Max.prototype.defaultMessage = '{{field}} cannot be greater than {{settings.limit}}.';
+
+
+    return Max;
 });

@@ -1,10 +1,12 @@
 define([
     './_classes/component/Component',
-    './_classes/nested/NestedComponent',
+//    './_classes/nested/NestedComponent',
     'skylark-lodash'
-], function (Component, NestedComponent, _) {
+], function (Component, 
+    //NestedComponent, 
+    _) {
     'use strict';
-    return class Components {
+     class Components {
         static get components() {
             if (!Components._components) {
                 Components._components = {};
@@ -31,11 +33,13 @@ define([
             if (component.type && Components.components.hasOwnProperty(component.type)) {
                 comp = new Components.components[component.type](component, options, data);
             } else if (Array.isArray(component.components)) {
-                comp = new NestedComponent(component, options, data);
+                comp = new Components.NestedComponent(component, options, data);
             } else {
                 comp = new Component(component, options, data);
             }
             return comp;
         }
     };
+
+    return Components;
 });

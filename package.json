@@ -30,6 +30,7 @@
     "skylark-langx": "git+https://github.com/skylarklangx/skylark-langx.git#master",
     "skylark-jquery": "git+https://github.com/skylark-integration/skylark-jquery.git#master",
     "skylark-textmask": "git+https://github.com/skylark-integration/skylark-textmask.git#master",
+    "skylark-bootstrap3": "git+https://github.com/skylark-integration/skylark-bootstrap3.git#master",
     "skylark-moment": "git+https://github.com/skylark-integration/skylark-moment.git#master",
     "skylark-dragula": "git+https://github.com/skylark-integration/skylark-dragula.git#master",
     "skylark-popper": "git+https://github.com/skylark-integration/skylark-popper.git#master",
@@ -40,8 +41,7 @@
     "directories": {
       "dependencies": "./node_modules"
     },
-    "secondaries": {
-    },
+    "secondaries": {},
     "build": {
       "prepare": {
         "texttojs": [
@@ -59,7 +59,6 @@
       }
     }
   },
-
   "engines": {
     "node": ">=0.10.1"
   }

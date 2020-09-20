@@ -4,7 +4,7 @@ define([
     '../_classes/nestedarray/NestedArrayComponent',
     '../_classes/component/Component',
     '../../utils/utils',
-    './templates'
+    './templates/index'
 ], function (_,  NestedArrayComponent, Component, a, templates) {
     'use strict';
 

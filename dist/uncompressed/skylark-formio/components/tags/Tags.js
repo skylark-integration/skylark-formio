@@ -1,8 +1,9 @@
 define([
     '../_classes/input/Input',
-    'choices.js'
+ //   'choices.js'
 ], function (Input, Choices) {
     'use strict';
+    //TODO: lwf
     return class TagsComponent extends Input {
         static schema(...extend) {
             return Input.schema({
