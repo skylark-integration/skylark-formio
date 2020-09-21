@@ -808,9 +808,6 @@ define([
         form: null,
         submission: null
     };
-    const instance = new ValidationChecker();
-    return {
-        instance,
-        ValidationChecker
-    };
+    const instance = ValidationChecker.instance = new ValidationChecker();
+    return  ValidationChecker.instance;
 });

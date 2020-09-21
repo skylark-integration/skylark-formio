@@ -327,9 +327,9 @@ requirejs.config({
 // require(["module/name", ...], function(params){ ... });
 //require(["skylark-threejs-editor-all"],function() {
   require(["skylark-domx/query"], function ($) {
-      require(["skylark-formio"], function (Formio) {
+      require(["skylark-formio"], function (formios) {
           if (window.initPage) {
-              window.initPage($,Formio);
+              window.initPage($,formios);
           }
       });
   });

@@ -431,7 +431,7 @@ define([
         get schema() {
             const schema = utils.fastCloneDeep(_.omit(this._form, ['components']));
             schema.components = [];
-            this.undefined(component => schema.components.push(component.schema));
+            this.eachComponent(component => schema.components.push(component.schema));
             return schema;
         }
         mergeData(_this, _that) {

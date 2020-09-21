@@ -54,7 +54,7 @@ define([
                 this.decimalSeparator = override.decimalSeparator;
                 this.delimiter = override.delimiter;
             }
-            this.numberMask = this.undefined();
+            this.numberMask = this.createNumberMask();
         }
         createNumberMask() {
             return maskAddons.createNumberMask({

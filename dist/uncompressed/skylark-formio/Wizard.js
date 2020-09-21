@@ -503,7 +503,7 @@ define([
             }
         }
         checkValidity(data, dirty, row, currentPageOnly) {
-            if (!this.undefined(row, data)) {
+            if (!this.checkCondition(row, data)) {
                 this.setCustomValidity('');
                 return true;
             }
