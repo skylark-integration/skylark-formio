@@ -1,0 +1,1 @@
+define([], function() { return "<div class=\"text-muted text-center p-2\">{{ ctx.t(ctx.component.title) }}</div>\n"; });

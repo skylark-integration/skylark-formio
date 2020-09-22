@@ -86,6 +86,395 @@
 
 })(function(define,require) {
 
+define('skylark-formio/vendors/kraaden/autocomplete',[],function(){
+  /*
+   * https://github.com/kraaden/autocomplete
+   * Copyright (c) 2016 Denys Krasnoshchok
+   * MIT License
+   */
+  function autocomplete(settings) {
+      // just an alias to minimize JS file size
+      var doc = document;
+      var container = doc.createElement("div");
+      var containerStyle = container.style;
+      var userAgent = navigator.userAgent;
+      var mobileFirefox = userAgent.indexOf("Firefox") !== -1 && userAgent.indexOf("Mobile") !== -1;
+      var debounceWaitMs = settings.debounceWaitMs || 0;
+      var preventSubmit = settings.preventSubmit || false;
+      // 'keyup' event will not be fired on Mobile Firefox, so we have to use 'input' event instead
+      var keyUpEventName = mobileFirefox ? "input" : "keyup";
+      var items = [];
+      var inputValue = "";
+      var minLen = 2;
+      var showOnFocus = settings.showOnFocus;
+      var selected;
+      var keypressCounter = 0;
+      var debounceTimer;
+      if (settings.minLength !== undefined) {
+          minLen = settings.minLength;
+      }
+      if (!settings.input) {
+          throw new Error("input undefined");
+      }
+      var input = settings.input;
+      container.className = "autocomplete " + (settings.className || "");
+      // IOS implementation for fixed positioning has many bugs, so we will use absolute positioning
+      containerStyle.position = "absolute";
+      /**
+       * Detach the container from DOM
+       */
+      function detach() {
+          var parent = container.parentNode;
+          if (parent) {
+              parent.removeChild(container);
+          }
+      }
+      /**
+       * Clear debouncing timer if assigned
+       */
+      function clearDebounceTimer() {
+          if (debounceTimer) {
+              window.clearTimeout(debounceTimer);
+          }
+      }
+      /**
+       * Attach the container to DOM
+       */
+      function attach() {
+          if (!container.parentNode) {
+              doc.body.appendChild(container);
+          }
+      }
+      /**
+       * Check if container for autocomplete is displayed
+       */
+      function containerDisplayed() {
+          return !!container.parentNode;
+      }
+      /**
+       * Clear autocomplete state and hide container
+       */
+      function clear() {
+          // prevent the update call if there are pending AJAX requests
+          keypressCounter++;
+          items = [];
+          inputValue = "";
+          selected = undefined;
+          detach();
+      }
+      /**
+       * Update autocomplete position
+       */
+      function updatePosition() {
+          if (!containerDisplayed()) {
+              return;
+          }
+          containerStyle.height = "auto";
+          containerStyle.width = input.offsetWidth + "px";
+          var maxHeight = 0;
+          var inputRect;
+          function calc() {
+              var docEl = doc.documentElement;
+              var clientTop = docEl.clientTop || doc.body.clientTop || 0;
+              var clientLeft = docEl.clientLeft || doc.body.clientLeft || 0;
+              var scrollTop = window.pageYOffset || docEl.scrollTop;
+              var scrollLeft = window.pageXOffset || docEl.scrollLeft;
+              inputRect = input.getBoundingClientRect();
+              var top = inputRect.top + input.offsetHeight + scrollTop - clientTop;
+              var left = inputRect.left + scrollLeft - clientLeft;
+              containerStyle.top = top + "px";
+              containerStyle.left = left + "px";
+              maxHeight = window.innerHeight - (inputRect.top + input.offsetHeight);
+              if (maxHeight < 0) {
+                  maxHeight = 0;
+              }
+              containerStyle.top = top + "px";
+              containerStyle.bottom = "";
+              containerStyle.left = left + "px";
+              containerStyle.maxHeight = maxHeight + "px";
+          }
+          // the calc method must be called twice, otherwise the calculation may be wrong on resize event (chrome browser)
+          calc();
+          calc();
+          if (settings.customize && inputRect) {
+              settings.customize(input, inputRect, container, maxHeight);
+          }
+      }
+      /**
+       * Redraw the autocomplete div element with suggestions
+       */
+      function update() {
+          // delete all children from autocomplete DOM container
+          while (container.firstChild) {
+              container.removeChild(container.firstChild);
+          }
+          // function for rendering autocomplete suggestions
+          var render = function (item, currentValue) {
+              var itemElement = doc.createElement("div");
+              itemElement.textContent = item.label || "";
+              return itemElement;
+          };
+          if (settings.render) {
+              render = settings.render;
+          }
+          // function to render autocomplete groups
+          var renderGroup = function (groupName, currentValue) {
+              var groupDiv = doc.createElement("div");
+              groupDiv.textContent = groupName;
+              return groupDiv;
+          };
+          if (settings.renderGroup) {
+              renderGroup = settings.renderGroup;
+          }
+          var fragment = doc.createDocumentFragment();
+          var prevGroup = "#9?$";
+          items.forEach(function (item) {
+              if (item.group && item.group !== prevGroup) {
+                  prevGroup = item.group;
+                  var groupDiv = renderGroup(item.group, inputValue);
+                  if (groupDiv) {
+                      groupDiv.className += " group";
+                      fragment.appendChild(groupDiv);
+                  }
+              }
+              var div = render(item, inputValue);
+              if (div) {
+                  div.addEventListener("click", function (ev) {
+                      settings.onSelect(item, input);
+                      clear();
+                      ev.preventDefault();
+                      ev.stopPropagation();
+                  });
+                  if (item === selected) {
+                      div.className += " selected";
+                  }
+                  fragment.appendChild(div);
+              }
+          });
+          container.appendChild(fragment);
+          if (items.length < 1) {
+              if (settings.emptyMsg) {
+                  var empty = doc.createElement("div");
+                  empty.className = "empty";
+                  empty.textContent = settings.emptyMsg;
+                  container.appendChild(empty);
+              }
+              else {
+                  clear();
+                  return;
+              }
+          }
+          attach();
+          updatePosition();
+          updateScroll();
+      }
+      function updateIfDisplayed() {
+          if (containerDisplayed()) {
+              update();
+          }
+      }
+      function resizeEventHandler() {
+          updateIfDisplayed();
+      }
+      function scrollEventHandler(e) {
+          if (e.target !== container) {
+              updateIfDisplayed();
+          }
+          else {
+              e.preventDefault();
+          }
+      }
+      function keyupEventHandler(ev) {
+          var keyCode = ev.which || ev.keyCode || 0;
+          var ignore = [38 /* Up */, 13 /* Enter */, 27 /* Esc */, 39 /* Right */, 37 /* Left */, 16 /* Shift */, 17 /* Ctrl */, 18 /* Alt */, 20 /* CapsLock */, 91 /* WindowsKey */, 9 /* Tab */];
+          for (var _i = 0, ignore_1 = ignore; _i < ignore_1.length; _i++) {
+              var key = ignore_1[_i];
+              if (keyCode === key) {
+                  return;
+              }
+          }
+          if (keyCode >= 112 /* F1 */ && keyCode <= 123 /* F12 */) {
+              return;
+          }
+          // the down key is used to open autocomplete
+          if (keyCode === 40 /* Down */ && containerDisplayed()) {
+              return;
+          }
+          startFetch(0 /* Keyboard */);
+      }
+      /**
+       * Automatically move scroll bar if selected item is not visible
+       */
+      function updateScroll() {
+          var elements = container.getElementsByClassName("selected");
+          if (elements.length > 0) {
+              var element = elements[0];
+              // make group visible
+              var previous = element.previousElementSibling;
+              if (previous && previous.className.indexOf("group") !== -1 && !previous.previousElementSibling) {
+                  element = previous;
+              }
+              if (element.offsetTop < container.scrollTop) {
+                  container.scrollTop = element.offsetTop;
+              }
+              else {
+                  var selectBottom = element.offsetTop + element.offsetHeight;
+                  var containerBottom = container.scrollTop + container.offsetHeight;
+                  if (selectBottom > containerBottom) {
+                      container.scrollTop += selectBottom - containerBottom;
+                  }
+              }
+          }
+      }
+      /**
+       * Select the previous item in suggestions
+       */
+      function selectPrev() {
+          if (items.length < 1) {
+              selected = undefined;
+          }
+          else {
+              if (selected === items[0]) {
+                  selected = items[items.length - 1];
+              }
+              else {
+                  for (var i = items.length - 1; i > 0; i--) {
+                      if (selected === items[i] || i === 1) {
+                          selected = items[i - 1];
+                          break;
+                      }
+                  }
+              }
+          }
+      }
+      /**
+       * Select the next item in suggestions
+       */
+      function selectNext() {
+          if (items.length < 1) {
+              selected = undefined;
+          }
+          if (!selected || selected === items[items.length - 1]) {
+              selected = items[0];
+              return;
+          }
+          for (var i = 0; i < (items.length - 1); i++) {
+              if (selected === items[i]) {
+                  selected = items[i + 1];
+                  break;
+              }
+          }
+      }
+      function keydownEventHandler(ev) {
+          var keyCode = ev.which || ev.keyCode || 0;
+          if (keyCode === 38 /* Up */ || keyCode === 40 /* Down */ || keyCode === 27 /* Esc */) {
+              var containerIsDisplayed = containerDisplayed();
+              if (keyCode === 27 /* Esc */) {
+                  clear();
+              }
+              else {
+                  if (!containerDisplayed || items.length < 1) {
+                      return;
+                  }
+                  keyCode === 38 /* Up */
+                      ? selectPrev()
+                      : selectNext();
+                  update();
+              }
+              ev.preventDefault();
+              if (containerIsDisplayed) {
+                  ev.stopPropagation();
+              }
+              return;
+          }
+          if (keyCode === 13 /* Enter */) {
+              if (selected) {
+                  settings.onSelect(selected, input);
+                  clear();
+              }
+              if (preventSubmit) {
+                  ev.preventDefault();
+              }
+          }
+      }
+      function focusEventHandler() {
+          if (showOnFocus) {
+              startFetch(1 /* Focus */);
+          }
+      }
+      function startFetch(trigger) {
+          // if multiple keys were pressed, before we get update from server,
+          // this may cause redrawing our autocomplete multiple times after the last key press.
+          // to avoid this, the number of times keyboard was pressed will be
+          // saved and checked before redraw our autocomplete box.
+          var savedKeypressCounter = ++keypressCounter;
+          var val = input.value;
+          if (val.length >= minLen || trigger === 1 /* Focus */) {
+              clearDebounceTimer();
+              debounceTimer = window.setTimeout(function () {
+                  settings.fetch(val, function (elements) {
+                      if (keypressCounter === savedKeypressCounter && elements) {
+                          items = elements;
+                          inputValue = val;
+                          selected = items.length > 0 ? items[0] : undefined;
+                          update();
+                      }
+                  }, 0 /* Keyboard */);
+              }, trigger === 0 /* Keyboard */ ? debounceWaitMs : 0);
+          }
+          else {
+              clear();
+          }
+      }
+      function blurEventHandler() {
+          // we need to delay clear, because when we click on an item, blur will be called before click and remove items from DOM
+          setTimeout(function () {
+              if (doc.activeElement !== input) {
+                  clear();
+              }
+          }, 200);
+      }
+      /**
+       * Fixes #26: on long clicks focus will be lost and onSelect method will not be called
+       */
+      container.addEventListener("mousedown", function (evt) {
+          evt.stopPropagation();
+          evt.preventDefault();
+      });
+      /**
+       * Fixes #30: autocomplete closes when scrollbar is clicked in IE
+       * See: https://stackoverflow.com/a/9210267/13172349
+       */
+      container.addEventListener("focus", function () { return input.focus(); });
+      /**
+       * This function will remove DOM elements and clear event handlers
+       */
+      function destroy() {
+          input.removeEventListener("focus", focusEventHandler);
+          input.removeEventListener("keydown", keydownEventHandler);
+          input.removeEventListener(keyUpEventName, keyupEventHandler);
+          input.removeEventListener("blur", blurEventHandler);
+          window.removeEventListener("resize", resizeEventHandler);
+          doc.removeEventListener("scroll", scrollEventHandler, true);
+          clearDebounceTimer();
+          clear();
+      }
+      // setup event handlers
+      input.addEventListener("keydown", keydownEventHandler);
+      input.addEventListener(keyUpEventName, keyupEventHandler);
+      input.addEventListener("blur", blurEventHandler);
+      input.addEventListener("focus", focusEventHandler);
+      window.addEventListener("resize", resizeEventHandler);
+      doc.addEventListener("scroll", scrollEventHandler, true);
+      return {
+          destroy: destroy
+      };
+  }
+
+  return autocomplete;
+
+});
+
 define('skylark-formio/vendors/getify/npo',[],function(){
 	return Promise;
 });
@@ -6273,7 +6662,6 @@ define('skylark-formio/vendors/fast-json-patch/helpers',[],function(){
     function hasOwnProperty(obj, key) {
         return _hasOwnProperty.call(obj, key);
     }
-    exports.hasOwnProperty = hasOwnProperty;
     function _objectKeys(obj) {
         if (Array.isArray(obj)) {
             var keys = new Array(obj.length);
@@ -6411,6 +6799,7 @@ define('skylark-formio/vendors/fast-json-patch/helpers',[],function(){
     }(Error));
 
     return {
+        hasOwnProperty,
         PatchError,
         hasUndefined,
         getPath,
@@ -8210,7 +8599,26 @@ define('skylark-formio/utils/utils',[
         fastCloneDeep: fastCloneDeep,
         Evaluator,
         interpolate,
-        isInputComponent: isInputComponent
+        isInputComponent: isInputComponent,
+
+
+        isLayoutComponent: formUtils.isLayoutComponent,
+        eachComponent: formUtils.eachComponent,
+        matchComponent: formUtils.matchComponent,
+        getComponent: formUtils.getComponent,
+        searchComponents: formUtils.searchComponents,
+        findComponents: formUtils.findComponents,
+        findComponent: formUtils.findComponent,
+        removeComponent: formUtils.removeComponent,
+        generateFormChange: formUtils.generateFormChange,
+        applyFormChanges: formUtils.applyFormChanges,
+        flattenComponents: formUtils.flattenComponents,
+        hasCondition: formUtils.hasCondition,
+        parseFloatExt: formUtils.parseFloatExt,
+        formatAsCurrency: formUtils.formatAsCurrency,
+        escapeRegExCharacters: formUtils.escapeRegExCharacters,
+        getValue: formUtils.getValue,
+        getStrings: formUtils.getStrings
     };
 });
 define('skylark-formio/EventEmitter',[
@@ -9150,10 +9558,10 @@ define('skylark-formio/providers/index',['./Providers'], function (Providers) {
     'use strict';
     return Providers;
 });
-define('vendors/jwt-decode/atob',[],function(){
+define('skylark-formio/vendors/jwt-decode/atob',[],function(){
 	return window.atob;
 });
-define('vendors/jwt-decode/base64_url_decode',[
+define('skylark-formio/vendors/jwt-decode/base64_url_decode',[
   './atob'
 ],function(atob) {
   function b64DecodeUnicode(str) {
@@ -9192,7 +9600,7 @@ define('vendors/jwt-decode/base64_url_decode',[
 
 
 
- define('vendors/jwt-decode/decode',[
+ define('skylark-formio/vendors/jwt-decode/decode',[
   './base64_url_decode'
 ],function(base64_url_decode) {
   'use strict';
@@ -9660,7 +10068,7 @@ define('skylark-formio/Formio',[
     './providers/index',
     "skylark-lodash",
     './utils/utils',
-    '../vendors/jwt-decode/decode',
+    './vendors/jwt-decode/decode',
     './polyfills/index'
 ], function (NativePromise, fetchPonyfill, EventEmitter, cookies, Providers, _ , utils, jwtDecode) {
     'use strict';
@@ -10909,279 +11317,6 @@ define('skylark-formio/vendors/vanilla-text-mask/utilities',[
 });
 
 
-define('skylark-formio/vendors/vanilla-text-mask/adjustCaretPosition',[],function(){
-  const defaultArray = [];
-  const emptyString = '';
-
-  function adjustCaretPosition({
-    previousConformedValue = emptyString,
-    previousPlaceholder = emptyString,
-    currentCaretPosition = 0,
-    conformedValue,
-    rawValue,
-    placeholderChar,
-    placeholder,
-    indexesOfPipedChars = defaultArray,
-    caretTrapIndexes = defaultArray
-  }) {
-    if (currentCaretPosition === 0 || !rawValue.length) { return 0 }
-
-    // Store lengths for faster performance?
-    const rawValueLength = rawValue.length
-    const previousConformedValueLength = previousConformedValue.length
-    const placeholderLength = placeholder.length
-    const conformedValueLength = conformedValue.length
-
-    // This tells us how long the edit is. If user modified input from `(2__)` to `(243__)`,
-    // we know the user in this instance pasted two characters
-    const editLength = rawValueLength - previousConformedValueLength
-
-    // If the edit length is positive, that means the user is adding characters, not deleting.
-    const isAddition = editLength > 0
-
-    // This is the first raw value the user entered that needs to be conformed to mask
-    const isFirstRawValue = previousConformedValueLength === 0
-
-    // A partial multi-character edit happens when the user makes a partial selection in their
-    // input and edits that selection. That is going from `(123) 432-4348` to `() 432-4348` by
-    // selecting the first 3 digits and pressing backspace.
-    //
-    // Such cases can also happen when the user presses the backspace while holding down the ALT
-    // key.
-    const isPartialMultiCharEdit = editLength > 1 && !isAddition && !isFirstRawValue
-
-    // This algorithm doesn't support all cases of multi-character edits, so we just return
-    // the current caret position.
-    //
-    // This works fine for most cases.
-    if (isPartialMultiCharEdit) { return currentCaretPosition }
-
-    // For a mask like (111), if the `previousConformedValue` is (1__) and user attempts to enter
-    // `f` so the `rawValue` becomes (1f__), the new `conformedValue` would be (1__), which is the
-    // same as the original `previousConformedValue`. We handle this case differently for caret
-    // positioning.
-    const possiblyHasRejectedChar = isAddition && (
-      previousConformedValue === conformedValue ||
-      conformedValue === placeholder
-    )
-
-    let startingSearchIndex = 0
-    let trackRightCharacter
-    let targetChar
-
-    if (possiblyHasRejectedChar) {
-      startingSearchIndex = currentCaretPosition - editLength
-    } else {
-      // At this point in the algorithm, we want to know where the caret is right before the raw input
-      // has been conformed, and then see if we can find that same spot in the conformed input.
-      //
-      // We do that by seeing what character lies immediately before the caret, and then look for that
-      // same character in the conformed input and place the caret there.
-
-      // First, we need to normalize the inputs so that letter capitalization between raw input and
-      // conformed input wouldn't matter.
-      const normalizedConformedValue = conformedValue.toLowerCase()
-      const normalizedRawValue = rawValue.toLowerCase()
-
-      // Then we take all characters that come before where the caret currently is.
-      const leftHalfChars = normalizedRawValue.substr(0, currentCaretPosition).split(emptyString)
-
-      // Now we find all the characters in the left half that exist in the conformed input
-      // This step ensures that we don't look for a character that was filtered out or rejected by `conformToMask`.
-      const intersection = leftHalfChars.filter((char) => normalizedConformedValue.indexOf(char) !== -1)
-
-      // The last character in the intersection is the character we want to look for in the conformed
-      // value and the one we want to adjust the caret close to
-      targetChar = intersection[intersection.length - 1]
-
-      // Calculate the number of mask characters in the previous placeholder
-      // from the start of the string up to the place where the caret is
-      const previousLeftMaskChars = previousPlaceholder
-        .substr(0, intersection.length)
-        .split(emptyString)
-        .filter(char => char !== placeholderChar)
-        .length
-
-      // Calculate the number of mask characters in the current placeholder
-      // from the start of the string up to the place where the caret is
-      const leftMaskChars = placeholder
-        .substr(0, intersection.length)
-        .split(emptyString)
-        .filter(char => char !== placeholderChar)
-        .length
-
-      // Has the number of mask characters up to the caret changed?
-      const masklengthChanged = leftMaskChars !== previousLeftMaskChars
-
-      // Detect if `targetChar` is a mask character and has moved to the left
-      const targetIsMaskMovingLeft = (
-        previousPlaceholder[intersection.length - 1] !== undefined &&
-        placeholder[intersection.length - 2] !== undefined &&
-        previousPlaceholder[intersection.length - 1] !== placeholderChar &&
-        previousPlaceholder[intersection.length - 1] !== placeholder[intersection.length - 1] &&
-        previousPlaceholder[intersection.length - 1] === placeholder[intersection.length - 2]
-      )
-
-      // If deleting and the `targetChar` `is a mask character and `masklengthChanged` is true
-      // or the mask is moving to the left, we can't use the selected `targetChar` any longer
-      // if we are not at the end of the string.
-      // In this case, change tracking strategy and track the character to the right of the caret.
-      if (
-        !isAddition &&
-        (masklengthChanged || targetIsMaskMovingLeft) &&
-        previousLeftMaskChars > 0 &&
-        placeholder.indexOf(targetChar) > -1 &&
-        rawValue[currentCaretPosition] !== undefined
-      ) {
-        trackRightCharacter = true
-        targetChar = rawValue[currentCaretPosition]
-      }
-
-      // It is possible that `targetChar` will appear multiple times in the conformed value.
-      // We need to know not to select a character that looks like our target character from the placeholder or
-      // the piped characters, so we inspect the piped characters and the placeholder to see if they contain
-      // characters that match our target character.
-
-      // If the `conformedValue` got piped, we need to know which characters were piped in so that when we look for
-      // our `targetChar`, we don't select a piped char by mistake
-      const pipedChars = indexesOfPipedChars.map((index) => normalizedConformedValue[index])
-
-      // We need to know how many times the `targetChar` occurs in the piped characters.
-      const countTargetCharInPipedChars = pipedChars.filter((char) => char === targetChar).length
-
-      // We need to know how many times it occurs in the intersection
-      const countTargetCharInIntersection = intersection.filter((char) => char === targetChar).length
-
-      // We need to know if the placeholder contains characters that look like
-      // our `targetChar`, so we don't select one of those by mistake.
-      const countTargetCharInPlaceholder = placeholder
-        .substr(0, placeholder.indexOf(placeholderChar))
-        .split(emptyString)
-        .filter((char, index) => (
-          // Check if `char` is the same as our `targetChar`, so we account for it
-          char === targetChar &&
-
-          // but also make sure that both the `rawValue` and placeholder don't have the same character at the same
-          // index because if they are equal, that means we are already counting those characters in
-          // `countTargetCharInIntersection`
-          rawValue[index] !== char
-        ))
-        .length
-
-      // The number of times we need to see occurrences of the `targetChar` before we know it is the one we're looking
-      // for is:
-      const requiredNumberOfMatches = (
-        countTargetCharInPlaceholder +
-        countTargetCharInIntersection +
-        countTargetCharInPipedChars +
-        // The character to the right of the caret isn't included in `intersection`
-        // so add one if we are tracking the character to the right
-        (trackRightCharacter ? 1 : 0)
-      )
-
-      // Now we start looking for the location of the `targetChar`.
-      // We keep looping forward and store the index in every iteration. Once we have encountered
-      // enough occurrences of the target character, we break out of the loop
-      // If are searching for the second `1` in `1214`, `startingSearchIndex` will point at `4`.
-      let numberOfEncounteredMatches = 0
-      for (let i = 0; i < conformedValueLength; i++) {
-        const conformedValueChar = normalizedConformedValue[i]
-
-        startingSearchIndex = i + 1
-
-        if (conformedValueChar === targetChar) {
-          numberOfEncounteredMatches++
-        }
-
-        if (numberOfEncounteredMatches >= requiredNumberOfMatches) {
-          break
-        }
-      }
-    }
-
-    // At this point, if we simply return `startingSearchIndex` as the adjusted caret position,
-    // most cases would be handled. However, we want to fast forward or rewind the caret to the
-    // closest placeholder character if it happens to be in a non-editable spot. That's what the next
-    // logic is for.
-
-    // In case of addition, we fast forward.
-    if (isAddition) {
-      // We want to remember the last placeholder character encountered so that if the mask
-      // contains more characters after the last placeholder character, we don't forward the caret
-      // that far to the right. Instead, we stop it at the last encountered placeholder character.
-      let lastPlaceholderChar = startingSearchIndex
-
-      for (let i = startingSearchIndex; i <= placeholderLength; i++) {
-        if (placeholder[i] === placeholderChar) {
-          lastPlaceholderChar = i
-        }
-
-        if (
-          // If we're adding, we can position the caret at the next placeholder character.
-          placeholder[i] === placeholderChar ||
-
-          // If a caret trap was set by a mask function, we need to stop at the trap.
-          caretTrapIndexes.indexOf(i) !== -1 ||
-
-          // This is the end of the placeholder. We cannot move any further. Let's put the caret there.
-          i === placeholderLength
-        ) {
-          return lastPlaceholderChar
-        }
-      }
-    } else {
-      // In case of deletion, we rewind.
-      if (trackRightCharacter) {
-        // Searching for the character that was to the right of the caret
-        // We start at `startingSearchIndex` - 1 because it includes one character extra to the right
-        for (let i = startingSearchIndex - 1; i >= 0; i--) {
-          // If tracking the character to the right of the cursor, we move to the left until
-          // we found the character and then place the caret right before it
-
-          if (
-            // `targetChar` should be in `conformedValue`, since it was in `rawValue`, just
-            // to the right of the caret
-            conformedValue[i] === targetChar ||
-
-            // If a caret trap was set by a mask function, we need to stop at the trap.
-            caretTrapIndexes.indexOf(i) !== -1 ||
-
-            // This is the beginning of the placeholder. We cannot move any further.
-            // Let's put the caret there.
-            i === 0
-          ) {
-            return i
-          }
-        }
-      } else {
-        // Searching for the first placeholder or caret trap to the left
-
-        for (let i = startingSearchIndex; i >= 0; i--) {
-          // If we're deleting, we stop the caret right before the placeholder character.
-          // For example, for mask `(111) 11`, current conformed input `(456) 86`. If user
-          // modifies input to `(456 86`. That is, they deleted the `)`, we place the caret
-          // right after the first `6`
-
-          if (
-            // If we're deleting, we can position the caret right before the placeholder character
-            placeholder[i - 1] === placeholderChar ||
-
-            // If a caret trap was set by a mask function, we need to stop at the trap.
-            caretTrapIndexes.indexOf(i) !== -1 ||
-
-            // This is the beginning of the placeholder. We cannot move any further.
-            // Let's put the caret there.
-            i === 0
-          ) {
-            return i
-          }
-        }
-      }
-    }
-  }
-
-  return adjustCaretPosition;
-});
 define('skylark-formio/vendors/vanilla-text-mask/conformToMask',[
   "./utilities",
   "./constants"
@@ -11442,527 +11577,6 @@ define('skylark-formio/vendors/vanilla-text-mask/conformToMask',[
 
   return conformToMask;
 
-});
-define('skylark-formio/vendors/vanilla-text-mask/createTextMaskInputElement',[
-  "./utilities",
-  "./constants",
-  "./adjustCaretPosition",
-  "./conformToMask"
-],function(utilities,constants,adjustCaretPosition,conformToMask){
-
-
-  const {convertMaskToPlaceholder, isArray, processCaretTraps} = utilities;
-  const {strFunction} = constants;
-
-  const defaultPlaceholderChar = constants.placeholderChar;
-
-  const emptyString = ''
-  const strNone = 'none'
-  const strObject = 'object'
-  const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)
-  const defer = typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame : setTimeout
-
-  function createTextMaskInputElement(config) {
-    // Anything that we will need to keep between `update` calls, we will store in this `state` object.
-    const state = {previousConformedValue: undefined, previousPlaceholder: undefined}
-
-    return {
-      state,
-
-      // `update` is called by framework components whenever they want to update the `value` of the input element.
-      // The caller can send a `rawValue` to be conformed and set on the input element. However, the default use-case
-      // is for this to be read from the `inputElement` directly.
-      update(rawValue, {
-        inputElement,
-        mask: providedMask,
-        guide,
-        pipe,
-        placeholderChar = defaultPlaceholderChar,
-        keepCharPositions = false,
-        showMask = false
-      } = config) {
-        // if `rawValue` is `undefined`, read from the `inputElement`
-        if (typeof rawValue === 'undefined') {
-          rawValue = inputElement.value
-        }
-
-        // If `rawValue` equals `state.previousConformedValue`, we don't need to change anything. So, we return.
-        // This check is here to handle controlled framework components that repeat the `update` call on every render.
-        if (rawValue === state.previousConformedValue) { return }
-
-        // Text Mask accepts masks that are a combination of a `mask` and a `pipe` that work together. If such a `mask` is
-        // passed, we destructure it below, so the rest of the code can work normally as if a separate `mask` and a `pipe`
-        // were passed.
-        if (typeof providedMask === strObject && providedMask.pipe !== undefined && providedMask.mask !== undefined) {
-          pipe = providedMask.pipe
-          providedMask = providedMask.mask
-        }
-
-        // The `placeholder` is an essential piece of how Text Mask works. For a mask like `(111)`, the placeholder would
-        // be `(___)` if the `placeholderChar` is set to `_`.
-        let placeholder
-
-        // We don't know what the mask would be yet. If it is an array, we take it as is, but if it's a function, we will
-        // have to call that function to get the mask array.
-        let mask
-
-        // If the provided mask is an array, we can call `convertMaskToPlaceholder` here once and we'll always have the
-        // correct `placeholder`.
-        if (providedMask instanceof Array) {
-          placeholder = convertMaskToPlaceholder(providedMask, placeholderChar)
-        }
-
-        // In framework components that support reactivity, it's possible to turn off masking by passing
-        // `false` for `mask` after initialization. See https://github.com/text-mask/text-mask/pull/359
-        if (providedMask === false) { return }
-
-        // We check the provided `rawValue` before moving further.
-        // If it's something we can't work with `getSafeRawValue` will throw.
-        const safeRawValue = getSafeRawValue(rawValue)
-
-        // `selectionEnd` indicates to us where the caret position is after the user has typed into the input
-        const {selectionEnd: currentCaretPosition} = inputElement
-
-        // We need to know what the `previousConformedValue` and `previousPlaceholder` is from the previous `update` call
-        const {previousConformedValue, previousPlaceholder} = state
-
-        let caretTrapIndexes
-
-        // If the `providedMask` is a function. We need to call it at every `update` to get the `mask` array.
-        // Then we also need to get the `placeholder`
-        if (typeof providedMask === strFunction) {
-          mask = providedMask(safeRawValue, {currentCaretPosition, previousConformedValue, placeholderChar})
-
-          // disable masking if `mask` is `false`
-          if (mask === false) { return }
-
-          // mask functions can setup caret traps to have some control over how the caret moves. We need to process
-          // the mask for any caret traps. `processCaretTraps` will remove the caret traps from the mask and return
-          // the indexes of the caret traps.
-          const {maskWithoutCaretTraps, indexes} = processCaretTraps(mask)
-
-          mask = maskWithoutCaretTraps // The processed mask is what we're interested in
-          caretTrapIndexes = indexes // And we need to store these indexes because they're needed by `adjustCaretPosition`
-
-          placeholder = convertMaskToPlaceholder(mask, placeholderChar)
-
-        // If the `providedMask` is not a function, we just use it as-is.
-        } else {
-          mask = providedMask
-        }
-
-        // The following object will be passed to `conformToMask` to determine how the `rawValue` will be conformed
-        const conformToMaskConfig = {
-          previousConformedValue,
-          guide,
-          placeholderChar,
-          pipe,
-          placeholder,
-          currentCaretPosition,
-          keepCharPositions
-        }
-
-        // `conformToMask` returns `conformedValue` as part of an object for future API flexibility
-        const {conformedValue} = conformToMask(safeRawValue, mask, conformToMaskConfig)
-
-        // The following few lines are to support the `pipe` feature.
-        const piped = typeof pipe === strFunction
-
-        let pipeResults = {}
-
-        // If `pipe` is a function, we call it.
-        if (piped) {
-          // `pipe` receives the `conformedValue` and the configurations with which `conformToMask` was called.
-          pipeResults = pipe(conformedValue, {rawValue: safeRawValue, ...conformToMaskConfig})
-
-          // `pipeResults` should be an object. But as a convenience, we allow the pipe author to just return `false` to
-          // indicate rejection. Or return just a string when there are no piped characters.
-          // If the `pipe` returns `false` or a string, the block below turns it into an object that the rest
-          // of the code can work with.
-          if (pipeResults === false) {
-            // If the `pipe` rejects `conformedValue`, we use the `previousConformedValue`, and set `rejected` to `true`.
-            pipeResults = {value: previousConformedValue, rejected: true}
-          } else if (isString(pipeResults)) {
-            pipeResults = {value: pipeResults}
-          }
-        }
-
-        // Before we proceed, we need to know which conformed value to use, the one returned by the pipe or the one
-        // returned by `conformToMask`.
-        const finalConformedValue = (piped) ? pipeResults.value : conformedValue
-
-        // After determining the conformed value, we will need to know where to set
-        // the caret position. `adjustCaretPosition` will tell us.
-        const adjustedCaretPosition = adjustCaretPosition({
-          previousConformedValue,
-          previousPlaceholder,
-          conformedValue: finalConformedValue,
-          placeholder,
-          rawValue: safeRawValue,
-          currentCaretPosition,
-          placeholderChar,
-          indexesOfPipedChars: pipeResults.indexesOfPipedChars,
-          caretTrapIndexes
-        })
-
-        // Text Mask sets the input value to an empty string when the condition below is set. It provides a better UX.
-        const inputValueShouldBeEmpty = finalConformedValue === placeholder && adjustedCaretPosition === 0
-        const emptyValue = showMask ? placeholder : emptyString
-        const inputElementValue = (inputValueShouldBeEmpty) ? emptyValue : finalConformedValue
-
-        state.previousConformedValue = inputElementValue // store value for access for next time
-        state.previousPlaceholder = placeholder
-
-        // In some cases, this `update` method will be repeatedly called with a raw value that has already been conformed
-        // and set to `inputElement.value`. The below check guards against needlessly readjusting the input state.
-        // See https://github.com/text-mask/text-mask/issues/231
-        if (inputElement.value === inputElementValue) {
-          return
-        }
-
-        inputElement.value = inputElementValue // set the input value
-        safeSetSelection(inputElement, adjustedCaretPosition) // adjust caret position
-      }
-    }
-  }
-
-  function safeSetSelection(element, selectionPosition) {
-    if (document.activeElement === element) {
-      if (isAndroid) {
-        defer(() => element.setSelectionRange(selectionPosition, selectionPosition, strNone), 0)
-      } else {
-        element.setSelectionRange(selectionPosition, selectionPosition, strNone)
-      }
-    }
-  }
-
-  function getSafeRawValue(inputValue) {
-    if (isString(inputValue)) {
-      return inputValue
-    } else if (isNumber(inputValue)) {
-      return String(inputValue)
-    } else if (inputValue === undefined || inputValue === null) {
-      return emptyString
-    } else {
-      throw new Error(
-        "The 'value' provided to Text Mask needs to be a string or a number. The value " +
-        `received was:\n\n ${JSON.stringify(inputValue)}`
-      )
-    }
-  }
-
-  return createTextMaskInputElement;
-
-});
-define('skylark-formio/vendors/vanilla-text-mask/maskInput',[
-	"./createTextMaskInputElement"
-],function(createTextMaskInputElement) {
-
-	function maskInput(textMaskConfig) {
-	  const {inputElement} = textMaskConfig
-	  const textMaskInputElement = createTextMaskInputElement(textMaskConfig)
-	  const inputHandler = ({target: {value}}) => textMaskInputElement.update(value)
-
-	  inputElement.addEventListener('input', inputHandler)
-
-	  textMaskInputElement.update(inputElement.value)
-
-	  return {
-	    textMaskInputElement,
-
-	    destroy() {
-	      inputElement.removeEventListener('input', inputHandler)
-	    }
-	  }
-	}
-
-	return  maskInput;
-});
-
-
-define('skylark-formio/Element',[
-    './EventEmitter',
-    './Formio',
-    './utils/utils',
-    'skylark-i18next',
-    'skylark-lodash',
-    'skylark-moment',
-    './vendors/vanilla-text-mask/maskInput'
-], function (EventEmitter, Formio, FormioUtils, i18next, _, moment, maskInput) {
-    'use strict';
-    return class Element {
-        constructor(options) {
-            this.options = Object.assign({
-                language: 'en',
-                highlightErrors: true,
-                componentErrorClass: 'formio-error-wrapper',
-                componentWarningClass: 'formio-warning-wrapper',
-                row: '',
-                namespace: 'formio'
-            }, options || {});
-            this.id = FormioUtils.getRandomComponentId();
-            this.eventHandlers = [];
-            this.i18next = this.options.i18next || i18next;
-            this.events = options && options.events ? options.events : new EventEmitter({
-                wildcard: false,
-                maxListeners: 0
-            });
-            this.defaultMask = null;
-        }
-        on(event, cb, internal, once = false) {
-            if (!this.events) {
-                return;
-            }
-            const type = `${ this.options.namespace }.${ event }`;
-            cb.id = this.id;
-            cb.internal = internal;
-            return this.events[once ? 'once' : 'on'](type, cb);
-        }
-        once(event, cb, internal) {
-            return this.on(event, cb, internal, true);
-        }
-        onAny(cb) {
-            if (!this.events) {
-                return;
-            }
-            return this.events.onAny(cb);
-        }
-        off(event) {
-            if (!this.events) {
-                return;
-            }
-            const type = `${ this.options.namespace }.${ event }`;
-            _.each(this.events.listeners(type), listener => {
-                if (listener && listener.id === this.id) {
-                    this.events.off(type, listener);
-                }
-            });
-        }
-        emit(event, ...data) {
-            if (this.events) {
-                this.events.emit(`${ this.options.namespace }.${ event }`, ...data);
-            }
-        }
-        addEventListener(obj, type, func, persistent) {
-            if (!obj) {
-                return;
-            }
-            if (!persistent) {
-                this.eventHandlers.push({
-                    id: this.id,
-                    obj,
-                    type,
-                    func
-                });
-            }
-            if ('addEventListener' in obj) {
-                obj.addEventListener(type, func, false);
-            } else if ('attachEvent' in obj) {
-                obj.attachEvent(`on${ type }`, func);
-            }
-            return this;
-        }
-        removeEventListener(obj, type, func = null) {
-            const indexes = [];
-            this.eventHandlers.forEach((handler, index) => {
-                if (handler.id === this.id && obj.removeEventListener && handler.type === type && (!func || handler.func === func)) {
-                    obj.removeEventListener(type, handler.func);
-                    indexes.push(index);
-                }
-            });
-            if (indexes.length) {
-                _.pullAt(this.eventHandlers, indexes);
-            }
-            return this;
-        }
-        removeEventListeners() {
-            this.eventHandlers.forEach(handler => {
-                if (this.id === handler.id && handler.type && handler.obj && handler.obj.removeEventListener) {
-                    handler.obj.removeEventListener(handler.type, handler.func);
-                }
-            });
-            this.eventHandlers = [];
-        }
-        removeAllEvents(includeExternal) {
-            _.each(this.events._events, (events, type) => {
-                _.each(events, listener => {
-                    if (listener && this.id === listener.id && (includeExternal || listener.internal)) {
-                        this.events.off(type, listener);
-                    }
-                });
-            });
-        }
-        destroy() {
-            this.removeEventListeners();
-            this.removeAllEvents();
-        }
-        appendTo(element, container) {
-            container.appendChild(element);
-            return this;
-        }
-        prependTo(element, container) {
-            if (container) {
-                if (container.firstChild) {
-                    try {
-                        container.insertBefore(element, container.firstChild);
-                    } catch (err) {
-                        console.warn(err);
-                        container.appendChild(element);
-                    }
-                } else {
-                    container.appendChild(element);
-                }
-            }
-            return this;
-        }
-        removeChildFrom(element, container) {
-            if (container && container.contains(element)) {
-                try {
-                    container.removeChild(element);
-                } catch (err) {
-                    console.warn(err);
-                }
-            }
-            return this;
-        }
-        ce(type, attr, children = null) {
-            const element = document.createElement(type);
-            if (attr) {
-                this.attr(element, attr);
-            }
-            this.appendChild(element, children);
-            return element;
-        }
-        appendChild(element, child) {
-            if (Array.isArray(child)) {
-                child.forEach(oneChild => this.appendChild(element, oneChild));
-            } else if (child instanceof HTMLElement || child instanceof Text) {
-                element.appendChild(child);
-            } else if (child) {
-                element.appendChild(this.text(child.toString()));
-            }
-            return this;
-        }
-        maskPlaceholder(mask) {
-            return mask.map(char => char instanceof RegExp ? '_' : char).join('');
-        }
-        setInputMask(input, inputMask, placeholder) {
-            if (input && inputMask) {
-                const mask = FormioUtils.getInputMask(inputMask);
-                this.defaultMask = mask;
-                try {
-                    if (input.mask) {
-                        input.mask.destroy();
-                    }
-                    input.mask = maskInput({
-                        inputElement: input,
-                        mask
-                    });
-                } catch (e) {
-                    console.warn(e);
-                }
-                if (mask.numeric) {
-                    input.setAttribute('pattern', '\\d*');
-                }
-                if (placeholder) {
-                    input.setAttribute('placeholder', this.maskPlaceholder(mask));
-                }
-            }
-        }
-        t(text, params) {
-            params = params || {};
-            params.nsSeparator = '::';
-            params.keySeparator = '.|.';
-            params.pluralSeparator = '._.';
-            params.contextSeparator = '._.';
-            const translated = this.i18next.t(text, params);
-            return translated || text;
-        }
-        text(text) {
-            return document.createTextNode(this.t(text));
-        }
-        attr(element, attr) {
-            if (!element) {
-                return;
-            }
-            _.each(attr, (value, key) => {
-                if (typeof value !== 'undefined') {
-                    if (key.indexOf('on') === 0) {
-                        this.addEventListener(element, key.substr(2).toLowerCase(), value);
-                    } else {
-                        element.setAttribute(key, value);
-                    }
-                }
-            });
-        }
-        hasClass(element, className) {
-            if (!element) {
-                return false;
-            }
-            className = ` ${ className } `;
-            return ` ${ element.className } `.replace(/[\n\t\r]/g, ' ').indexOf(className) > -1;
-        }
-        addClass(element, className) {
-            if (!element) {
-                return this;
-            }
-            const classes = element.getAttribute('class');
-            if (!classes.includes(className)) {
-                element.setAttribute('class', `${ classes } ${ className }`);
-            }
-            return this;
-        }
-        removeClass(element, className) {
-            if (!element || !className) {
-                return this;
-            }
-            let cls = element.getAttribute('class');
-            if (cls) {
-                cls = cls.replace(new RegExp(` ${ className }`, 'g'), '');
-                element.setAttribute('class', cls);
-            }
-            return this;
-        }
-        empty(element) {
-            if (element) {
-                while (element.firstChild) {
-                    element.removeChild(element.firstChild);
-                }
-            }
-        }
-        evalContext(additional) {
-            return Object.assign({
-                _,
-                utils: FormioUtils,
-                util: FormioUtils,
-                user: Formio.getUser(),
-                moment,
-                instance: this,
-                self: this,
-                token: Formio.getToken({ decode: true }),
-                config: this.root && this.root.form && this.root.form.config ? this.root.form.config : {}
-            }, additional, _.get(this.root, 'options.evalContext', {}));
-        }
-        interpolate(string, data) {
-            return FormioUtils.interpolate(string, this.evalContext(data));
-        }
-        evaluate(func, args, ret, tokenize) {
-            return FormioUtils.evaluate(func, this.evalContext(args), ret, tokenize);
-        }
-        hook() {
-            const name = arguments[0];
-            if (this.options && this.options.hooks && this.options.hooks[name]) {
-                return this.options.hooks[name].apply(this, Array.prototype.slice.call(arguments, 1));
-            } else {
-                const fn = typeof arguments[arguments.length - 1] === 'function' ? arguments[arguments.length - 1] : null;
-                if (fn) {
-                    return fn(null, arguments[1]);
-                } else {
-                    return arguments[1];
-                }
-            }
-        }
-    };
 });
 /**!
  * @fileOverview Kickass library to create and place poppers near their reference elements.
@@ -12700,52 +12314,631 @@ define('skylark-formio/utils/calendarUtils',[
         checkInvalidDate: checkInvalidDate
     };
 });
-const custom = require('./Custom');
-const date = require('./Date');
-const day = require('./Day');
-const email = require('./Email');
-const json = require('./JSON');
-const mask = require('./Mask');
-const max = require('./Max');
-const maxDate = require('./MaxDate');
-const maxLength = require('./MaxLength');
-const maxWords = require('./MaxWords');
-const min = require('./Min');
-const minDate = require('./MinDate');
-const minLength = require('./MinLength');
-const minWords = require('./MinWords');
-const pattern = require('./Pattern');
-const required = require('./Required');
-const select = require('./Select');
-const unique = require('./Unique');
-const url = require('./Url');
-const minYear = require('./MinYear');
-const maxYear = require('./MaxYear');
-module.exports = {
-    custom,
-    date,
-    day,
-    email,
-    json,
-    mask,
-    max,
-    maxDate,
-    maxLength,
-    maxWords,
-    min,
-    minDate,
-    minLength,
-    minWords,
-    pattern,
-    required,
-    select,
-    unique,
-    url,
-    minYear,
-    maxYear
-};
-define("skylark-formio/validator/rules/index", function(){});
+define('skylark-formio/validator/rules/Rule',[], function () {
+    'use strict';
 
+    class Rule {
+        constructor(component, settings, config) {
+            this.component = component;
+            this.settings = settings;
+            this.config = config;
+        }
+        check() {
+        }
+    };
+
+    return Rule;
+});
+define('skylark-formio/validator/rules/Custom',['./Rule'], function (Rule) {
+    'use strict';
+
+    class Custom extends Rule {
+        check(value, data, row, index) {
+            const custom = this.settings.custom;
+            if (!custom) {
+                return true;
+            }
+            const valid = this.component.evaluate(custom, {
+                valid: true,
+                data,
+                row,
+                rowIndex: index,
+                input: value
+            }, 'valid', true);
+            if (valid === null) {
+                return true;
+            }
+            return valid;
+        }
+    };
+    Custom.prototype.defaultMessage = '{{error}}';
+
+    return Custom;
+
+});
+define('skylark-formio/validator/rules/Date',['./Rule'], function (Rule) {
+    'use strict';
+
+    class DateRule extends Rule {
+        check(value) {
+            if (!value || value instanceof Date) {
+                return true;
+            }
+            if (value === 'Invalid date' || value === 'Invalid Date') {
+                return false;
+            }
+            if (typeof value === 'string') {
+                value = new Date(value);
+            }
+            return value.toString() !== 'Invalid Date';
+        }
+    };
+    DateRule.prototype.defaultMessage = '{{field}} is not a valid date.';
+
+    return DateRule;
+});
+define('skylark-formio/validator/rules/Day',['./Rule'], function (Rule) {
+    'use strict';
+
+     class Day extends Rule {
+        check(value) {
+            if (!value) {
+                return true;
+            }
+            if (typeof value !== 'string') {
+                return false;
+            }
+            const [DAY, MONTH, YEAR] = this.component.dayFirst ? [
+                0,
+                1,
+                2
+            ] : [
+                1,
+                0,
+                2
+            ];
+            const values = value.split('/').map(x => parseInt(x, 10)), day = values[DAY], month = values[MONTH], year = values[YEAR], maxDay = getDaysInMonthCount(month, year);
+            if (isNaN(day) || day < 0 || day > maxDay) {
+                return false;
+            }
+            if (isNaN(month) || month < 0 || month > 12) {
+                return false;
+            }
+            if (isNaN(year) || year < 0 || year > 9999) {
+                return false;
+            }
+            return true;
+            function isLeapYear(year) {
+                return !(year % 400) || !!(year % 100) && !(year % 4);
+            }
+            function getDaysInMonthCount(month, year) {
+                switch (month) {
+                case 1:
+                case 3:
+                case 5:
+                case 7:
+                case 8:
+                case 10:
+                case 12:
+                    return 31;
+                case 4:
+                case 6:
+                case 9:
+                case 11:
+                    return 30;
+                case 2:
+                    return isLeapYear(year) ? 29 : 28;
+                default:
+                    return 31;
+                }
+            }
+        }
+    };
+    Day.prototype.defaultMessage = '{{field}} is not a valid day.';
+
+    return Day;
+});
+define('skylark-formio/validator/rules/Email',['./Rule'], function (Rule) {
+    'use strict';
+
+    class Email extends Rule {
+        check(value) {
+            if (!value) {
+                return true;
+            }
+            const re = /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
+            return re.test(value);
+        }
+    };
+    Email.prototype.defaultMessage = '{{field}} must be a valid email.';
+
+    return Email;
+});
+define('skylark-formio/validator/rules/JSON',['./Rule'], function (Rule) {
+    'use strict';
+
+    class JSON extends Rule {
+        check(value, data, row, index) {
+            const {json} = this.settings;
+            if (!json) {
+                return true;
+            }
+            const valid = this.component.evaluate(json, {
+                data,
+                row,
+                rowIndex: index,
+                input: value
+            });
+            if (valid === null) {
+                return true;
+            }
+            return valid;
+        }
+    };
+    JSON.prototype.defaultMessage = '{{error}}';
+
+    return JSON;
+});
+define('skylark-formio/validator/rules/Mask',[
+    './Rule',
+    '../../utils/utils'
+], function (Rule,utils) {
+    'use strict';
+    class Mask extends Rule {
+        check(value) {
+            let inputMask;
+            if (this.component.isMultipleMasksField) {
+                const maskName = value ? value.maskName : undefined;
+                const formioInputMask = this.component.getMaskByName(maskName);
+                if (formioInputMask) {
+                    inputMask = utils.getInputMask(formioInputMask);
+                }
+                value = value ? value.value : value;
+            } else {
+                inputMask = utils.getInputMask(this.settings.mask);
+            }
+            if (value && inputMask) {
+                return utils.matchInputMask(value, inputMask);
+            }
+            return true;
+        }
+    };
+
+    Mask.prototype.defaultMessage = '{{field}} does not match the mask.';
+
+    return Mask;
+});
+define('skylark-formio/validator/rules/Max',[
+    'skylark-lodash',
+    './Rule'
+], function (_, Rule) {
+    'use strict';
+    class Max extends Rule {
+        check(value) {
+            const max = parseFloat(this.settings.limit);
+            if (Number.isNaN(max) || !_.isNumber(value)) {
+                return true;
+            }
+            return parseFloat(value) <= max;
+        }
+    };
+    Max.prototype.defaultMessage = '{{field}} cannot be greater than {{settings.limit}}.';
+
+
+    return Max;
+});
+define('skylark-formio/validator/rules/MaxDate',[
+    "./Rule",
+    '../../utils/utils',
+    'skylark-moment',
+    'skylark-lodash'
+], function (Rule, utils, moment, _) {
+    'use strict';
+    
+    class MaxDate extends Rule {
+        check(value) {
+            if (!value) {
+                return true;
+            }
+            if (value === this.settings.dateLimit) {
+                return true;
+            }
+            const date = moment(value);
+            const maxDate = utils.getDateSetting(this.settings.dateLimit);
+            if (_.isNull(maxDate)) {
+                return true;
+            } else {
+                maxDate.setHours(0, 0, 0, 0);
+            }
+            return date.isBefore(maxDate) || date.isSame(maxDate);
+        }
+    };
+
+    MaxDate.prototype.defaultMessage = '{{field}} should not contain date after {{settings.dateLimit}}';
+
+    return MaxDate;
+});
+
+define('skylark-formio/validator/rules/MaxLength',['./Rule'], function (Rule) {
+    'use strict';
+
+    class MaxLength extends Rule {
+        check(value) {
+            const maxLength = parseInt(this.settings.length, 10);
+            if (!value || !maxLength || !value.hasOwnProperty('length')) {
+                return true;
+            }
+            return value.length <= maxLength;
+        }
+    };
+    MaxLength.prototype.defaultMessage = '{{field}} must have no more than {{- settings.length}} characters.';
+
+    return MaxLength;
+
+});
+define('skylark-formio/validator/rules/MaxWords',['./Rule'], function (Rule) {
+    'use strict';
+
+    class MaxWords extends Rule {
+        check(value) {
+            const maxWords = parseInt(this.settings.length, 10);
+            if (!maxWords || typeof value !== 'string') {
+                return true;
+            }
+            return value.trim().split(/\s+/).length <= maxWords;
+        }
+    };
+    MaxWords.prototype.defaultMessage = '{{field}} must have no more than {{- settings.length}} words.';
+
+    return MaxWords;
+});
+define('skylark-formio/validator/rules/Min',['skylark-lodash',"./Rule"], function (_,Rule) {
+    class Min extends Rule {
+        check(value) {
+            const min = parseFloat(this.settings.limit);
+            if (Number.isNaN(min) || !_.isNumber(value)) {
+                return true;
+            }
+            return parseFloat(value) >= min;
+        }
+    };
+    Min.prototype.defaultMessage = '{{field}} cannot be less than {{settings.limit}}.';
+
+    return Min;
+});
+
+define('skylark-formio/validator/rules/MinDate',[
+    "./Rule",
+    '../../utils/utils',
+    'skylark-moment',
+    'skylark-lodash'
+], function (Rule,utils, moment, _) {
+    class MinDate extends Rule {
+        check(value) {
+            if (!value) {
+                return true;
+            }
+            const date = moment(value);
+            const minDate = utils.getDateSetting(this.settings.dateLimit);
+            if (_.isNull(minDate)) {
+                return true;
+            } else {
+                minDate.setHours(0, 0, 0, 0);
+            }
+            return date.isAfter(minDate) || date.isSame(minDate);
+        }
+    };
+    MinDate.prototype.defaultMessage = '{{field}} should not contain date before {{settings.dateLimit}}';
+
+    return MinDate;
+});
+
+define('skylark-formio/validator/rules/MinLength',['./Rule'], function (Rule) {
+    'use strict';
+
+    class MinLength extends Rule {
+        check(value) {
+            const minLength = parseInt(this.settings.length, 10);
+            if (!minLength || !value || !value.hasOwnProperty('length') || this.component.isEmpty(value)) {
+                return true;
+            }
+            return value.length >= minLength;
+        }
+    };
+    MinLength.prototype.defaultMessage = '{{field}} must have no more than {{- settings.length}} characters.';
+
+    return MinLength;
+});
+define('skylark-formio/validator/rules/MinWords',['./Rule'], function (Rule) {
+    'use strict';
+
+    class MinWords extends Rule {
+        check(value) {
+            const minWords = parseInt(this.settings.length, 10);
+            if (!minWords || !value || typeof value !== 'string') {
+                return true;
+            }
+            return value.trim().split(/\s+/).length >= minWords;
+        }
+    };
+    MinWords.prototype.defaultMessage = '{{field}} must have at least {{- settings.length}} words.';
+
+
+    return MinWords;
+});
+define('skylark-formio/validator/rules/Pattern',['./Rule'], function (Rule) {
+    'use strict';
+
+    class Pattern extends Rule {
+        check(value) {
+            const {pattern} = this.settings;
+            if (!pattern) {
+                return true;
+            }
+            return new RegExp(`^${ pattern }$`).test(value);
+        }
+    };
+
+    Pattern.prototype.defaultMessage = '{{field}} does not match the pattern {{settings.pattern}}';
+
+    return Pattern;
+});
+define('skylark-formio/validator/rules/Required',['./Rule'], function (Rule) {
+    'use strict';
+
+    class Required extends Rule {
+        check(value) {
+            return !this.component.isValueHidden() && !this.component.isEmpty(value);
+        }
+    };
+    
+    Required.prototype.defaultMessage = '{{field}} is required';
+
+    return Required;
+});
+define('skylark-formio/validator/rules/Select',[
+    "./Rule",
+    '../../utils/utils',
+    '../../vendors/getify/npo',
+    '../../vendors/fetch-ponyfill/fetch',
+    'skylark-lodash'
+], function (Rule,a, NativePromise, fetchPonyfill, _) {
+    const {fetch, Headers, Request} = fetchPonyfill({ Promise: NativePromise });
+    class Select extends Rule {
+        check(value, data, row, async) {
+            if (!value || _.isEmpty(value)) {
+                return true;
+            }
+            if (!async) {
+                return true;
+            }
+            const schema = this.component.component;
+            const requestOptions = {
+                url: this.settings.url,
+                method: 'GET',
+                qs: {},
+                json: true,
+                headers: {}
+            };
+            if (_.isBoolean(requestOptions.url)) {
+                requestOptions.url = !!requestOptions.url;
+                if (!requestOptions.url || schema.dataSrc !== 'url' || !schema.data.url || !schema.searchField) {
+                    return true;
+                }
+                requestOptions.url = schema.data.url;
+                requestOptions.qs[schema.searchField] = value;
+                if (schema.filter) {
+                    requestOptions.url += (!requestOptions.url.includes('?') ? '?' : '&') + schema.filter;
+                }
+                if (schema.selectFields) {
+                    requestOptions.qs.select = schema.selectFields;
+                }
+            }
+            if (!requestOptions.url) {
+                return true;
+            }
+            requestOptions.url = a.interpolate(requestOptions.url, { data: this.component.data });
+            requestOptions.url += (requestOptions.url.includes('?') ? '&' : '?') + _.chain(requestOptions.qs).map((val, key) => `${ encodeURIComponent(key) }=${ encodeURIComponent(val) }`).join('&').value();
+            if (schema.data && schema.data.headers) {
+                _.each(schema.data.headers, header => {
+                    if (header.key) {
+                        requestOptions.headers[header.key] = header.value;
+                    }
+                });
+            }
+            if (schema.authenticate && this.config.token) {
+                requestOptions.headers['x-jwt-token'] = this.config.token;
+            }
+            return fetch(new Request(requestOptions.url, { headers: new Headers(requestOptions.headers) })).then(response => {
+                if (!response.ok) {
+                    return false;
+                }
+                return response.json();
+            }).then(results => {
+                return results && results.length;
+            }).catch(() => false);
+        }
+    };
+    Select.prototype.defaultMessage = '{{field}} contains an invalid selection';
+
+    return Select;
+});
+
+define('skylark-formio/validator/rules/Unique',[
+    "./Rule",
+    '../../utils/utils',
+    'skylark-lodash',
+    '../../vendors/getify/npo'
+], function (Rule,utils, _, NativePromise) {
+    class Unique extends Rule {
+        check(value) {
+            if (!value || _.isEmpty(value)) {
+                return true;
+            }
+            if (!this.config.db) {
+                return true;
+            }
+            return new NativePromise(resolve => {
+                const form = this.config.form;
+                const submission = this.config.submission;
+                const path = `data.${ this.component.path }`;
+                const query = { form: form._id };
+                if (_.isString(value)) {
+                    query[path] = {
+                        $regex: new RegExp(`^${ utils.escapeRegExCharacters(value) }$`),
+                        $options: 'i'
+                    };
+                } else if (_.isPlainObject(value) && value.address && value.address['address_components'] && value.address['place_id']) {
+                    query[`${ path }.address.place_id`] = {
+                        $regex: new RegExp(`^${ utils.escapeRegExCharacters(value.address['place_id']) }$`),
+                        $options: 'i'
+                    };
+                } else if (_.isArray(value)) {
+                    query[path] = { $all: value };
+                } else if (_.isObject(value)) {
+                    query[path] = { $eq: value };
+                }
+                query.deleted = { $eq: null };
+                this.config.db.findOne(query, (err, result) => {
+                    if (err) {
+                        return resolve(false);
+                    } else if (result) {
+                        return resolve(submission._id && result._id.toString() === submission._id);
+                    } else {
+                        return resolve(true);
+                    }
+                });
+            }).catch(() => false);
+        }
+    };
+    Unique.prototype.defaultMessage = '{{field}} must be unique';
+
+    return Unique;
+});
+
+define('skylark-formio/validator/rules/Url',['./Rule'], function (Rule) {
+    'use strict';
+
+    class Url extends Rule {
+        check(value) {
+            const re = /(https?:\/\/(?:www\.|(?!www)))?[-a-zA-Z0-9@:%._+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_+.~#?&//=]*)/;
+            return !value || re.test(value);
+        }
+    };
+    Url.prototype.defaultMessage = '{{field}} must be a valid url.';
+
+    return Url;
+});
+define('skylark-formio/validator/rules/MinYear',['./Rule'], function (Rule) {
+    'use strict';
+
+    class MinYear extends Rule {
+        check(value) {
+            const minYear = this.settings;
+            let year = /\d{4}$/.exec(value);
+            year = year ? year[0] : null;
+            if (!+minYear || !+year) {
+                return true;
+            }
+            return +year >= +minYear;
+        }
+    };
+    MinYear.prototype.defaultMessage = '{{field}} should not contain year less than {{minYear}}';
+
+
+    return MinYear;
+});
+define('skylark-formio/validator/rules/MaxYear',['./Rule'], function (Rule) {
+    'use strict';
+
+    class MaxYear extends Rule {
+        check(value) {
+            const maxYear = this.settings;
+            let year = /\d{4}$/.exec(value);
+            year = year ? year[0] : null;
+            if (!+maxYear || !+year) {
+                return true;
+            }
+            return +year <= +maxYear;
+        }
+    };
+    
+    MaxYear.prototype.defaultMessage = '{{field}} should not contain year greater than {{maxYear}}';
+
+    return MaxYear;
+
+});
+define('skylark-formio/validator/rules/index',[
+    './Custom',
+    './Date',
+    './Day',
+    './Email',
+    './JSON',
+    './Mask',
+    './Max',
+    './MaxDate',
+    './MaxLength',
+    './MaxWords',
+    './Min',
+    './MinDate',
+    './MinLength',
+    './MinWords',
+    './Pattern',
+    './Required',
+    './Select',
+    './Unique',
+    './Url',
+    './MinYear',
+    './MaxYear'
+], function (
+    Custom,
+    Date,
+    Day,
+    Email,
+    JSON,
+    Mask,
+    Max,
+    MaxDate,
+    MaxLength,
+    MaxWords,
+    Min,
+    MinDate,
+    MinLength,
+    MinWords,
+    Pattern,
+    Required,
+    Select,
+    Unique,
+    Url,
+    MinYear,
+    MaxYear
+) {
+  
+  return {
+    Custom,
+    Date,
+    Day,
+    Email,
+    JSON,
+    Mask,
+    Max,
+    MaxDate,
+    MaxLength,
+    MaxWords,
+    Min,
+    MinDate,
+    MinLength,
+    MinWords,
+    Pattern,
+    Required,
+    Select,
+    Unique,
+    Url,
+    MinYear,
+    MaxYear
+  };
+
+});
 define('skylark-formio/validator/Rules',[
     './rules/index'
 ], function (rules) {
@@ -13579,11 +13772,8 @@ define('skylark-formio/validator/Validator',[
         form: null,
         submission: null
     };
-    const instance = new ValidationChecker();
-    return {
-        instance,
-        ValidationChecker
-    };
+    const instance = ValidationChecker.instance = new ValidationChecker();
+    return  ValidationChecker.instance;
 });
 define('skylark-formio/templates/bootstrap/address/form.ejs',[], function() { return "{% if (ctx.mode.autocomplete) { %}\n  <div class=\"address-autocomplete-container\">\n    <input\n      ref=\"{{ ctx.ref.searchInput }}\"\n      {% for (var attr in ctx.inputAttributes) { %}\n        {{attr}}=\"{{ctx.inputAttributes[attr]}}\"\n      {% } %}\n      value=\"{{ ctx.displayValue }}\"\n      autocomplete=\"off\"\n    >\n    {% if (!ctx.component.disableClearIcon) { %}\n      <i\n        class=\"address-autocomplete-remove-value-icon fa fa-times\"\n        tabindex=\"{{ ctx.inputAttributes.tabindex }}\"\n        ref=\"{{ ctx.ref.removeValueIcon }}\"\n      ></i>\n    {% } %}\n  </div>\n{% } %}\n{% if (ctx.self.manualModeEnabled) { %}\n  <div class=\"form-check checkbox\">\n    <label class=\"form-check-label\">\n      <input\n        ref=\"{{ ctx.ref.modeSwitcher }}\"\n        type=\"checkbox\"\n        class=\"form-check-input\"\n        tabindex=\"{{ ctx.inputAttributes.tabindex }}\"\n        {% if (ctx.mode.manual) { %}checked=true{% } %}\n        {% if (ctx.disabled) { %}disabled=true{% } %}\n      >\n      <span>{{ ctx.component.switchToManualModeLabel }}</span>\n    </label>\n  </div>\n{% } %}\n{% if (ctx.self.manualMode) { %}\n  <div ref=\"{{ ctx.nestedKey }}\">\n    {{ ctx.children }}\n  </div>\n{% } %}\n"; });
 define('skylark-formio/templates/bootstrap/address/index',['./form.ejs'], function (form) {
@@ -14180,6 +14370,800 @@ define('skylark-formio/templates/Templates',[
         }
         static get framework() {
             return Templates._framework;
+        }
+    };
+});
+define('skylark-formio/vendors/vanilla-text-mask/adjustCaretPosition',[],function(){
+  const defaultArray = [];
+  const emptyString = '';
+
+  function adjustCaretPosition({
+    previousConformedValue = emptyString,
+    previousPlaceholder = emptyString,
+    currentCaretPosition = 0,
+    conformedValue,
+    rawValue,
+    placeholderChar,
+    placeholder,
+    indexesOfPipedChars = defaultArray,
+    caretTrapIndexes = defaultArray
+  }) {
+    if (currentCaretPosition === 0 || !rawValue.length) { return 0 }
+
+    // Store lengths for faster performance?
+    const rawValueLength = rawValue.length
+    const previousConformedValueLength = previousConformedValue.length
+    const placeholderLength = placeholder.length
+    const conformedValueLength = conformedValue.length
+
+    // This tells us how long the edit is. If user modified input from `(2__)` to `(243__)`,
+    // we know the user in this instance pasted two characters
+    const editLength = rawValueLength - previousConformedValueLength
+
+    // If the edit length is positive, that means the user is adding characters, not deleting.
+    const isAddition = editLength > 0
+
+    // This is the first raw value the user entered that needs to be conformed to mask
+    const isFirstRawValue = previousConformedValueLength === 0
+
+    // A partial multi-character edit happens when the user makes a partial selection in their
+    // input and edits that selection. That is going from `(123) 432-4348` to `() 432-4348` by
+    // selecting the first 3 digits and pressing backspace.
+    //
+    // Such cases can also happen when the user presses the backspace while holding down the ALT
+    // key.
+    const isPartialMultiCharEdit = editLength > 1 && !isAddition && !isFirstRawValue
+
+    // This algorithm doesn't support all cases of multi-character edits, so we just return
+    // the current caret position.
+    //
+    // This works fine for most cases.
+    if (isPartialMultiCharEdit) { return currentCaretPosition }
+
+    // For a mask like (111), if the `previousConformedValue` is (1__) and user attempts to enter
+    // `f` so the `rawValue` becomes (1f__), the new `conformedValue` would be (1__), which is the
+    // same as the original `previousConformedValue`. We handle this case differently for caret
+    // positioning.
+    const possiblyHasRejectedChar = isAddition && (
+      previousConformedValue === conformedValue ||
+      conformedValue === placeholder
+    )
+
+    let startingSearchIndex = 0
+    let trackRightCharacter
+    let targetChar
+
+    if (possiblyHasRejectedChar) {
+      startingSearchIndex = currentCaretPosition - editLength
+    } else {
+      // At this point in the algorithm, we want to know where the caret is right before the raw input
+      // has been conformed, and then see if we can find that same spot in the conformed input.
+      //
+      // We do that by seeing what character lies immediately before the caret, and then look for that
+      // same character in the conformed input and place the caret there.
+
+      // First, we need to normalize the inputs so that letter capitalization between raw input and
+      // conformed input wouldn't matter.
+      const normalizedConformedValue = conformedValue.toLowerCase()
+      const normalizedRawValue = rawValue.toLowerCase()
+
+      // Then we take all characters that come before where the caret currently is.
+      const leftHalfChars = normalizedRawValue.substr(0, currentCaretPosition).split(emptyString)
+
+      // Now we find all the characters in the left half that exist in the conformed input
+      // This step ensures that we don't look for a character that was filtered out or rejected by `conformToMask`.
+      const intersection = leftHalfChars.filter((char) => normalizedConformedValue.indexOf(char) !== -1)
+
+      // The last character in the intersection is the character we want to look for in the conformed
+      // value and the one we want to adjust the caret close to
+      targetChar = intersection[intersection.length - 1]
+
+      // Calculate the number of mask characters in the previous placeholder
+      // from the start of the string up to the place where the caret is
+      const previousLeftMaskChars = previousPlaceholder
+        .substr(0, intersection.length)
+        .split(emptyString)
+        .filter(char => char !== placeholderChar)
+        .length
+
+      // Calculate the number of mask characters in the current placeholder
+      // from the start of the string up to the place where the caret is
+      const leftMaskChars = placeholder
+        .substr(0, intersection.length)
+        .split(emptyString)
+        .filter(char => char !== placeholderChar)
+        .length
+
+      // Has the number of mask characters up to the caret changed?
+      const masklengthChanged = leftMaskChars !== previousLeftMaskChars
+
+      // Detect if `targetChar` is a mask character and has moved to the left
+      const targetIsMaskMovingLeft = (
+        previousPlaceholder[intersection.length - 1] !== undefined &&
+        placeholder[intersection.length - 2] !== undefined &&
+        previousPlaceholder[intersection.length - 1] !== placeholderChar &&
+        previousPlaceholder[intersection.length - 1] !== placeholder[intersection.length - 1] &&
+        previousPlaceholder[intersection.length - 1] === placeholder[intersection.length - 2]
+      )
+
+      // If deleting and the `targetChar` `is a mask character and `masklengthChanged` is true
+      // or the mask is moving to the left, we can't use the selected `targetChar` any longer
+      // if we are not at the end of the string.
+      // In this case, change tracking strategy and track the character to the right of the caret.
+      if (
+        !isAddition &&
+        (masklengthChanged || targetIsMaskMovingLeft) &&
+        previousLeftMaskChars > 0 &&
+        placeholder.indexOf(targetChar) > -1 &&
+        rawValue[currentCaretPosition] !== undefined
+      ) {
+        trackRightCharacter = true
+        targetChar = rawValue[currentCaretPosition]
+      }
+
+      // It is possible that `targetChar` will appear multiple times in the conformed value.
+      // We need to know not to select a character that looks like our target character from the placeholder or
+      // the piped characters, so we inspect the piped characters and the placeholder to see if they contain
+      // characters that match our target character.
+
+      // If the `conformedValue` got piped, we need to know which characters were piped in so that when we look for
+      // our `targetChar`, we don't select a piped char by mistake
+      const pipedChars = indexesOfPipedChars.map((index) => normalizedConformedValue[index])
+
+      // We need to know how many times the `targetChar` occurs in the piped characters.
+      const countTargetCharInPipedChars = pipedChars.filter((char) => char === targetChar).length
+
+      // We need to know how many times it occurs in the intersection
+      const countTargetCharInIntersection = intersection.filter((char) => char === targetChar).length
+
+      // We need to know if the placeholder contains characters that look like
+      // our `targetChar`, so we don't select one of those by mistake.
+      const countTargetCharInPlaceholder = placeholder
+        .substr(0, placeholder.indexOf(placeholderChar))
+        .split(emptyString)
+        .filter((char, index) => (
+          // Check if `char` is the same as our `targetChar`, so we account for it
+          char === targetChar &&
+
+          // but also make sure that both the `rawValue` and placeholder don't have the same character at the same
+          // index because if they are equal, that means we are already counting those characters in
+          // `countTargetCharInIntersection`
+          rawValue[index] !== char
+        ))
+        .length
+
+      // The number of times we need to see occurrences of the `targetChar` before we know it is the one we're looking
+      // for is:
+      const requiredNumberOfMatches = (
+        countTargetCharInPlaceholder +
+        countTargetCharInIntersection +
+        countTargetCharInPipedChars +
+        // The character to the right of the caret isn't included in `intersection`
+        // so add one if we are tracking the character to the right
+        (trackRightCharacter ? 1 : 0)
+      )
+
+      // Now we start looking for the location of the `targetChar`.
+      // We keep looping forward and store the index in every iteration. Once we have encountered
+      // enough occurrences of the target character, we break out of the loop
+      // If are searching for the second `1` in `1214`, `startingSearchIndex` will point at `4`.
+      let numberOfEncounteredMatches = 0
+      for (let i = 0; i < conformedValueLength; i++) {
+        const conformedValueChar = normalizedConformedValue[i]
+
+        startingSearchIndex = i + 1
+
+        if (conformedValueChar === targetChar) {
+          numberOfEncounteredMatches++
+        }
+
+        if (numberOfEncounteredMatches >= requiredNumberOfMatches) {
+          break
+        }
+      }
+    }
+
+    // At this point, if we simply return `startingSearchIndex` as the adjusted caret position,
+    // most cases would be handled. However, we want to fast forward or rewind the caret to the
+    // closest placeholder character if it happens to be in a non-editable spot. That's what the next
+    // logic is for.
+
+    // In case of addition, we fast forward.
+    if (isAddition) {
+      // We want to remember the last placeholder character encountered so that if the mask
+      // contains more characters after the last placeholder character, we don't forward the caret
+      // that far to the right. Instead, we stop it at the last encountered placeholder character.
+      let lastPlaceholderChar = startingSearchIndex
+
+      for (let i = startingSearchIndex; i <= placeholderLength; i++) {
+        if (placeholder[i] === placeholderChar) {
+          lastPlaceholderChar = i
+        }
+
+        if (
+          // If we're adding, we can position the caret at the next placeholder character.
+          placeholder[i] === placeholderChar ||
+
+          // If a caret trap was set by a mask function, we need to stop at the trap.
+          caretTrapIndexes.indexOf(i) !== -1 ||
+
+          // This is the end of the placeholder. We cannot move any further. Let's put the caret there.
+          i === placeholderLength
+        ) {
+          return lastPlaceholderChar
+        }
+      }
+    } else {
+      // In case of deletion, we rewind.
+      if (trackRightCharacter) {
+        // Searching for the character that was to the right of the caret
+        // We start at `startingSearchIndex` - 1 because it includes one character extra to the right
+        for (let i = startingSearchIndex - 1; i >= 0; i--) {
+          // If tracking the character to the right of the cursor, we move to the left until
+          // we found the character and then place the caret right before it
+
+          if (
+            // `targetChar` should be in `conformedValue`, since it was in `rawValue`, just
+            // to the right of the caret
+            conformedValue[i] === targetChar ||
+
+            // If a caret trap was set by a mask function, we need to stop at the trap.
+            caretTrapIndexes.indexOf(i) !== -1 ||
+
+            // This is the beginning of the placeholder. We cannot move any further.
+            // Let's put the caret there.
+            i === 0
+          ) {
+            return i
+          }
+        }
+      } else {
+        // Searching for the first placeholder or caret trap to the left
+
+        for (let i = startingSearchIndex; i >= 0; i--) {
+          // If we're deleting, we stop the caret right before the placeholder character.
+          // For example, for mask `(111) 11`, current conformed input `(456) 86`. If user
+          // modifies input to `(456 86`. That is, they deleted the `)`, we place the caret
+          // right after the first `6`
+
+          if (
+            // If we're deleting, we can position the caret right before the placeholder character
+            placeholder[i - 1] === placeholderChar ||
+
+            // If a caret trap was set by a mask function, we need to stop at the trap.
+            caretTrapIndexes.indexOf(i) !== -1 ||
+
+            // This is the beginning of the placeholder. We cannot move any further.
+            // Let's put the caret there.
+            i === 0
+          ) {
+            return i
+          }
+        }
+      }
+    }
+  }
+
+  return adjustCaretPosition;
+});
+define('skylark-formio/vendors/vanilla-text-mask/createTextMaskInputElement',[
+  "./utilities",
+  "./constants",
+  "./adjustCaretPosition",
+  "./conformToMask"
+],function(utilities,constants,adjustCaretPosition,conformToMask){
+
+
+  const {convertMaskToPlaceholder, isArray, processCaretTraps,isString} = utilities;
+  const {strFunction} = constants;
+
+  const defaultPlaceholderChar = constants.placeholderChar;
+
+  const emptyString = ''
+  const strNone = 'none'
+  const strObject = 'object'
+  const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)
+  const defer = typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame : setTimeout
+
+  function createTextMaskInputElement(config) {
+    // Anything that we will need to keep between `update` calls, we will store in this `state` object.
+    const state = {previousConformedValue: undefined, previousPlaceholder: undefined}
+
+    return {
+      state,
+
+      // `update` is called by framework components whenever they want to update the `value` of the input element.
+      // The caller can send a `rawValue` to be conformed and set on the input element. However, the default use-case
+      // is for this to be read from the `inputElement` directly.
+      update(rawValue, {
+        inputElement,
+        mask: providedMask,
+        guide,
+        pipe,
+        placeholderChar = defaultPlaceholderChar,
+        keepCharPositions = false,
+        showMask = false
+      } = config) {
+        // if `rawValue` is `undefined`, read from the `inputElement`
+        if (typeof rawValue === 'undefined') {
+          rawValue = inputElement.value
+        }
+
+        // If `rawValue` equals `state.previousConformedValue`, we don't need to change anything. So, we return.
+        // This check is here to handle controlled framework components that repeat the `update` call on every render.
+        if (rawValue === state.previousConformedValue) { return }
+
+        // Text Mask accepts masks that are a combination of a `mask` and a `pipe` that work together. If such a `mask` is
+        // passed, we destructure it below, so the rest of the code can work normally as if a separate `mask` and a `pipe`
+        // were passed.
+        if (typeof providedMask === strObject && providedMask.pipe !== undefined && providedMask.mask !== undefined) {
+          pipe = providedMask.pipe
+          providedMask = providedMask.mask
+        }
+
+        // The `placeholder` is an essential piece of how Text Mask works. For a mask like `(111)`, the placeholder would
+        // be `(___)` if the `placeholderChar` is set to `_`.
+        let placeholder
+
+        // We don't know what the mask would be yet. If it is an array, we take it as is, but if it's a function, we will
+        // have to call that function to get the mask array.
+        let mask
+
+        // If the provided mask is an array, we can call `convertMaskToPlaceholder` here once and we'll always have the
+        // correct `placeholder`.
+        if (providedMask instanceof Array) {
+          placeholder = convertMaskToPlaceholder(providedMask, placeholderChar)
+        }
+
+        // In framework components that support reactivity, it's possible to turn off masking by passing
+        // `false` for `mask` after initialization. See https://github.com/text-mask/text-mask/pull/359
+        if (providedMask === false) { return }
+
+        // We check the provided `rawValue` before moving further.
+        // If it's something we can't work with `getSafeRawValue` will throw.
+        const safeRawValue = getSafeRawValue(rawValue)
+
+        // `selectionEnd` indicates to us where the caret position is after the user has typed into the input
+        const {selectionEnd: currentCaretPosition} = inputElement
+
+        // We need to know what the `previousConformedValue` and `previousPlaceholder` is from the previous `update` call
+        const {previousConformedValue, previousPlaceholder} = state
+
+        let caretTrapIndexes
+
+        // If the `providedMask` is a function. We need to call it at every `update` to get the `mask` array.
+        // Then we also need to get the `placeholder`
+        if (typeof providedMask === strFunction) {
+          mask = providedMask(safeRawValue, {currentCaretPosition, previousConformedValue, placeholderChar})
+
+          // disable masking if `mask` is `false`
+          if (mask === false) { return }
+
+          // mask functions can setup caret traps to have some control over how the caret moves. We need to process
+          // the mask for any caret traps. `processCaretTraps` will remove the caret traps from the mask and return
+          // the indexes of the caret traps.
+          const {maskWithoutCaretTraps, indexes} = processCaretTraps(mask)
+
+          mask = maskWithoutCaretTraps // The processed mask is what we're interested in
+          caretTrapIndexes = indexes // And we need to store these indexes because they're needed by `adjustCaretPosition`
+
+          placeholder = convertMaskToPlaceholder(mask, placeholderChar)
+
+        // If the `providedMask` is not a function, we just use it as-is.
+        } else {
+          mask = providedMask
+        }
+
+        // The following object will be passed to `conformToMask` to determine how the `rawValue` will be conformed
+        const conformToMaskConfig = {
+          previousConformedValue,
+          guide,
+          placeholderChar,
+          pipe,
+          placeholder,
+          currentCaretPosition,
+          keepCharPositions
+        }
+
+        // `conformToMask` returns `conformedValue` as part of an object for future API flexibility
+        const {conformedValue} = conformToMask(safeRawValue, mask, conformToMaskConfig)
+
+        // The following few lines are to support the `pipe` feature.
+        const piped = typeof pipe === strFunction
+
+        let pipeResults = {}
+
+        // If `pipe` is a function, we call it.
+        if (piped) {
+          // `pipe` receives the `conformedValue` and the configurations with which `conformToMask` was called.
+          pipeResults = pipe(conformedValue, {rawValue: safeRawValue, ...conformToMaskConfig})
+
+          // `pipeResults` should be an object. But as a convenience, we allow the pipe author to just return `false` to
+          // indicate rejection. Or return just a string when there are no piped characters.
+          // If the `pipe` returns `false` or a string, the block below turns it into an object that the rest
+          // of the code can work with.
+          if (pipeResults === false) {
+            // If the `pipe` rejects `conformedValue`, we use the `previousConformedValue`, and set `rejected` to `true`.
+            pipeResults = {value: previousConformedValue, rejected: true}
+          } else if (isString(pipeResults)) {
+            pipeResults = {value: pipeResults}
+          }
+        }
+
+        // Before we proceed, we need to know which conformed value to use, the one returned by the pipe or the one
+        // returned by `conformToMask`.
+        const finalConformedValue = (piped) ? pipeResults.value : conformedValue
+
+        // After determining the conformed value, we will need to know where to set
+        // the caret position. `adjustCaretPosition` will tell us.
+        const adjustedCaretPosition = adjustCaretPosition({
+          previousConformedValue,
+          previousPlaceholder,
+          conformedValue: finalConformedValue,
+          placeholder,
+          rawValue: safeRawValue,
+          currentCaretPosition,
+          placeholderChar,
+          indexesOfPipedChars: pipeResults.indexesOfPipedChars,
+          caretTrapIndexes
+        })
+
+        // Text Mask sets the input value to an empty string when the condition below is set. It provides a better UX.
+        const inputValueShouldBeEmpty = finalConformedValue === placeholder && adjustedCaretPosition === 0
+        const emptyValue = showMask ? placeholder : emptyString
+        const inputElementValue = (inputValueShouldBeEmpty) ? emptyValue : finalConformedValue
+
+        state.previousConformedValue = inputElementValue // store value for access for next time
+        state.previousPlaceholder = placeholder
+
+        // In some cases, this `update` method will be repeatedly called with a raw value that has already been conformed
+        // and set to `inputElement.value`. The below check guards against needlessly readjusting the input state.
+        // See https://github.com/text-mask/text-mask/issues/231
+        if (inputElement.value === inputElementValue) {
+          return
+        }
+
+        inputElement.value = inputElementValue // set the input value
+        safeSetSelection(inputElement, adjustedCaretPosition) // adjust caret position
+      }
+    }
+  }
+
+  function safeSetSelection(element, selectionPosition) {
+    if (document.activeElement === element) {
+      if (isAndroid) {
+        defer(() => element.setSelectionRange(selectionPosition, selectionPosition, strNone), 0)
+      } else {
+        element.setSelectionRange(selectionPosition, selectionPosition, strNone)
+      }
+    }
+  }
+
+  function getSafeRawValue(inputValue) {
+    if (isString(inputValue)) {
+      return inputValue
+    } else if (isNumber(inputValue)) {
+      return String(inputValue)
+    } else if (inputValue === undefined || inputValue === null) {
+      return emptyString
+    } else {
+      throw new Error(
+        "The 'value' provided to Text Mask needs to be a string or a number. The value " +
+        `received was:\n\n ${JSON.stringify(inputValue)}`
+      )
+    }
+  }
+
+  return createTextMaskInputElement;
+
+});
+define('skylark-formio/vendors/vanilla-text-mask/maskInput',[
+	"./createTextMaskInputElement"
+],function(createTextMaskInputElement) {
+
+	function maskInput(textMaskConfig) {
+	  const {inputElement} = textMaskConfig
+	  const textMaskInputElement = createTextMaskInputElement(textMaskConfig)
+	  const inputHandler = ({target: {value}}) => textMaskInputElement.update(value)
+
+	  inputElement.addEventListener('input', inputHandler)
+
+	  textMaskInputElement.update(inputElement.value)
+
+	  return {
+	    textMaskInputElement,
+
+	    destroy() {
+	      inputElement.removeEventListener('input', inputHandler)
+	    }
+	  }
+	}
+
+	return  maskInput;
+});
+
+
+define('skylark-formio/Element',[
+    './EventEmitter',
+    './Formio',
+    './utils/utils',
+    'skylark-i18next',
+    'skylark-lodash',
+    'skylark-moment',
+    './vendors/vanilla-text-mask/maskInput'
+], function (EventEmitter, Formio, FormioUtils, i18next, _, moment, maskInput) {
+    'use strict';
+    return class Element {
+        constructor(options) {
+            this.options = Object.assign({
+                language: 'en',
+                highlightErrors: true,
+                componentErrorClass: 'formio-error-wrapper',
+                componentWarningClass: 'formio-warning-wrapper',
+                row: '',
+                namespace: 'formio'
+            }, options || {});
+            this.id = FormioUtils.getRandomComponentId();
+            this.eventHandlers = [];
+            this.i18next = this.options.i18next || i18next;
+            this.events = options && options.events ? options.events : new EventEmitter({
+                wildcard: false,
+                maxListeners: 0
+            });
+            this.defaultMask = null;
+        }
+        on(event, cb, internal, once = false) {
+            if (!this.events) {
+                return;
+            }
+            const type = `${ this.options.namespace }.${ event }`;
+            cb.id = this.id;
+            cb.internal = internal;
+            return this.events[once ? 'once' : 'on'](type, cb);
+        }
+        once(event, cb, internal) {
+            return this.on(event, cb, internal, true);
+        }
+        onAny(cb) {
+            if (!this.events) {
+                return;
+            }
+            return this.events.onAny(cb);
+        }
+        off(event) {
+            if (!this.events) {
+                return;
+            }
+            const type = `${ this.options.namespace }.${ event }`;
+            _.each(this.events.listeners(type), listener => {
+                if (listener && listener.id === this.id) {
+                    this.events.off(type, listener);
+                }
+            });
+        }
+        emit(event, ...data) {
+            if (this.events) {
+                this.events.emit(`${ this.options.namespace }.${ event }`, ...data);
+            }
+        }
+        addEventListener(obj, type, func, persistent) {
+            if (!obj) {
+                return;
+            }
+            if (!persistent) {
+                this.eventHandlers.push({
+                    id: this.id,
+                    obj,
+                    type,
+                    func
+                });
+            }
+            if ('addEventListener' in obj) {
+                obj.addEventListener(type, func, false);
+            } else if ('attachEvent' in obj) {
+                obj.attachEvent(`on${ type }`, func);
+            }
+            return this;
+        }
+        removeEventListener(obj, type, func = null) {
+            const indexes = [];
+            this.eventHandlers.forEach((handler, index) => {
+                if (handler.id === this.id && obj.removeEventListener && handler.type === type && (!func || handler.func === func)) {
+                    obj.removeEventListener(type, handler.func);
+                    indexes.push(index);
+                }
+            });
+            if (indexes.length) {
+                _.pullAt(this.eventHandlers, indexes);
+            }
+            return this;
+        }
+        removeEventListeners() {
+            this.eventHandlers.forEach(handler => {
+                if (this.id === handler.id && handler.type && handler.obj && handler.obj.removeEventListener) {
+                    handler.obj.removeEventListener(handler.type, handler.func);
+                }
+            });
+            this.eventHandlers = [];
+        }
+        removeAllEvents(includeExternal) {
+            _.each(this.events._events, (events, type) => {
+                _.each(events, listener => {
+                    if (listener && this.id === listener.id && (includeExternal || listener.internal)) {
+                        this.events.off(type, listener);
+                    }
+                });
+            });
+        }
+        destroy() {
+            this.removeEventListeners();
+            this.removeAllEvents();
+        }
+        appendTo(element, container) {
+            container.appendChild(element);
+            return this;
+        }
+        prependTo(element, container) {
+            if (container) {
+                if (container.firstChild) {
+                    try {
+                        container.insertBefore(element, container.firstChild);
+                    } catch (err) {
+                        console.warn(err);
+                        container.appendChild(element);
+                    }
+                } else {
+                    container.appendChild(element);
+                }
+            }
+            return this;
+        }
+        removeChildFrom(element, container) {
+            if (container && container.contains(element)) {
+                try {
+                    container.removeChild(element);
+                } catch (err) {
+                    console.warn(err);
+                }
+            }
+            return this;
+        }
+        ce(type, attr, children = null) {
+            const element = document.createElement(type);
+            if (attr) {
+                this.attr(element, attr);
+            }
+            this.appendChild(element, children);
+            return element;
+        }
+        appendChild(element, child) {
+            if (Array.isArray(child)) {
+                child.forEach(oneChild => this.appendChild(element, oneChild));
+            } else if (child instanceof HTMLElement || child instanceof Text) {
+                element.appendChild(child);
+            } else if (child) {
+                element.appendChild(this.text(child.toString()));
+            }
+            return this;
+        }
+        maskPlaceholder(mask) {
+            return mask.map(char => char instanceof RegExp ? '_' : char).join('');
+        }
+        setInputMask(input, inputMask, placeholder) {
+            if (input && inputMask) {
+                const mask = FormioUtils.getInputMask(inputMask);
+                this.defaultMask = mask;
+                try {
+                    if (input.mask) {
+                        input.mask.destroy();
+                    }
+                    input.mask = maskInput({
+                        inputElement: input,
+                        mask
+                    });
+                } catch (e) {
+                    console.warn(e);
+                }
+                if (mask.numeric) {
+                    input.setAttribute('pattern', '\\d*');
+                }
+                if (placeholder) {
+                    input.setAttribute('placeholder', this.maskPlaceholder(mask));
+                }
+            }
+        }
+        t(text, params) {
+            params = params || {};
+            params.nsSeparator = '::';
+            params.keySeparator = '.|.';
+            params.pluralSeparator = '._.';
+            params.contextSeparator = '._.';
+            const translated = this.i18next.t(text, params);
+            return translated || text;
+        }
+        text(text) {
+            return document.createTextNode(this.t(text));
+        }
+        attr(element, attr) {
+            if (!element) {
+                return;
+            }
+            _.each(attr, (value, key) => {
+                if (typeof value !== 'undefined') {
+                    if (key.indexOf('on') === 0) {
+                        this.addEventListener(element, key.substr(2).toLowerCase(), value);
+                    } else {
+                        element.setAttribute(key, value);
+                    }
+                }
+            });
+        }
+        hasClass(element, className) {
+            if (!element) {
+                return false;
+            }
+            className = ` ${ className } `;
+            return ` ${ element.className } `.replace(/[\n\t\r]/g, ' ').indexOf(className) > -1;
+        }
+        addClass(element, className) {
+            if (!element) {
+                return this;
+            }
+            const classes = element.getAttribute('class');
+            if (!classes.includes(className)) {
+                element.setAttribute('class', `${ classes } ${ className }`);
+            }
+            return this;
+        }
+        removeClass(element, className) {
+            if (!element || !className) {
+                return this;
+            }
+            let cls = element.getAttribute('class');
+            if (cls) {
+                cls = cls.replace(new RegExp(` ${ className }`, 'g'), '');
+                element.setAttribute('class', cls);
+            }
+            return this;
+        }
+        empty(element) {
+            if (element) {
+                while (element.firstChild) {
+                    element.removeChild(element.firstChild);
+                }
+            }
+        }
+        evalContext(additional) {
+            return Object.assign({
+                _,
+                utils: FormioUtils,
+                util: FormioUtils,
+                user: Formio.getUser(),
+                moment,
+                instance: this,
+                self: this,
+                token: Formio.getToken({ decode: true }),
+                config: this.root && this.root.form && this.root.form.config ? this.root.form.config : {}
+            }, additional, _.get(this.root, 'options.evalContext', {}));
+        }
+        interpolate(string, data) {
+            return FormioUtils.interpolate(string, this.evalContext(data));
+        }
+        evaluate(func, args, ret, tokenize) {
+            return FormioUtils.evaluate(func, this.evalContext(args), ret, tokenize);
+        }
+        hook() {
+            const name = arguments[0];
+            if (this.options && this.options.hooks && this.options.hooks[name]) {
+                return this.options.hooks[name].apply(this, Array.prototype.slice.call(arguments, 1));
+            } else {
+                const fn = typeof arguments[arguments.length - 1] === 'function' ? arguments[arguments.length - 1] : null;
+                if (fn) {
+                    return fn(null, arguments[1]);
+                } else {
+                    return arguments[1];
+                }
+            }
         }
     };
 });
@@ -16174,6 +17158,51 @@ define('skylark-formio/components/_classes/field/Field',['../component/Component
         }
     };
 });
+define('skylark-formio/components/Components',[
+    './_classes/component/Component',
+//    './_classes/nested/NestedComponent',
+    'skylark-lodash'
+], function (Component, 
+    //NestedComponent, 
+    _) {
+    'use strict';
+     class Components {
+        static get components() {
+            if (!Components._components) {
+                Components._components = {};
+            }
+            return Components._components;
+        }
+        static setComponents(comps) {
+            if (comps.base) {
+                comps.base.tableView = function (value, options) {
+                    const comp = Components.create(options.component, options.options || {}, options.data || {}, true);
+                    return comp.getView(value);
+                };
+            }
+            _.assign(Components.components, comps);
+        }
+        static addComponent(name, comp) {
+            return Components.setComponent(name, comp);
+        }
+        static setComponent(name, comp) {
+            Components.components[name] = comp;
+        }
+        static create(component, options, data) {
+            let comp = null;
+            if (component.type && Components.components.hasOwnProperty(component.type)) {
+                comp = new Components.components[component.type](component, options, data);
+            } else if (Array.isArray(component.components)) {
+                comp = new Components.NestedComponent(component, options, data);
+            } else {
+                comp = new Component(component, options, data);
+            }
+            return comp;
+        }
+    };
+
+    return Components;
+});
 define('skylark-formio/components/_classes/nested/NestedComponent',[
     'skylark-lodash',
     '../field/Field',
@@ -16181,8 +17210,7 @@ define('skylark-formio/components/_classes/nested/NestedComponent',[
     '../../../vendors/getify/npo'
 ], function (_, Field, Components, NativePromise) {
     'use strict';
-    'use strict';
-    return class NestedComponent extends Field {
+    class NestedComponent extends Field {
         static schema(...extend) {
             return Field.schema({ tree: false }, ...extend);
         }
@@ -16648,47 +17676,11 @@ define('skylark-formio/components/_classes/nested/NestedComponent',[
             }, false);
         }
     };
-});
-define('skylark-formio/components/Components',[
-    './_classes/component/Component',
-    './_classes/nested/NestedComponent',
-    'skylark-lodash'
-], function (Component, NestedComponent, _) {
-    'use strict';
-    return class Components {
-        static get components() {
-            if (!Components._components) {
-                Components._components = {};
-            }
-            return Components._components;
-        }
-        static setComponents(comps) {
-            if (comps.base) {
-                comps.base.tableView = function (value, options) {
-                    const comp = Components.create(options.component, options.options || {}, options.data || {}, true);
-                    return comp.getView(value);
-                };
-            }
-            _.assign(Components.components, comps);
-        }
-        static addComponent(name, comp) {
-            return Components.setComponent(name, comp);
-        }
-        static setComponent(name, comp) {
-            Components.components[name] = comp;
-        }
-        static create(component, options, data) {
-            let comp = null;
-            if (component.type && Components.components.hasOwnProperty(component.type)) {
-                comp = new Components.components[component.type](component, options, data);
-            } else if (Array.isArray(component.components)) {
-                comp = new NestedComponent(component, options, data);
-            } else {
-                comp = new Component(component, options, data);
-            }
-            return comp;
-        }
-    };
+
+
+    Components.NestedComponent = NestedComponent;
+
+    return NestedComponent;
 });
 define('skylark-formio/components/_classes/nesteddata/NestedDataComponent',[
     '../component/Component',
@@ -16718,6 +17710,8164 @@ define('skylark-formio/components/_classes/nesteddata/NestedDataComponent',[
         }
     };
 });
+define('skylark-formio/components/container/Container',[
+    'skylark-lodash',
+    '../_classes/component/Component',
+    '../_classes/nesteddata/NestedDataComponent'
+], function (_, Component, NestedDataComponent) {
+    'use strict';
+    return class ContainerComponent extends NestedDataComponent {
+        static schema(...extend) {
+            return NestedDataComponent.schema({
+                label: 'Container',
+                type: 'container',
+                key: 'container',
+                clearOnHide: true,
+                input: true,
+                tree: true,
+                hideLabel: true,
+                components: []
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Container',
+                icon: 'folder-open',
+                group: 'data',
+                documentation: 'http://help.form.io/userguide/#container',
+                weight: 10,
+                schema: ContainerComponent.schema()
+            };
+        }
+        constructor(...args) {
+            super(...args);
+            this.type = 'container';
+        }
+        addComponents(data, options) {
+            return super.addComponents(this.dataValue, options);
+        }
+        get defaultSchema() {
+            return ContainerComponent.schema();
+        }
+        get emptyValue() {
+            return {};
+        }
+        get templateName() {
+            return 'container';
+        }
+        componentContext() {
+            return this.dataValue;
+        }
+        setValue(value, flags = {}) {
+            let changed = false;
+            const hasValue = this.hasValue();
+            if (hasValue && _.isEmpty(this.dataValue)) {
+                flags.noValidate = true;
+            }
+            if (!value || !_.isObject(value) || !hasValue) {
+                changed = true;
+                this.dataValue = this.defaultValue;
+            }
+            changed = super.setValue(value, flags) || changed;
+            this.updateOnChange(flags, changed);
+            return changed;
+        }
+        checkData(data, flags, row, components) {
+            data = data || this.rootValue;
+            flags = flags || {};
+            row = row || this.data;
+            components = components || this.getComponents();
+            return components.reduce((valid, comp) => {
+                return comp.checkData(data, flags, this.dataValue) && valid;
+            }, Component.prototype.checkData.call(this, data, flags, row));
+        }
+    };
+});
+define('skylark-formio/components/address/Address',[
+    '../../vendors/kraaden/autocomplete',
+    'skylark-lodash',
+    '../../Formio',
+    '../../providers/address/GoogleAddressProvider',
+    '../_classes/field/Field',
+    '../_classes/nested/NestedComponent',
+    '../container/Container'
+], function (autocompleter, _, Formio, GoogleAddressProvider, Field, NestedComponent, ContainerComponent) {
+    'use strict';
+    const AddressComponentMode = {
+        Autocomplete: 'autocomplete',
+        Manual: 'manual'
+    };
+    const RemoveValueIconHiddenClass = 'address-autocomplete-remove-value-icon--hidden';
+    const ChildConditional = "show = _.get(instance, 'parent.manualMode', false);";
+    return class AddressComponent extends ContainerComponent {
+        static schema(...extend) {
+            return ContainerComponent.schema({
+                type: 'address',
+                label: 'Address',
+                key: 'address',
+                switchToManualModeLabel: "Can't find address? Switch to manual mode.",
+                provider: '',
+                providerOptions: {},
+                manualModeViewString: '',
+                hideLabel: false,
+                disableClearIcon: false,
+                enableManualMode: false,
+                components: [
+                    {
+                        label: 'Address 1',
+                        tableView: false,
+                        key: 'address1',
+                        type: 'textfield',
+                        input: true,
+                        customConditional: ChildConditional
+                    },
+                    {
+                        label: 'Address 2',
+                        tableView: false,
+                        key: 'address2',
+                        type: 'textfield',
+                        input: true,
+                        customConditional: ChildConditional
+                    },
+                    {
+                        label: 'City',
+                        tableView: false,
+                        key: 'city',
+                        type: 'textfield',
+                        input: true,
+                        customConditional: ChildConditional
+                    },
+                    {
+                        label: 'State',
+                        tableView: false,
+                        key: 'state',
+                        type: 'textfield',
+                        input: true,
+                        customConditional: ChildConditional
+                    },
+                    {
+                        label: 'Country',
+                        tableView: false,
+                        key: 'country',
+                        type: 'textfield',
+                        input: true,
+                        customConditional: ChildConditional
+                    },
+                    {
+                        label: 'Zip Code',
+                        tableView: false,
+                        key: 'zip',
+                        type: 'textfield',
+                        input: true,
+                        customConditional: ChildConditional
+                    }
+                ]
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Address',
+                group: 'advanced',
+                icon: 'home',
+                documentation: 'http://help.form.io/userguide/#address',
+                weight: 35,
+                schema: AddressComponent.schema()
+            };
+        }
+        mergeSchema(component = {}) {
+            let {defaultSchema} = this;
+            if (component.components) {
+                defaultSchema = _.omit(defaultSchema, 'components');
+            }
+            return _.defaultsDeep(component, defaultSchema);
+        }
+        init() {
+            this.components = this.components || [];
+            if (this.builderMode || this.manualModeEnabled) {
+                NestedComponent.prototype.addComponents.call(this, this.manualMode ? this.address : {});
+            }
+            Field.prototype.init.call(this);
+            if (!this.builderMode) {
+                if (this.component.provider) {
+                    const {provider, providerOptions} = this.component;
+                    this.provider = this.initializeProvider(provider, providerOptions);
+                } else if (this.component.map) {
+                    this.component.provider = GoogleAddressProvider.name;
+                    this.component.providerOptions = this.component.providerOptions || {};
+                    const {map, provider, providerOptions} = this.component;
+                    const {key, region} = map;
+                    if (key) {
+                        _.set(providerOptions, 'params.key', key);
+                    }
+                    if (region) {
+                        _.set(providerOptions, 'params.region', region);
+                    }
+                    this.provider = this.initializeProvider(provider, providerOptions);
+                }
+            }
+        }
+        initializeProvider(provider, options = {}) {
+            const Provider = Formio.Providers.getProvider('address', provider);
+            return new Provider(options);
+        }
+        get emptyValue() {
+            return this.manualModeEnabled ? {
+                mode: AddressComponentMode.Autocomplete,
+                address: {}
+            } : {};
+        }
+        get mode() {
+            return this.manualModeEnabled ? this.dataValue ? this.dataValue.mode : this.dataValue : AddressComponentMode.Autocomplete;
+        }
+        set mode(value) {
+            if (this.manualModeEnabled) {
+                this.dataValue.mode = value;
+            }
+        }
+        get autocompleteMode() {
+            return this.mode === AddressComponentMode.Autocomplete;
+        }
+        get manualMode() {
+            return this.mode === AddressComponentMode.Manual;
+        }
+        get manualModeEnabled() {
+            return Boolean(this.component.enableManualMode);
+        }
+        restoreComponentsContext() {
+            this.getComponents().forEach(component => {
+                component.data = this.address;
+                component.setValue(component.dataValue, { noUpdateEvent: true });
+            });
+        }
+        get address() {
+            return this.manualModeEnabled && this.dataValue ? this.dataValue.address : this.dataValue;
+        }
+        set address(value) {
+            if (this.manualModeEnabled) {
+                this.dataValue.address = value;
+            } else {
+                this.dataValue = value;
+            }
+        }
+        get defaultSchema() {
+            return AddressComponent.schema();
+        }
+        isValueInLegacyFormat(value) {
+            return value && !value.mode;
+        }
+        normalizeValue(value) {
+            return this.manualModeEnabled && this.isValueInLegacyFormat(value) ? {
+                mode: AddressComponentMode.Autocomplete,
+                address: value
+            } : value;
+        }
+        setValue(value, flags = {}) {
+            const changed = Field.prototype.setValue.call(this, value, flags);
+            if (this.manualMode) {
+                this.restoreComponentsContext();
+            }
+            if (changed) {
+                this.redraw();
+            }
+            return changed;
+        }
+        static get modeSwitcherRef() {
+            return 'modeSwitcher';
+        }
+        static get removeValueIconRef() {
+            return 'removeValueIcon';
+        }
+        static get searchInputRef() {
+            return 'searchInput';
+        }
+        get modeSwitcher() {
+            return this.refs ? this.refs[AddressComponent.modeSwitcherRef] || null : null;
+        }
+        get removeValueIcon() {
+            return this.refs ? this.refs[AddressComponent.removeValueIconRef] || null : null;
+        }
+        get searchInput() {
+            return this.refs ? this.refs[AddressComponent.searchInputRef] || null : null;
+        }
+        get searchInputAttributes() {
+            const attr = {
+                name: this.options.name,
+                type: 'text',
+                class: 'form-control',
+                lang: this.options.language,
+                tabindex: this.component.tabindex || 0
+            };
+            if (this.component.placeholder) {
+                attr.placeholder = this.t(this.component.placeholder);
+            }
+            if (this.disabled) {
+                attr.disabled = 'disabled';
+            }
+            _.defaults(attr, this.component.attributes);
+            return attr;
+        }
+        get templateName() {
+            return 'address';
+        }
+        render() {
+            return super.render(this.renderTemplate(this.templateName, {
+                children: this.builderMode || this.manualModeEnabled ? this.renderComponents() : '',
+                nestedKey: this.nestedKey,
+                inputAttributes: this.searchInputAttributes,
+                ref: {
+                    modeSwitcher: AddressComponent.modeSwitcherRef,
+                    removeValueIcon: AddressComponent.removeValueIconRef,
+                    searchInput: AddressComponent.searchInputRef
+                },
+                displayValue: this.getDisplayValue(),
+                mode: {
+                    autocomplete: this.autocompleteMode,
+                    manual: this.manualMode
+                }
+            }));
+        }
+        attach(element) {
+            const result = (this.builderMode || this.manualMode ? super.attach : Field.prototype.attach).call(this, element);
+            if (!this.builderMode) {
+                if (!this.provider && this.component.provider) {
+                    const {provider, providerOptions} = this.component;
+                    this.provider = this.initializeProvider(provider, providerOptions);
+                }
+            }
+            this.loadRefs(element, {
+                [AddressComponent.modeSwitcherRef]: 'single',
+                [AddressComponent.removeValueIconRef]: 'single',
+                [AddressComponent.searchInputRef]: 'single'
+            });
+            if (!this.builderMode && this.searchInput && this.provider) {
+                autocompleter({
+                    input: this.searchInput,
+                    debounceWaitMs: 300,
+                    fetch: (text, update) => {
+                        const query = text;
+                        this.provider.search(query).then(update);
+                    },
+                    render: address => {
+                        const div = this.ce('div');
+                        div.textContent = this.getDisplayValue(address);
+                        return div;
+                    },
+                    onSelect: address => {
+                        this.address = address;
+                        this.triggerChange({ modified: true });
+                        if (this.searchInput) {
+                            this.searchInput.value = this.getDisplayValue();
+                        }
+                        this.updateRemoveIcon();
+                    }
+                });
+                this.addEventListener(this.searchInput, 'blur', () => {
+                    if (!this.searchInput) {
+                        return;
+                    }
+                    if (this.searchInput.value) {
+                        this.searchInput.value = this.getDisplayValue();
+                    }
+                });
+                this.addEventListener(this.searchInput, 'keyup', () => {
+                    if (!this.searchInput) {
+                        return;
+                    }
+                    if (!this.searchInput.value) {
+                        this.clearAddress();
+                    }
+                });
+            }
+            if (this.modeSwitcher) {
+                this.addEventListener(this.modeSwitcher, 'change', () => {
+                    if (!this.modeSwitcher) {
+                        return;
+                    }
+                    this.dataValue = this.emptyValue;
+                    this.mode = this.modeSwitcher.checked ? AddressComponentMode.Manual : AddressComponentMode.Autocomplete;
+                    if (!this.builderMode) {
+                        if (this.manualMode) {
+                            this.restoreComponentsContext();
+                        }
+                        this.triggerChange({ modified: true });
+                    }
+                    this.redraw();
+                });
+            }
+            if (!this.builderMode && this.removeValueIcon) {
+                this.updateRemoveIcon();
+                const removeValueHandler = () => {
+                    this.clearAddress();
+                    this.focus();
+                };
+                this.addEventListener(this.removeValueIcon, 'click', removeValueHandler);
+                this.addEventListener(this.removeValueIcon, 'keydown', ({key}) => {
+                    if (key === 'Enter') {
+                        removeValueHandler();
+                    }
+                });
+            }
+            return result;
+        }
+        addChildComponent(component) {
+            component.customConditional = ChildConditional;
+        }
+        redraw() {
+            const modeSwitcherInFocus = this.modeSwitcher && document.activeElement === this.modeSwitcher;
+            return super.redraw().then(result => {
+                if (modeSwitcherInFocus && this.modeSwitcher) {
+                    this.modeSwitcher.focus();
+                }
+                return result;
+            });
+        }
+        clearAddress() {
+            if (!this.isEmpty()) {
+                this.triggerChange();
+            }
+            this.dataValue = this.emptyValue;
+            if (this.searchInput) {
+                this.searchInput.value = '';
+            }
+            this.updateRemoveIcon();
+        }
+        getDisplayValue(value = this.address) {
+            return this.provider && !this.manualMode ? this.provider.getDisplayValue(value) : '';
+        }
+        validateMultiple() {
+            return false;
+        }
+        updateRemoveIcon() {
+            if (this.removeValueIcon) {
+                if (this.isEmpty() || this.disabled) {
+                    this.addClass(this.removeValueIcon, RemoveValueIconHiddenClass);
+                } else {
+                    this.removeClass(this.removeValueIcon, RemoveValueIconHiddenClass);
+                }
+            }
+        }
+        getValueAsString(value) {
+            if (!value) {
+                return '';
+            }
+            const normalizedValue = this.normalizeValue(value);
+            const {address, mode} = this.manualModeEnabled ? normalizedValue : {
+                address: normalizedValue,
+                mode: AddressComponentMode.Autocomplete
+            };
+            const valueInManualMode = mode === AddressComponentMode.Manual;
+            if (this.provider && !valueInManualMode) {
+                return this.getDisplayValue(address);
+            }
+            if (valueInManualMode) {
+                if (this.component.manualModeViewString) {
+                    return this.interpolate(this.component.manualModeViewString, {
+                        address,
+                        data: this.data,
+                        component: this.component
+                    });
+                }
+                return this.getComponents().filter(component => component.hasValue(address)).map(component => [
+                    component,
+                    _.get(address, component.key)
+                ]).filter(([component, componentValue]) => !component.isEmpty(componentValue)).map(([component, componentValue]) => component.getValueAsString(componentValue)).join(', ');
+            }
+            return super.getValueAsString(address);
+        }
+        focus() {
+            if (this.searchInput) {
+                this.searchInput.focus();
+            }
+        }
+    };
+});
+define('skylark-formio/components/_classes/multivalue/Multivalue',[
+    '../field/Field',
+    'skylark-lodash'
+], function (Field, _) {
+    'use strict';
+    return class Multivalue extends Field {
+        get dataValue() {
+            const parent = super.dataValue;
+            if (!parent && this.component.multiple) {
+                return [];
+            }
+            return parent;
+        }
+        set dataValue(value) {
+            super.dataValue = value;
+        }
+        get defaultValue() {
+            let value = super.defaultValue;
+            if (this.component.multiple) {
+                if (_.isArray(value)) {
+                    value = !value.length ? [super.emptyValue] : value;
+                } else {
+                    value = [value];
+                }
+            }
+            return value;
+        }
+        get addAnother() {
+            return this.t(this.component.addAnother || ' Add Another');
+        }
+        useWrapper() {
+            return this.component.hasOwnProperty('multiple') && this.component.multiple;
+        }
+        render() {
+            if (!this.useWrapper()) {
+                return super.render(`<div ref="element">${ this.renderElement(this.dataValue) }</div>`);
+            }
+            let dataValue = this.dataValue;
+            if (!Array.isArray(dataValue)) {
+                dataValue = dataValue ? [dataValue] : [];
+            }
+            return super.render(this.renderTemplate('multiValueTable', {
+                rows: dataValue.map(this.renderRow.bind(this)).join(''),
+                disabled: this.disabled,
+                addAnother: this.addAnother
+            }));
+        }
+        renderElement() {
+            return '';
+        }
+        renderRow(value, index) {
+            return this.renderTemplate('multiValueRow', {
+                index,
+                disabled: this.disabled,
+                element: `${ this.renderElement(value, index) }`
+            });
+        }
+        attach(dom) {
+            const superAttach = super.attach(dom);
+            this.loadRefs(dom, {
+                addButton: 'multiple',
+                input: 'multiple',
+                removeRow: 'multiple',
+                mask: 'multiple',
+                select: 'multiple'
+            });
+            this.refs.input.forEach(this.attachElement.bind(this));
+            if (!this.component.multiple) {
+                return;
+            }
+            this.refs.removeRow.forEach((removeButton, index) => {
+                this.addEventListener(removeButton, 'click', event => {
+                    event.preventDefault();
+                    this.removeValue(index);
+                });
+            });
+            this.refs.addButton.forEach(addButton => {
+                this.addEventListener(addButton, 'click', event => {
+                    event.preventDefault();
+                    this.addValue();
+                });
+            });
+            return superAttach;
+        }
+        detach() {
+            if (this.refs.input && this.refs.input.length) {
+                this.refs.input.forEach(input => {
+                    if (input.mask) {
+                        input.mask.destroy();
+                    }
+                    if (input.widget) {
+                        input.widget.destroy();
+                    }
+                });
+            }
+            if (this.refs.mask && this.refs.mask.length) {
+                this.refs.mask.forEach(input => {
+                    if (input.mask) {
+                        input.mask.destroy();
+                    }
+                });
+            }
+            super.detach();
+        }
+        attachElement(element, index) {
+            this.addEventListener(element, this.inputInfo.changeEvent, () => {
+                const textCase = _.get(this.component, 'case', 'mixed');
+                if (textCase !== 'mixed') {
+                    const {selectionStart, selectionEnd} = element;
+                    if (textCase === 'uppercase' && element.value) {
+                        element.value = element.value.toUpperCase();
+                    }
+                    if (textCase === 'lowercase' && element.value) {
+                        element.value = element.value.toLowerCase();
+                    }
+                    if (element.selectionStart && element.selectionEnd) {
+                        element.selectionStart = selectionStart;
+                        element.selectionEnd = selectionEnd;
+                    }
+                }
+                if (element.mask) {
+                    setTimeout(() => {
+                        return this.updateValue(null, { modified: this.component.type !== 'hidden' }, index);
+                    }, 1);
+                } else {
+                    return this.updateValue(null, { modified: this.component.type !== 'hidden' }, index);
+                }
+            });
+            if (!this.attachMultiMask(index)) {
+                this.setInputMask(element);
+            }
+        }
+        onSelectMaskHandler(event) {
+            this.updateMask(event.target.maskInput, this.getMaskPattern(event.target.value));
+        }
+        getMaskPattern(maskName) {
+            if (!this.multiMasks) {
+                this.multiMasks = {};
+            }
+            if (this.multiMasks[maskName]) {
+                return this.multiMasks[maskName];
+            }
+            const mask = this.component.inputMasks.find(inputMask => inputMask.label === maskName);
+            this.multiMasks[maskName] = mask ? mask.mask : this.component.inputMasks[0].mask;
+            return this.multiMasks[maskName];
+        }
+        attachMultiMask(index) {
+            if (!(this.isMultipleMasksField && this.component.inputMasks.length && this.refs.input.length)) {
+                return false;
+            }
+            const maskSelect = this.refs.select[index];
+            maskSelect.onchange = this.onSelectMaskHandler.bind(this);
+            maskSelect.maskInput = this.refs.mask[index];
+            this.setInputMask(maskSelect.maskInput, this.component.inputMasks[0].mask);
+            return true;
+        }
+        updateMask(input, mask) {
+            if (!mask) {
+                return;
+            }
+            this.setInputMask(input, mask, !this.component.placeholder);
+            this.updateValue();
+        }
+        addNewValue(value) {
+            if (value === undefined) {
+                value = this.component.defaultValue ? this.component.defaultValue : this.emptyValue;
+                if (Array.isArray(value) && value.length === 0) {
+                    value = this.emptyValue;
+                }
+            }
+            let dataValue = this.dataValue || [];
+            if (!Array.isArray(dataValue)) {
+                dataValue = [dataValue];
+            }
+            if (Array.isArray(value)) {
+                dataValue = dataValue.concat(value);
+            } else {
+                dataValue.push(value);
+            }
+            this.dataValue = dataValue;
+        }
+        addValue() {
+            this.addNewValue();
+            this.redraw();
+            this.checkConditions();
+            if (!this.isEmpty(this.dataValue)) {
+                this.restoreValue();
+            }
+            if (this.root) {
+                this.root.onChange();
+            }
+        }
+    };
+});
+define('skylark-formio/widgets/InputWidget',[
+    'skylark-lodash',
+    '../Element',
+    '../vendors/getify/npo'
+], function (_, Element, NativePromise) {
+    'use strict';
+    return class InputWidget extends Element {
+        static get defaultSettings() {
+            return { type: 'input' };
+        }
+        constructor(settings, component) {
+            super(settings);
+            this.namespace = 'formio.widget';
+            this.component = component || {};
+            this.settings = _.merge({}, this.defaultSettings, settings || {});
+        }
+        attach(input) {
+            this._input = input;
+            return NativePromise.resolve();
+        }
+        get defaultSettings() {
+            return {};
+        }
+        set disabled(disabled) {
+            if (disabled) {
+                this._input.setAttribute('disabled', 'disabled');
+            } else {
+                this._input.removeAttribute('disabled');
+            }
+        }
+        get input() {
+            return this._input;
+        }
+        getValue() {
+            return this._input.value;
+        }
+        getValueAsString(value) {
+            return value;
+        }
+        validationValue(value) {
+            return value;
+        }
+        addPrefix() {
+            return null;
+        }
+        addSuffix() {
+            return null;
+        }
+        setValue(value) {
+            this._input.value = value;
+        }
+    };
+});
+/* flatpickr v4.5.7, @license MIT */
+define('skylark-formio/vendors/flatpickr/flatpickr',[], function () { 
+    'use strict';
+
+    /*! *****************************************************************************
+    Copyright (c) Microsoft Corporation. All rights reserved.
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+    this file except in compliance with the License. You may obtain a copy of the
+    License at http://www.apache.org/licenses/LICENSE-2.0
+
+    THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
+    WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
+    MERCHANTABLITY OR NON-INFRINGEMENT.
+
+    See the Apache Version 2.0 License for specific language governing permissions
+    and limitations under the License.
+    ***************************************************************************** */
+
+    var __assign = function() {
+        __assign = Object.assign || function __assign(t) {
+            for (var s, i = 1, n = arguments.length; i < n; i++) {
+                s = arguments[i];
+                for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p)) t[p] = s[p];
+            }
+            return t;
+        };
+        return __assign.apply(this, arguments);
+    };
+
+    var HOOKS = [
+        "onChange",
+        "onClose",
+        "onDayCreate",
+        "onDestroy",
+        "onKeyDown",
+        "onMonthChange",
+        "onOpen",
+        "onParseConfig",
+        "onReady",
+        "onValueUpdate",
+        "onYearChange",
+        "onPreCalendarPosition",
+    ];
+    var defaults = {
+        _disable: [],
+        _enable: [],
+        allowInput: false,
+        altFormat: "F j, Y",
+        altInput: false,
+        altInputClass: "form-control input",
+        animate: typeof window === "object" &&
+            window.navigator.userAgent.indexOf("MSIE") === -1,
+        ariaDateFormat: "F j, Y",
+        clickOpens: true,
+        closeOnSelect: true,
+        conjunction: ", ",
+        dateFormat: "Y-m-d",
+        defaultHour: 12,
+        defaultMinute: 0,
+        defaultSeconds: 0,
+        disable: [],
+        disableMobile: false,
+        enable: [],
+        enableSeconds: false,
+        enableTime: false,
+        errorHandler: function (err) {
+            return typeof console !== "undefined" && console.warn(err);
+        },
+        getWeek: function (givenDate) {
+            var date = new Date(givenDate.getTime());
+            date.setHours(0, 0, 0, 0);
+            // Thursday in current week decides the year.
+            date.setDate(date.getDate() + 3 - ((date.getDay() + 6) % 7));
+            // January 4 is always in week 1.
+            var week1 = new Date(date.getFullYear(), 0, 4);
+            // Adjust to Thursday in week 1 and count number of weeks from date to week1.
+            return (1 +
+                Math.round(((date.getTime() - week1.getTime()) / 86400000 -
+                    3 +
+                    ((week1.getDay() + 6) % 7)) /
+                    7));
+        },
+        hourIncrement: 1,
+        ignoredFocusElements: [],
+        inline: false,
+        locale: "default",
+        minuteIncrement: 5,
+        mode: "single",
+        nextArrow: "<svg version='1.1' xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' viewBox='0 0 17 17'><g></g><path d='M13.207 8.472l-7.854 7.854-0.707-0.707 7.146-7.146-7.146-7.148 0.707-0.707 7.854 7.854z' /></svg>",
+        noCalendar: false,
+        now: new Date(),
+        onChange: [],
+        onClose: [],
+        onDayCreate: [],
+        onDestroy: [],
+        onKeyDown: [],
+        onMonthChange: [],
+        onOpen: [],
+        onParseConfig: [],
+        onReady: [],
+        onValueUpdate: [],
+        onYearChange: [],
+        onPreCalendarPosition: [],
+        plugins: [],
+        position: "auto",
+        positionElement: undefined,
+        prevArrow: "<svg version='1.1' xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' viewBox='0 0 17 17'><g></g><path d='M5.207 8.471l7.146 7.147-0.707 0.707-7.853-7.854 7.854-7.853 0.707 0.707-7.147 7.146z' /></svg>",
+        shorthandCurrentMonth: false,
+        showMonths: 1,
+        static: false,
+        time_24hr: false,
+        weekNumbers: false,
+        wrap: false
+    };
+
+    var english = {
+        weekdays: {
+            shorthand: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+            longhand: [
+                "Sunday",
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday",
+                "Saturday",
+            ]
+        },
+        months: {
+            shorthand: [
+                "Jan",
+                "Feb",
+                "Mar",
+                "Apr",
+                "May",
+                "Jun",
+                "Jul",
+                "Aug",
+                "Sep",
+                "Oct",
+                "Nov",
+                "Dec",
+            ],
+            longhand: [
+                "January",
+                "February",
+                "March",
+                "April",
+                "May",
+                "June",
+                "July",
+                "August",
+                "September",
+                "October",
+                "November",
+                "December",
+            ]
+        },
+        daysInMonth: [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],
+        firstDayOfWeek: 0,
+        ordinal: function (nth) {
+            var s = nth % 100;
+            if (s > 3 && s < 21)
+                return "th";
+            switch (s % 10) {
+                case 1:
+                    return "st";
+                case 2:
+                    return "nd";
+                case 3:
+                    return "rd";
+                default:
+                    return "th";
+            }
+        },
+        rangeSeparator: " to ",
+        weekAbbreviation: "Wk",
+        scrollTitle: "Scroll to increment",
+        toggleTitle: "Click to toggle",
+        amPM: ["AM", "PM"],
+        yearAriaLabel: "Year"
+    };
+
+    var pad = function (number) { return ("0" + number).slice(-2); };
+    var int = function (bool) { return (bool === true ? 1 : 0); };
+    /* istanbul ignore next */
+    function debounce(func, wait, immediate) {
+        if (immediate === void 0) { immediate = false; }
+        var timeout;
+        return function () {
+            var context = this, args = arguments;
+            timeout !== null && clearTimeout(timeout);
+            timeout = window.setTimeout(function () {
+                timeout = null;
+                if (!immediate)
+                    func.apply(context, args);
+            }, wait);
+            if (immediate && !timeout)
+                func.apply(context, args);
+        };
+    }
+    var arrayify = function (obj) {
+        return obj instanceof Array ? obj : [obj];
+    };
+
+    function toggleClass(elem, className, bool) {
+        if (bool === true)
+            return elem.classList.add(className);
+        elem.classList.remove(className);
+    }
+    function createElement(tag, className, content) {
+        var e = window.document.createElement(tag);
+        className = className || "";
+        content = content || "";
+        e.className = className;
+        if (content !== undefined)
+            e.textContent = content;
+        return e;
+    }
+    function clearNode(node) {
+        while (node.firstChild)
+            node.removeChild(node.firstChild);
+    }
+    function findParent(node, condition) {
+        if (condition(node))
+            return node;
+        else if (node.parentNode)
+            return findParent(node.parentNode, condition);
+        return undefined; // nothing found
+    }
+    function createNumberInput(inputClassName, opts) {
+        var wrapper = createElement("div", "numInputWrapper"), numInput = createElement("input", "numInput " + inputClassName), arrowUp = createElement("span", "arrowUp"), arrowDown = createElement("span", "arrowDown");
+        if (navigator.userAgent.indexOf("MSIE 9.0") === -1) {
+            numInput.type = "number";
+        }
+        else {
+            numInput.type = "text";
+            numInput.pattern = "\\d*";
+        }
+        if (opts !== undefined)
+            for (var key in opts)
+                numInput.setAttribute(key, opts[key]);
+        wrapper.appendChild(numInput);
+        wrapper.appendChild(arrowUp);
+        wrapper.appendChild(arrowDown);
+        return wrapper;
+    }
+    function getEventTarget(event) {
+        if (typeof event.composedPath === "function") {
+            var path = event.composedPath();
+            return path[0];
+        }
+        return event.target;
+    }
+
+    var do_nothing = function () { return undefined; };
+    var monthToStr = function (monthNumber, shorthand, locale) { return locale.months[shorthand ? "shorthand" : "longhand"][monthNumber]; };
+    var revFormat = {
+        D: do_nothing,
+        F: function (dateObj, monthName, locale) {
+            dateObj.setMonth(locale.months.longhand.indexOf(monthName));
+        },
+        G: function (dateObj, hour) {
+            dateObj.setHours(parseFloat(hour));
+        },
+        H: function (dateObj, hour) {
+            dateObj.setHours(parseFloat(hour));
+        },
+        J: function (dateObj, day) {
+            dateObj.setDate(parseFloat(day));
+        },
+        K: function (dateObj, amPM, locale) {
+            dateObj.setHours((dateObj.getHours() % 12) +
+                12 * int(new RegExp(locale.amPM[1], "i").test(amPM)));
+        },
+        M: function (dateObj, shortMonth, locale) {
+            dateObj.setMonth(locale.months.shorthand.indexOf(shortMonth));
+        },
+        S: function (dateObj, seconds) {
+            dateObj.setSeconds(parseFloat(seconds));
+        },
+        U: function (_, unixSeconds) { return new Date(parseFloat(unixSeconds) * 1000); },
+        W: function (dateObj, weekNum) {
+            var weekNumber = parseInt(weekNum);
+            return new Date(dateObj.getFullYear(), 0, 2 + (weekNumber - 1) * 7, 0, 0, 0, 0);
+        },
+        Y: function (dateObj, year) {
+            dateObj.setFullYear(parseFloat(year));
+        },
+        Z: function (_, ISODate) { return new Date(ISODate); },
+        d: function (dateObj, day) {
+            dateObj.setDate(parseFloat(day));
+        },
+        h: function (dateObj, hour) {
+            dateObj.setHours(parseFloat(hour));
+        },
+        i: function (dateObj, minutes) {
+            dateObj.setMinutes(parseFloat(minutes));
+        },
+        j: function (dateObj, day) {
+            dateObj.setDate(parseFloat(day));
+        },
+        l: do_nothing,
+        m: function (dateObj, month) {
+            dateObj.setMonth(parseFloat(month) - 1);
+        },
+        n: function (dateObj, month) {
+            dateObj.setMonth(parseFloat(month) - 1);
+        },
+        s: function (dateObj, seconds) {
+            dateObj.setSeconds(parseFloat(seconds));
+        },
+        u: function (_, unixMillSeconds) {
+            return new Date(parseFloat(unixMillSeconds));
+        },
+        w: do_nothing,
+        y: function (dateObj, year) {
+            dateObj.setFullYear(2000 + parseFloat(year));
+        }
+    };
+    var tokenRegex = {
+        D: "(\\w+)",
+        F: "(\\w+)",
+        G: "(\\d\\d|\\d)",
+        H: "(\\d\\d|\\d)",
+        J: "(\\d\\d|\\d)\\w+",
+        K: "",
+        M: "(\\w+)",
+        S: "(\\d\\d|\\d)",
+        U: "(.+)",
+        W: "(\\d\\d|\\d)",
+        Y: "(\\d{4})",
+        Z: "(.+)",
+        d: "(\\d\\d|\\d)",
+        h: "(\\d\\d|\\d)",
+        i: "(\\d\\d|\\d)",
+        j: "(\\d\\d|\\d)",
+        l: "(\\w+)",
+        m: "(\\d\\d|\\d)",
+        n: "(\\d\\d|\\d)",
+        s: "(\\d\\d|\\d)",
+        u: "(.+)",
+        w: "(\\d\\d|\\d)",
+        y: "(\\d{2})"
+    };
+    var formats = {
+        // get the date in UTC
+        Z: function (date) { return date.toISOString(); },
+        // weekday name, short, e.g. Thu
+        D: function (date, locale, options) {
+            return locale.weekdays.shorthand[formats.w(date, locale, options)];
+        },
+        // full month name e.g. January
+        F: function (date, locale, options) {
+            return monthToStr(formats.n(date, locale, options) - 1, false, locale);
+        },
+        // padded hour 1-12
+        G: function (date, locale, options) {
+            return pad(formats.h(date, locale, options));
+        },
+        // hours with leading zero e.g. 03
+        H: function (date) { return pad(date.getHours()); },
+        // day (1-30) with ordinal suffix e.g. 1st, 2nd
+        J: function (date, locale) {
+            return locale.ordinal !== undefined
+                ? date.getDate() + locale.ordinal(date.getDate())
+                : date.getDate();
+        },
+        // AM/PM
+        K: function (date, locale) { return locale.amPM[int(date.getHours() > 11)]; },
+        // shorthand month e.g. Jan, Sep, Oct, etc
+        M: function (date, locale) {
+            return monthToStr(date.getMonth(), true, locale);
+        },
+        // seconds 00-59
+        S: function (date) { return pad(date.getSeconds()); },
+        // unix timestamp
+        U: function (date) { return date.getTime() / 1000; },
+        W: function (date, _, options) {
+            return options.getWeek(date);
+        },
+        // full year e.g. 2016
+        Y: function (date) { return date.getFullYear(); },
+        // day in month, padded (01-30)
+        d: function (date) { return pad(date.getDate()); },
+        // hour from 1-12 (am/pm)
+        h: function (date) { return (date.getHours() % 12 ? date.getHours() % 12 : 12); },
+        // minutes, padded with leading zero e.g. 09
+        i: function (date) { return pad(date.getMinutes()); },
+        // day in month (1-30)
+        j: function (date) { return date.getDate(); },
+        // weekday name, full, e.g. Thursday
+        l: function (date, locale) {
+            return locale.weekdays.longhand[date.getDay()];
+        },
+        // padded month number (01-12)
+        m: function (date) { return pad(date.getMonth() + 1); },
+        // the month number (1-12)
+        n: function (date) { return date.getMonth() + 1; },
+        // seconds 0-59
+        s: function (date) { return date.getSeconds(); },
+        // Unix Milliseconds
+        u: function (date) { return date.getTime(); },
+        // number of the day of the week
+        w: function (date) { return date.getDay(); },
+        // last two digits of year e.g. 16 for 2016
+        y: function (date) { return String(date.getFullYear()).substring(2); }
+    };
+
+    var createDateFormatter = function (_a) {
+        var _b = _a.config, config = _b === void 0 ? defaults : _b, _c = _a.l10n, l10n = _c === void 0 ? english : _c;
+        return function (dateObj, frmt, overrideLocale) {
+            var locale = overrideLocale || l10n;
+            if (config.formatDate !== undefined) {
+                return config.formatDate(dateObj, frmt, locale);
+            }
+            return frmt
+                .split("")
+                .map(function (c, i, arr) {
+                return formats[c] && arr[i - 1] !== "\\"
+                    ? formats[c](dateObj, locale, config)
+                    : c !== "\\"
+                        ? c
+                        : "";
+            })
+                .join("");
+        };
+    };
+    var createDateParser = function (_a) {
+        var _b = _a.config, config = _b === void 0 ? defaults : _b, _c = _a.l10n, l10n = _c === void 0 ? english : _c;
+        return function (date, givenFormat, timeless, customLocale) {
+            if (date !== 0 && !date)
+                return undefined;
+            var locale = customLocale || l10n;
+            var parsedDate;
+            var date_orig = date;
+            if (date instanceof Date)
+                parsedDate = new Date(date.getTime());
+            else if (typeof date !== "string" &&
+                date.toFixed !== undefined // timestamp
+            )
+                // create a copy
+                parsedDate = new Date(date);
+            else if (typeof date === "string") {
+                // date string
+                var format = givenFormat || (config || defaults).dateFormat;
+                var datestr = String(date).trim();
+                if (datestr === "today") {
+                    parsedDate = new Date();
+                    timeless = true;
+                }
+                else if (/Z$/.test(datestr) ||
+                    /GMT$/.test(datestr) // datestrings w/ timezone
+                )
+                    parsedDate = new Date(date);
+                else if (config && config.parseDate)
+                    parsedDate = config.parseDate(date, format);
+                else {
+                    parsedDate =
+                        !config || !config.noCalendar
+                            ? new Date(new Date().getFullYear(), 0, 1, 0, 0, 0, 0)
+                            : new Date(new Date().setHours(0, 0, 0, 0));
+                    var matched = void 0, ops = [];
+                    for (var i = 0, matchIndex = 0, regexStr = ""; i < format.length; i++) {
+                        var token_1 = format[i];
+                        var isBackSlash = token_1 === "\\";
+                        var escaped = format[i - 1] === "\\" || isBackSlash;
+                        if (tokenRegex[token_1] && !escaped) {
+                            regexStr += tokenRegex[token_1];
+                            var match = new RegExp(regexStr).exec(date);
+                            if (match && (matched = true)) {
+                                ops[token_1 !== "Y" ? "push" : "unshift"]({
+                                    fn: revFormat[token_1],
+                                    val: match[++matchIndex]
+                                });
+                            }
+                        }
+                        else if (!isBackSlash)
+                            regexStr += "."; // don't really care
+                        ops.forEach(function (_a) {
+                            var fn = _a.fn, val = _a.val;
+                            return (parsedDate = fn(parsedDate, val, locale) || parsedDate);
+                        });
+                    }
+                    parsedDate = matched ? parsedDate : undefined;
+                }
+            }
+            /* istanbul ignore next */
+            if (!(parsedDate instanceof Date && !isNaN(parsedDate.getTime()))) {
+                config.errorHandler(new Error("Invalid date provided: " + date_orig));
+                return undefined;
+            }
+            if (timeless === true)
+                parsedDate.setHours(0, 0, 0, 0);
+            return parsedDate;
+        };
+    };
+    /**
+     * Compute the difference in dates, measured in ms
+     */
+    function compareDates(date1, date2, timeless) {
+        if (timeless === void 0) { timeless = true; }
+        if (timeless !== false) {
+            return (new Date(date1.getTime()).setHours(0, 0, 0, 0) -
+                new Date(date2.getTime()).setHours(0, 0, 0, 0));
+        }
+        return date1.getTime() - date2.getTime();
+    }
+    var isBetween = function (ts, ts1, ts2) {
+        return ts > Math.min(ts1, ts2) && ts < Math.max(ts1, ts2);
+    };
+    var duration = {
+        DAY: 86400000
+    };
+
+    if (typeof Object.assign !== "function") {
+        Object.assign = function (target) {
+            var args = [];
+            for (var _i = 1; _i < arguments.length; _i++) {
+                args[_i - 1] = arguments[_i];
+            }
+            if (!target) {
+                throw TypeError("Cannot convert undefined or null to object");
+            }
+            var _loop_1 = function (source) {
+                if (source) {
+                    Object.keys(source).forEach(function (key) { return (target[key] = source[key]); });
+                }
+            };
+            for (var _a = 0, args_1 = args; _a < args_1.length; _a++) {
+                var source = args_1[_a];
+                _loop_1(source);
+            }
+            return target;
+        };
+    }
+
+    var DEBOUNCED_CHANGE_MS = 300;
+    function FlatpickrInstance(element, instanceConfig) {
+        var self = {
+            config: __assign({}, flatpickr.defaultConfig),
+            l10n: english
+        };
+        self.parseDate = createDateParser({ config: self.config, l10n: self.l10n });
+        self._handlers = [];
+        self._bind = bind;
+        self._setHoursFromDate = setHoursFromDate;
+        self._positionCalendar = positionCalendar;
+        self.changeMonth = changeMonth;
+        self.changeYear = changeYear;
+        self.clear = clear;
+        self.close = close;
+        self._createElement = createElement;
+        self.destroy = destroy;
+        self.isEnabled = isEnabled;
+        self.jumpToDate = jumpToDate;
+        self.open = open;
+        self.redraw = redraw;
+        self.set = set;
+        self.setDate = setDate;
+        self.toggle = toggle;
+        function setupHelperFunctions() {
+            self.utils = {
+                getDaysInMonth: function (month, yr) {
+                    if (month === void 0) { month = self.currentMonth; }
+                    if (yr === void 0) { yr = self.currentYear; }
+                    if (month === 1 && ((yr % 4 === 0 && yr % 100 !== 0) || yr % 400 === 0))
+                        return 29;
+                    return self.l10n.daysInMonth[month];
+                }
+            };
+        }
+        function init() {
+            self.element = self.input = element;
+            self.isOpen = false;
+            parseConfig();
+            setupLocale();
+            setupInputs();
+            setupDates();
+            setupHelperFunctions();
+            if (!self.isMobile)
+                build();
+            bindEvents();
+            if (self.selectedDates.length || self.config.noCalendar) {
+                if (self.config.enableTime) {
+                    setHoursFromDate(self.config.noCalendar
+                        ? self.latestSelectedDateObj || self.config.minDate
+                        : undefined);
+                }
+                updateValue(false);
+            }
+            setCalendarWidth();
+            self.showTimeInput =
+                self.selectedDates.length > 0 || self.config.noCalendar;
+            var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+            /* TODO: investigate this further
+        
+              Currently, there is weird positioning behavior in safari causing pages
+              to scroll up. https://github.com/chmln/flatpickr/issues/563
+        
+              However, most browsers are not Safari and positioning is expensive when used
+              in scale. https://github.com/chmln/flatpickr/issues/1096
+            */
+            if (!self.isMobile && isSafari) {
+                positionCalendar();
+            }
+            triggerEvent("onReady");
+        }
+        function bindToInstance(fn) {
+            return fn.bind(self);
+        }
+        function setCalendarWidth() {
+            var config = self.config;
+            if (config.weekNumbers === false && config.showMonths === 1)
+                return;
+            else if (config.noCalendar !== true) {
+                window.requestAnimationFrame(function () {
+                    if (self.calendarContainer !== undefined) {
+                        self.calendarContainer.style.visibility = "hidden";
+                        self.calendarContainer.style.display = "block";
+                    }
+                    if (self.daysContainer !== undefined) {
+                        var daysWidth = (self.days.offsetWidth + 1) * config.showMonths;
+                        self.daysContainer.style.width = daysWidth + "px";
+                        self.calendarContainer.style.width =
+                            daysWidth +
+                                (self.weekWrapper !== undefined
+                                    ? self.weekWrapper.offsetWidth
+                                    : 0) +
+                                "px";
+                        self.calendarContainer.style.removeProperty("visibility");
+                        self.calendarContainer.style.removeProperty("display");
+                    }
+                });
+            }
+        }
+        /**
+         * The handler for all events targeting the time inputs
+         */
+        function updateTime(e) {
+            if (self.selectedDates.length === 0) {
+                setDefaultTime();
+            }
+            if (e !== undefined && e.type !== "blur") {
+                timeWrapper(e);
+            }
+            var prevValue = self._input.value;
+            setHoursFromInputs();
+            updateValue();
+            if (self._input.value !== prevValue) {
+                self._debouncedChange();
+            }
+        }
+        function ampm2military(hour, amPM) {
+            return (hour % 12) + 12 * int(amPM === self.l10n.amPM[1]);
+        }
+        function military2ampm(hour) {
+            switch (hour % 24) {
+                case 0:
+                case 12:
+                    return 12;
+                default:
+                    return hour % 12;
+            }
+        }
+        /**
+         * Syncs the selected date object time with user's time input
+         */
+        function setHoursFromInputs() {
+            if (self.hourElement === undefined || self.minuteElement === undefined)
+                return;
+            var hours = (parseInt(self.hourElement.value.slice(-2), 10) || 0) % 24, minutes = (parseInt(self.minuteElement.value, 10) || 0) % 60, seconds = self.secondElement !== undefined
+                ? (parseInt(self.secondElement.value, 10) || 0) % 60
+                : 0;
+            if (self.amPM !== undefined) {
+                hours = ampm2military(hours, self.amPM.textContent);
+            }
+            var limitMinHours = self.config.minTime !== undefined ||
+                (self.config.minDate &&
+                    self.minDateHasTime &&
+                    self.latestSelectedDateObj &&
+                    compareDates(self.latestSelectedDateObj, self.config.minDate, true) ===
+                        0);
+            var limitMaxHours = self.config.maxTime !== undefined ||
+                (self.config.maxDate &&
+                    self.maxDateHasTime &&
+                    self.latestSelectedDateObj &&
+                    compareDates(self.latestSelectedDateObj, self.config.maxDate, true) ===
+                        0);
+            if (limitMaxHours) {
+                var maxTime = self.config.maxTime !== undefined
+                    ? self.config.maxTime
+                    : self.config.maxDate;
+                hours = Math.min(hours, maxTime.getHours());
+                if (hours === maxTime.getHours())
+                    minutes = Math.min(minutes, maxTime.getMinutes());
+                if (minutes === maxTime.getMinutes())
+                    seconds = Math.min(seconds, maxTime.getSeconds());
+            }
+            if (limitMinHours) {
+                var minTime = self.config.minTime !== undefined
+                    ? self.config.minTime
+                    : self.config.minDate;
+                hours = Math.max(hours, minTime.getHours());
+                if (hours === minTime.getHours())
+                    minutes = Math.max(minutes, minTime.getMinutes());
+                if (minutes === minTime.getMinutes())
+                    seconds = Math.max(seconds, minTime.getSeconds());
+            }
+            setHours(hours, minutes, seconds);
+        }
+        /**
+         * Syncs time input values with a date
+         */
+        function setHoursFromDate(dateObj) {
+            var date = dateObj || self.latestSelectedDateObj;
+            if (date)
+                setHours(date.getHours(), date.getMinutes(), date.getSeconds());
+        }
+        function setDefaultHours() {
+            var hours = self.config.defaultHour;
+            var minutes = self.config.defaultMinute;
+            var seconds = self.config.defaultSeconds;
+            if (self.config.minDate !== undefined) {
+                var min_hr = self.config.minDate.getHours();
+                var min_minutes = self.config.minDate.getMinutes();
+                hours = Math.max(hours, min_hr);
+                if (hours === min_hr)
+                    minutes = Math.max(min_minutes, minutes);
+                if (hours === min_hr && minutes === min_minutes)
+                    seconds = self.config.minDate.getSeconds();
+            }
+            if (self.config.maxDate !== undefined) {
+                var max_hr = self.config.maxDate.getHours();
+                var max_minutes = self.config.maxDate.getMinutes();
+                hours = Math.min(hours, max_hr);
+                if (hours === max_hr)
+                    minutes = Math.min(max_minutes, minutes);
+                if (hours === max_hr && minutes === max_minutes)
+                    seconds = self.config.maxDate.getSeconds();
+            }
+            setHours(hours, minutes, seconds);
+        }
+        /**
+         * Sets the hours, minutes, and optionally seconds
+         * of the latest selected date object and the
+         * corresponding time inputs
+         * @param {Number} hours the hour. whether its military
+         *                 or am-pm gets inferred from config
+         * @param {Number} minutes the minutes
+         * @param {Number} seconds the seconds (optional)
+         */
+        function setHours(hours, minutes, seconds) {
+            if (self.latestSelectedDateObj !== undefined) {
+                self.latestSelectedDateObj.setHours(hours % 24, minutes, seconds || 0, 0);
+            }
+            if (!self.hourElement || !self.minuteElement || self.isMobile)
+                return;
+            self.hourElement.value = pad(!self.config.time_24hr
+                ? ((12 + hours) % 12) + 12 * int(hours % 12 === 0)
+                : hours);
+            self.minuteElement.value = pad(minutes);
+            if (self.amPM !== undefined)
+                self.amPM.textContent = self.l10n.amPM[int(hours >= 12)];
+            if (self.secondElement !== undefined)
+                self.secondElement.value = pad(seconds);
+        }
+        /**
+         * Handles the year input and incrementing events
+         * @param {Event} event the keyup or increment event
+         */
+        function onYearInput(event) {
+            var year = parseInt(event.target.value) + (event.delta || 0);
+            if (year / 1000 > 1 ||
+                (event.key === "Enter" && !/[^\d]/.test(year.toString()))) {
+                changeYear(year);
+            }
+        }
+        /**
+         * Essentially addEventListener + tracking
+         * @param {Element} element the element to addEventListener to
+         * @param {String} event the event name
+         * @param {Function} handler the event handler
+         */
+        function bind(element, event, handler, options) {
+            if (event instanceof Array)
+                return event.forEach(function (ev) { return bind(element, ev, handler, options); });
+            if (element instanceof Array)
+                return element.forEach(function (el) { return bind(el, event, handler, options); });
+            element.addEventListener(event, handler, options);
+            self._handlers.push({
+                element: element,
+                event: event,
+                handler: handler,
+                options: options
+            });
+        }
+        /**
+         * A mousedown handler which mimics click.
+         * Minimizes latency, since we don't need to wait for mouseup in most cases.
+         * Also, avoids handling right clicks.
+         *
+         * @param {Function} handler the event handler
+         */
+        function onClick(handler) {
+            return function (evt) {
+                evt.which === 1 && handler(evt);
+            };
+        }
+        function triggerChange() {
+            triggerEvent("onChange");
+        }
+        /**
+         * Adds all the necessary event listeners
+         */
+        function bindEvents() {
+            if (self.config.wrap) {
+                ["open", "close", "toggle", "clear"].forEach(function (evt) {
+                    Array.prototype.forEach.call(self.element.querySelectorAll("[data-" + evt + "]"), function (el) {
+                        return bind(el, "click", self[evt]);
+                    });
+                });
+            }
+            if (self.isMobile) {
+                setupMobile();
+                return;
+            }
+            var debouncedResize = debounce(onResize, 50);
+            self._debouncedChange = debounce(triggerChange, DEBOUNCED_CHANGE_MS);
+            if (self.daysContainer && !/iPhone|iPad|iPod/i.test(navigator.userAgent))
+                bind(self.daysContainer, "mouseover", function (e) {
+                    if (self.config.mode === "range")
+                        onMouseOver(e.target);
+                });
+            bind(window.document.body, "keydown", onKeyDown);
+            if (!self.config.static)
+                bind(self._input, "keydown", onKeyDown);
+            if (!self.config.inline && !self.config.static)
+                bind(window, "resize", debouncedResize);
+            if (window.ontouchstart !== undefined)
+                bind(window.document, "click", documentClick);
+            else
+                bind(window.document, "mousedown", onClick(documentClick));
+            bind(window.document, "focus", documentClick, { capture: true });
+            if (self.config.clickOpens === true) {
+                bind(self._input, "focus", self.open);
+                bind(self._input, "mousedown", onClick(self.open));
+            }
+            if (self.daysContainer !== undefined) {
+                bind(self.monthNav, "mousedown", onClick(onMonthNavClick));
+                bind(self.monthNav, ["keyup", "increment"], onYearInput);
+                bind(self.daysContainer, "mousedown", onClick(selectDate));
+            }
+            if (self.timeContainer !== undefined &&
+                self.minuteElement !== undefined &&
+                self.hourElement !== undefined) {
+                var selText = function (e) {
+                    return e.target.select();
+                };
+                bind(self.timeContainer, ["increment"], updateTime);
+                bind(self.timeContainer, "blur", updateTime, { capture: true });
+                bind(self.timeContainer, "mousedown", onClick(timeIncrement));
+                bind([self.hourElement, self.minuteElement], ["focus", "click"], selText);
+                if (self.secondElement !== undefined)
+                    bind(self.secondElement, "focus", function () { return self.secondElement && self.secondElement.select(); });
+                if (self.amPM !== undefined) {
+                    bind(self.amPM, "mousedown", onClick(function (e) {
+                        updateTime(e);
+                        triggerChange();
+                    }));
+                }
+            }
+        }
+        /**
+         * Set the calendar view to a particular date.
+         * @param {Date} jumpDate the date to set the view to
+         */
+        function jumpToDate(jumpDate) {
+            var jumpTo = jumpDate !== undefined
+                ? self.parseDate(jumpDate)
+                : self.latestSelectedDateObj ||
+                    (self.config.minDate && self.config.minDate > self.now
+                        ? self.config.minDate
+                        : self.config.maxDate && self.config.maxDate < self.now
+                            ? self.config.maxDate
+                            : self.now);
+            try {
+                if (jumpTo !== undefined) {
+                    self.currentYear = jumpTo.getFullYear();
+                    self.currentMonth = jumpTo.getMonth();
+                }
+            }
+            catch (e) {
+                /* istanbul ignore next */
+                e.message = "Invalid date supplied: " + jumpTo;
+                self.config.errorHandler(e);
+            }
+            self.redraw();
+        }
+        /**
+         * The up/down arrow handler for time inputs
+         * @param {Event} e the click event
+         */
+        function timeIncrement(e) {
+            if (~e.target.className.indexOf("arrow"))
+                incrementNumInput(e, e.target.classList.contains("arrowUp") ? 1 : -1);
+        }
+        /**
+         * Increments/decrements the value of input associ-
+         * ated with the up/down arrow by dispatching an
+         * "increment" event on the input.
+         *
+         * @param {Event} e the click event
+         * @param {Number} delta the diff (usually 1 or -1)
+         * @param {Element} inputElem the input element
+         */
+        function incrementNumInput(e, delta, inputElem) {
+            var target = e && e.target;
+            var input = inputElem ||
+                (target && target.parentNode && target.parentNode.firstChild);
+            var event = createEvent("increment");
+            event.delta = delta;
+            input && input.dispatchEvent(event);
+        }
+        function build() {
+            var fragment = window.document.createDocumentFragment();
+            self.calendarContainer = createElement("div", "flatpickr-calendar");
+            self.calendarContainer.tabIndex = -1;
+            if (!self.config.noCalendar) {
+                fragment.appendChild(buildMonthNav());
+                self.innerContainer = createElement("div", "flatpickr-innerContainer");
+                if (self.config.weekNumbers) {
+                    var _a = buildWeeks(), weekWrapper = _a.weekWrapper, weekNumbers = _a.weekNumbers;
+                    self.innerContainer.appendChild(weekWrapper);
+                    self.weekNumbers = weekNumbers;
+                    self.weekWrapper = weekWrapper;
+                }
+                self.rContainer = createElement("div", "flatpickr-rContainer");
+                self.rContainer.appendChild(buildWeekdays());
+                if (!self.daysContainer) {
+                    self.daysContainer = createElement("div", "flatpickr-days");
+                    self.daysContainer.tabIndex = -1;
+                }
+                buildDays();
+                self.rContainer.appendChild(self.daysContainer);
+                self.innerContainer.appendChild(self.rContainer);
+                fragment.appendChild(self.innerContainer);
+            }
+            if (self.config.enableTime) {
+                fragment.appendChild(buildTime());
+            }
+            toggleClass(self.calendarContainer, "rangeMode", self.config.mode === "range");
+            toggleClass(self.calendarContainer, "animate", self.config.animate === true);
+            toggleClass(self.calendarContainer, "multiMonth", self.config.showMonths > 1);
+            self.calendarContainer.appendChild(fragment);
+            var customAppend = self.config.appendTo !== undefined &&
+                self.config.appendTo.nodeType !== undefined;
+            if (self.config.inline || self.config.static) {
+                self.calendarContainer.classList.add(self.config.inline ? "inline" : "static");
+                if (self.config.inline) {
+                    if (!customAppend && self.element.parentNode)
+                        self.element.parentNode.insertBefore(self.calendarContainer, self._input.nextSibling);
+                    else if (self.config.appendTo !== undefined)
+                        self.config.appendTo.appendChild(self.calendarContainer);
+                }
+                if (self.config.static) {
+                    var wrapper = createElement("div", "flatpickr-wrapper");
+                    if (self.element.parentNode)
+                        self.element.parentNode.insertBefore(wrapper, self.element);
+                    wrapper.appendChild(self.element);
+                    if (self.altInput)
+                        wrapper.appendChild(self.altInput);
+                    wrapper.appendChild(self.calendarContainer);
+                }
+            }
+            if (!self.config.static && !self.config.inline)
+                (self.config.appendTo !== undefined
+                    ? self.config.appendTo
+                    : window.document.body).appendChild(self.calendarContainer);
+        }
+        function createDay(className, date, dayNumber, i) {
+            var dateIsEnabled = isEnabled(date, true), dayElement = createElement("span", "flatpickr-day " + className, date.getDate().toString());
+            dayElement.dateObj = date;
+            dayElement.$i = i;
+            dayElement.setAttribute("aria-label", self.formatDate(date, self.config.ariaDateFormat));
+            if (className.indexOf("hidden") === -1 &&
+                compareDates(date, self.now) === 0) {
+                self.todayDateElem = dayElement;
+                dayElement.classList.add("today");
+                dayElement.setAttribute("aria-current", "date");
+            }
+            if (dateIsEnabled) {
+                dayElement.tabIndex = -1;
+                if (isDateSelected(date)) {
+                    dayElement.classList.add("selected");
+                    self.selectedDateElem = dayElement;
+                    if (self.config.mode === "range") {
+                        toggleClass(dayElement, "startRange", self.selectedDates[0] &&
+                            compareDates(date, self.selectedDates[0], true) === 0);
+                        toggleClass(dayElement, "endRange", self.selectedDates[1] &&
+                            compareDates(date, self.selectedDates[1], true) === 0);
+                        if (className === "nextMonthDay")
+                            dayElement.classList.add("inRange");
+                    }
+                }
+            }
+            else {
+                dayElement.classList.add("disabled");
+            }
+            if (self.config.mode === "range") {
+                if (isDateInRange(date) && !isDateSelected(date))
+                    dayElement.classList.add("inRange");
+            }
+            if (self.weekNumbers &&
+                self.config.showMonths === 1 &&
+                className !== "prevMonthDay" &&
+                dayNumber % 7 === 1) {
+                self.weekNumbers.insertAdjacentHTML("beforeend", "<span class='flatpickr-day'>" + self.config.getWeek(date) + "</span>");
+            }
+            triggerEvent("onDayCreate", dayElement);
+            return dayElement;
+        }
+        function focusOnDayElem(targetNode) {
+            targetNode.focus();
+            if (self.config.mode === "range")
+                onMouseOver(targetNode);
+        }
+        function getFirstAvailableDay(delta) {
+            var startMonth = delta > 0 ? 0 : self.config.showMonths - 1;
+            var endMonth = delta > 0 ? self.config.showMonths : -1;
+            for (var m = startMonth; m != endMonth; m += delta) {
+                var month = self.daysContainer.children[m];
+                var startIndex = delta > 0 ? 0 : month.children.length - 1;
+                var endIndex = delta > 0 ? month.children.length : -1;
+                for (var i = startIndex; i != endIndex; i += delta) {
+                    var c = month.children[i];
+                    if (c.className.indexOf("hidden") === -1 && isEnabled(c.dateObj))
+                        return c;
+                }
+            }
+            return undefined;
+        }
+        function getNextAvailableDay(current, delta) {
+            var givenMonth = current.className.indexOf("Month") === -1
+                ? current.dateObj.getMonth()
+                : self.currentMonth;
+            var endMonth = delta > 0 ? self.config.showMonths : -1;
+            var loopDelta = delta > 0 ? 1 : -1;
+            for (var m = givenMonth - self.currentMonth; m != endMonth; m += loopDelta) {
+                var month = self.daysContainer.children[m];
+                var startIndex = givenMonth - self.currentMonth === m
+                    ? current.$i + delta
+                    : delta < 0
+                        ? month.children.length - 1
+                        : 0;
+                var numMonthDays = month.children.length;
+                for (var i = startIndex; i >= 0 && i < numMonthDays && i != (delta > 0 ? numMonthDays : -1); i += loopDelta) {
+                    var c = month.children[i];
+                    if (c.className.indexOf("hidden") === -1 &&
+                        isEnabled(c.dateObj) &&
+                        Math.abs(current.$i - i) >= Math.abs(delta))
+                        return focusOnDayElem(c);
+                }
+            }
+            self.changeMonth(loopDelta);
+            focusOnDay(getFirstAvailableDay(loopDelta), 0);
+            return undefined;
+        }
+        function focusOnDay(current, offset) {
+            var dayFocused = isInView(document.activeElement || document.body);
+            var startElem = current !== undefined
+                ? current
+                : dayFocused
+                    ? document.activeElement
+                    : self.selectedDateElem !== undefined && isInView(self.selectedDateElem)
+                        ? self.selectedDateElem
+                        : self.todayDateElem !== undefined && isInView(self.todayDateElem)
+                            ? self.todayDateElem
+                            : getFirstAvailableDay(offset > 0 ? 1 : -1);
+            if (startElem === undefined)
+                return self._input.focus();
+            if (!dayFocused)
+                return focusOnDayElem(startElem);
+            getNextAvailableDay(startElem, offset);
+        }
+        function buildMonthDays(year, month) {
+            var firstOfMonth = (new Date(year, month, 1).getDay() - self.l10n.firstDayOfWeek + 7) % 7;
+            var prevMonthDays = self.utils.getDaysInMonth((month - 1 + 12) % 12);
+            var daysInMonth = self.utils.getDaysInMonth(month), days = window.document.createDocumentFragment(), isMultiMonth = self.config.showMonths > 1, prevMonthDayClass = isMultiMonth ? "prevMonthDay hidden" : "prevMonthDay", nextMonthDayClass = isMultiMonth ? "nextMonthDay hidden" : "nextMonthDay";
+            var dayNumber = prevMonthDays + 1 - firstOfMonth, dayIndex = 0;
+            // prepend days from the ending of previous month
+            for (; dayNumber <= prevMonthDays; dayNumber++, dayIndex++) {
+                days.appendChild(createDay(prevMonthDayClass, new Date(year, month - 1, dayNumber), dayNumber, dayIndex));
+            }
+            // Start at 1 since there is no 0th day
+            for (dayNumber = 1; dayNumber <= daysInMonth; dayNumber++, dayIndex++) {
+                days.appendChild(createDay("", new Date(year, month, dayNumber), dayNumber, dayIndex));
+            }
+            // append days from the next month
+            for (var dayNum = daysInMonth + 1; dayNum <= 42 - firstOfMonth &&
+                (self.config.showMonths === 1 || dayIndex % 7 !== 0); dayNum++, dayIndex++) {
+                days.appendChild(createDay(nextMonthDayClass, new Date(year, month + 1, dayNum % daysInMonth), dayNum, dayIndex));
+            }
+            //updateNavigationCurrentMonth();
+            var dayContainer = createElement("div", "dayContainer");
+            dayContainer.appendChild(days);
+            return dayContainer;
+        }
+        function buildDays() {
+            if (self.daysContainer === undefined) {
+                return;
+            }
+            clearNode(self.daysContainer);
+            // TODO: week numbers for each month
+            if (self.weekNumbers)
+                clearNode(self.weekNumbers);
+            var frag = document.createDocumentFragment();
+            for (var i = 0; i < self.config.showMonths; i++) {
+                var d = new Date(self.currentYear, self.currentMonth, 1);
+                d.setMonth(self.currentMonth + i);
+                frag.appendChild(buildMonthDays(d.getFullYear(), d.getMonth()));
+            }
+            self.daysContainer.appendChild(frag);
+            self.days = self.daysContainer.firstChild;
+            if (self.config.mode === "range" && self.selectedDates.length === 1) {
+                onMouseOver();
+            }
+        }
+        function buildMonth() {
+            var container = createElement("div", "flatpickr-month");
+            var monthNavFragment = window.document.createDocumentFragment();
+            var monthElement = createElement("span", "cur-month");
+            var yearInput = createNumberInput("cur-year", { tabindex: "-1" });
+            var yearElement = yearInput.getElementsByTagName("input")[0];
+            yearElement.setAttribute("aria-label", self.l10n.yearAriaLabel);
+            if (self.config.minDate) {
+                yearElement.setAttribute("min", self.config.minDate.getFullYear().toString());
+            }
+            if (self.config.maxDate) {
+                yearElement.setAttribute("max", self.config.maxDate.getFullYear().toString());
+                yearElement.disabled =
+                    !!self.config.minDate &&
+                        self.config.minDate.getFullYear() === self.config.maxDate.getFullYear();
+            }
+            var currentMonth = createElement("div", "flatpickr-current-month");
+            currentMonth.appendChild(monthElement);
+            currentMonth.appendChild(yearInput);
+            monthNavFragment.appendChild(currentMonth);
+            container.appendChild(monthNavFragment);
+            return {
+                container: container,
+                yearElement: yearElement,
+                monthElement: monthElement
+            };
+        }
+        function buildMonths() {
+            clearNode(self.monthNav);
+            self.monthNav.appendChild(self.prevMonthNav);
+            if (self.config.showMonths) {
+                self.yearElements = [];
+                self.monthElements = [];
+            }
+            for (var m = self.config.showMonths; m--;) {
+                var month = buildMonth();
+                self.yearElements.push(month.yearElement);
+                self.monthElements.push(month.monthElement);
+                self.monthNav.appendChild(month.container);
+            }
+            self.monthNav.appendChild(self.nextMonthNav);
+        }
+        function buildMonthNav() {
+            self.monthNav = createElement("div", "flatpickr-months");
+            self.yearElements = [];
+            self.monthElements = [];
+            self.prevMonthNav = createElement("span", "flatpickr-prev-month");
+            self.prevMonthNav.innerHTML = self.config.prevArrow;
+            self.nextMonthNav = createElement("span", "flatpickr-next-month");
+            self.nextMonthNav.innerHTML = self.config.nextArrow;
+            buildMonths();
+            Object.defineProperty(self, "_hidePrevMonthArrow", {
+                get: function () { return self.__hidePrevMonthArrow; },
+                set: function (bool) {
+                    if (self.__hidePrevMonthArrow !== bool) {
+                        toggleClass(self.prevMonthNav, "disabled", bool);
+                        self.__hidePrevMonthArrow = bool;
+                    }
+                }
+            });
+            Object.defineProperty(self, "_hideNextMonthArrow", {
+                get: function () { return self.__hideNextMonthArrow; },
+                set: function (bool) {
+                    if (self.__hideNextMonthArrow !== bool) {
+                        toggleClass(self.nextMonthNav, "disabled", bool);
+                        self.__hideNextMonthArrow = bool;
+                    }
+                }
+            });
+            self.currentYearElement = self.yearElements[0];
+            updateNavigationCurrentMonth();
+            return self.monthNav;
+        }
+        function buildTime() {
+            self.calendarContainer.classList.add("hasTime");
+            if (self.config.noCalendar)
+                self.calendarContainer.classList.add("noCalendar");
+            self.timeContainer = createElement("div", "flatpickr-time");
+            self.timeContainer.tabIndex = -1;
+            var separator = createElement("span", "flatpickr-time-separator", ":");
+            var hourInput = createNumberInput("flatpickr-hour");
+            self.hourElement = hourInput.getElementsByTagName("input")[0];
+            var minuteInput = createNumberInput("flatpickr-minute");
+            self.minuteElement = minuteInput.getElementsByTagName("input")[0];
+            self.hourElement.tabIndex = self.minuteElement.tabIndex = -1;
+            self.hourElement.value = pad(self.latestSelectedDateObj
+                ? self.latestSelectedDateObj.getHours()
+                : self.config.time_24hr
+                    ? self.config.defaultHour
+                    : military2ampm(self.config.defaultHour));
+            self.minuteElement.value = pad(self.latestSelectedDateObj
+                ? self.latestSelectedDateObj.getMinutes()
+                : self.config.defaultMinute);
+            self.hourElement.setAttribute("step", self.config.hourIncrement.toString());
+            self.minuteElement.setAttribute("step", self.config.minuteIncrement.toString());
+            self.hourElement.setAttribute("min", self.config.time_24hr ? "0" : "1");
+            self.hourElement.setAttribute("max", self.config.time_24hr ? "23" : "12");
+            self.minuteElement.setAttribute("min", "0");
+            self.minuteElement.setAttribute("max", "59");
+            self.timeContainer.appendChild(hourInput);
+            self.timeContainer.appendChild(separator);
+            self.timeContainer.appendChild(minuteInput);
+            if (self.config.time_24hr)
+                self.timeContainer.classList.add("time24hr");
+            if (self.config.enableSeconds) {
+                self.timeContainer.classList.add("hasSeconds");
+                var secondInput = createNumberInput("flatpickr-second");
+                self.secondElement = secondInput.getElementsByTagName("input")[0];
+                self.secondElement.value = pad(self.latestSelectedDateObj
+                    ? self.latestSelectedDateObj.getSeconds()
+                    : self.config.defaultSeconds);
+                self.secondElement.setAttribute("step", self.minuteElement.getAttribute("step"));
+                self.secondElement.setAttribute("min", "0");
+                self.secondElement.setAttribute("max", "59");
+                self.timeContainer.appendChild(createElement("span", "flatpickr-time-separator", ":"));
+                self.timeContainer.appendChild(secondInput);
+            }
+            if (!self.config.time_24hr) {
+                // add self.amPM if appropriate
+                self.amPM = createElement("span", "flatpickr-am-pm", self.l10n.amPM[int((self.latestSelectedDateObj
+                    ? self.hourElement.value
+                    : self.config.defaultHour) > 11)]);
+                self.amPM.title = self.l10n.toggleTitle;
+                self.amPM.tabIndex = -1;
+                self.timeContainer.appendChild(self.amPM);
+            }
+            return self.timeContainer;
+        }
+        function buildWeekdays() {
+            if (!self.weekdayContainer)
+                self.weekdayContainer = createElement("div", "flatpickr-weekdays");
+            else
+                clearNode(self.weekdayContainer);
+            for (var i = self.config.showMonths; i--;) {
+                var container = createElement("div", "flatpickr-weekdaycontainer");
+                self.weekdayContainer.appendChild(container);
+            }
+            updateWeekdays();
+            return self.weekdayContainer;
+        }
+        function updateWeekdays() {
+            var firstDayOfWeek = self.l10n.firstDayOfWeek;
+            var weekdays = self.l10n.weekdays.shorthand.slice();
+            if (firstDayOfWeek > 0 && firstDayOfWeek < weekdays.length) {
+                weekdays = weekdays.splice(firstDayOfWeek, weekdays.length).concat(weekdays.splice(0, firstDayOfWeek));
+            }
+            for (var i = self.config.showMonths; i--;) {
+                self.weekdayContainer.children[i].innerHTML = "\n      <span class='flatpickr-weekday'>\n        " + weekdays.join("</span><span class='flatpickr-weekday'>") + "\n      </span>\n      ";
+            }
+        }
+        /* istanbul ignore next */
+        function buildWeeks() {
+            self.calendarContainer.classList.add("hasWeeks");
+            var weekWrapper = createElement("div", "flatpickr-weekwrapper");
+            weekWrapper.appendChild(createElement("span", "flatpickr-weekday", self.l10n.weekAbbreviation));
+            var weekNumbers = createElement("div", "flatpickr-weeks");
+            weekWrapper.appendChild(weekNumbers);
+            return {
+                weekWrapper: weekWrapper,
+                weekNumbers: weekNumbers
+            };
+        }
+        function changeMonth(value, is_offset) {
+            if (is_offset === void 0) { is_offset = true; }
+            var delta = is_offset ? value : value - self.currentMonth;
+            if ((delta < 0 && self._hidePrevMonthArrow === true) ||
+                (delta > 0 && self._hideNextMonthArrow === true))
+                return;
+            self.currentMonth += delta;
+            if (self.currentMonth < 0 || self.currentMonth > 11) {
+                self.currentYear += self.currentMonth > 11 ? 1 : -1;
+                self.currentMonth = (self.currentMonth + 12) % 12;
+                triggerEvent("onYearChange");
+            }
+            buildDays();
+            triggerEvent("onMonthChange");
+            updateNavigationCurrentMonth();
+        }
+        function clear(triggerChangeEvent, toInitial) {
+            if (triggerChangeEvent === void 0) { triggerChangeEvent = true; }
+            if (toInitial === void 0) { toInitial = true; }
+            self.input.value = "";
+            if (self.altInput !== undefined)
+                self.altInput.value = "";
+            if (self.mobileInput !== undefined)
+                self.mobileInput.value = "";
+            self.selectedDates = [];
+            self.latestSelectedDateObj = undefined;
+            if (toInitial === true) {
+                self.currentYear = self._initialDate.getFullYear();
+                self.currentMonth = self._initialDate.getMonth();
+            }
+            self.showTimeInput = false;
+            if (self.config.enableTime === true) {
+                setDefaultHours();
+            }
+            self.redraw();
+            if (triggerChangeEvent)
+                // triggerChangeEvent is true (default) or an Event
+                triggerEvent("onChange");
+        }
+        function close() {
+            self.isOpen = false;
+            if (!self.isMobile) {
+                if (self.calendarContainer !== undefined) {
+                    self.calendarContainer.classList.remove("open");
+                }
+                if (self._input !== undefined) {
+                    self._input.classList.remove("active");
+                }
+            }
+            triggerEvent("onClose");
+        }
+        function destroy() {
+            if (self.config !== undefined)
+                triggerEvent("onDestroy");
+            for (var i = self._handlers.length; i--;) {
+                var h = self._handlers[i];
+                h.element.removeEventListener(h.event, h.handler, h.options);
+            }
+            self._handlers = [];
+            if (self.mobileInput) {
+                if (self.mobileInput.parentNode)
+                    self.mobileInput.parentNode.removeChild(self.mobileInput);
+                self.mobileInput = undefined;
+            }
+            else if (self.calendarContainer && self.calendarContainer.parentNode) {
+                if (self.config.static && self.calendarContainer.parentNode) {
+                    var wrapper = self.calendarContainer.parentNode;
+                    wrapper.lastChild && wrapper.removeChild(wrapper.lastChild);
+                    if (wrapper.parentNode) {
+                        while (wrapper.firstChild)
+                            wrapper.parentNode.insertBefore(wrapper.firstChild, wrapper);
+                        wrapper.parentNode.removeChild(wrapper);
+                    }
+                }
+                else
+                    self.calendarContainer.parentNode.removeChild(self.calendarContainer);
+            }
+            if (self.altInput) {
+                self.input.type = "text";
+                if (self.altInput.parentNode)
+                    self.altInput.parentNode.removeChild(self.altInput);
+                delete self.altInput;
+            }
+            if (self.input) {
+                self.input.type = self.input._type;
+                self.input.classList.remove("flatpickr-input");
+                self.input.removeAttribute("readonly");
+                self.input.value = "";
+            }
+            [
+                "_showTimeInput",
+                "latestSelectedDateObj",
+                "_hideNextMonthArrow",
+                "_hidePrevMonthArrow",
+                "__hideNextMonthArrow",
+                "__hidePrevMonthArrow",
+                "isMobile",
+                "isOpen",
+                "selectedDateElem",
+                "minDateHasTime",
+                "maxDateHasTime",
+                "days",
+                "daysContainer",
+                "_input",
+                "_positionElement",
+                "innerContainer",
+                "rContainer",
+                "monthNav",
+                "todayDateElem",
+                "calendarContainer",
+                "weekdayContainer",
+                "prevMonthNav",
+                "nextMonthNav",
+                "currentMonthElement",
+                "currentYearElement",
+                "navigationCurrentMonth",
+                "selectedDateElem",
+                "config",
+            ].forEach(function (k) {
+                try {
+                    delete self[k];
+                }
+                catch (_) { }
+            });
+        }
+        function isCalendarElem(elem) {
+            if (self.config.appendTo && self.config.appendTo.contains(elem))
+                return true;
+            return self.calendarContainer.contains(elem);
+        }
+        function documentClick(e) {
+            if (self.isOpen && !self.config.inline) {
+                var eventTarget_1 = getEventTarget(e);
+                var isCalendarElement = isCalendarElem(eventTarget_1);
+                var isInput = eventTarget_1 === self.input ||
+                    eventTarget_1 === self.altInput ||
+                    self.element.contains(eventTarget_1) ||
+                    // web components
+                    // e.path is not present in all browsers. circumventing typechecks
+                    (e.path &&
+                        e.path.indexOf &&
+                        (~e.path.indexOf(self.input) ||
+                            ~e.path.indexOf(self.altInput)));
+                var lostFocus = e.type === "blur"
+                    ? isInput &&
+                        e.relatedTarget &&
+                        !isCalendarElem(e.relatedTarget)
+                    : !isInput &&
+                        !isCalendarElement &&
+                        !isCalendarElem(e.relatedTarget);
+                var isIgnored = !self.config.ignoredFocusElements.some(function (elem) {
+                    return elem.contains(eventTarget_1);
+                });
+                if (lostFocus && isIgnored) {
+                    self.close();
+                    if (self.config.mode === "range" && self.selectedDates.length === 1) {
+                        self.clear(false);
+                        self.redraw();
+                    }
+                }
+            }
+        }
+        function changeYear(newYear) {
+            if (!newYear ||
+                (self.config.minDate && newYear < self.config.minDate.getFullYear()) ||
+                (self.config.maxDate && newYear > self.config.maxDate.getFullYear()))
+                return;
+            var newYearNum = newYear, isNewYear = self.currentYear !== newYearNum;
+            self.currentYear = newYearNum || self.currentYear;
+            if (self.config.maxDate &&
+                self.currentYear === self.config.maxDate.getFullYear()) {
+                self.currentMonth = Math.min(self.config.maxDate.getMonth(), self.currentMonth);
+            }
+            else if (self.config.minDate &&
+                self.currentYear === self.config.minDate.getFullYear()) {
+                self.currentMonth = Math.max(self.config.minDate.getMonth(), self.currentMonth);
+            }
+            if (isNewYear) {
+                self.redraw();
+                triggerEvent("onYearChange");
+            }
+        }
+        function isEnabled(date, timeless) {
+            if (timeless === void 0) { timeless = true; }
+            var dateToCheck = self.parseDate(date, undefined, timeless); // timeless
+            if ((self.config.minDate &&
+                dateToCheck &&
+                compareDates(dateToCheck, self.config.minDate, timeless !== undefined ? timeless : !self.minDateHasTime) < 0) ||
+                (self.config.maxDate &&
+                    dateToCheck &&
+                    compareDates(dateToCheck, self.config.maxDate, timeless !== undefined ? timeless : !self.maxDateHasTime) > 0))
+                return false;
+            if (self.config.enable.length === 0 && self.config.disable.length === 0)
+                return true;
+            if (dateToCheck === undefined)
+                return false;
+            var bool = self.config.enable.length > 0, array = bool ? self.config.enable : self.config.disable;
+            for (var i = 0, d = void 0; i < array.length; i++) {
+                d = array[i];
+                if (typeof d === "function" &&
+                    d(dateToCheck) // disabled by function
+                )
+                    return bool;
+                else if (d instanceof Date &&
+                    dateToCheck !== undefined &&
+                    d.getTime() === dateToCheck.getTime())
+                    // disabled by date
+                    return bool;
+                else if (typeof d === "string" && dateToCheck !== undefined) {
+                    // disabled by date string
+                    var parsed = self.parseDate(d, undefined, true);
+                    return parsed && parsed.getTime() === dateToCheck.getTime()
+                        ? bool
+                        : !bool;
+                }
+                else if (
+                // disabled by range
+                typeof d === "object" &&
+                    dateToCheck !== undefined &&
+                    d.from &&
+                    d.to &&
+                    dateToCheck.getTime() >= d.from.getTime() &&
+                    dateToCheck.getTime() <= d.to.getTime())
+                    return bool;
+            }
+            return !bool;
+        }
+        function isInView(elem) {
+            if (self.daysContainer !== undefined)
+                return (elem.className.indexOf("hidden") === -1 &&
+                    self.daysContainer.contains(elem));
+            return false;
+        }
+        function onKeyDown(e) {
+            // e.key                      e.keyCode
+            // "Backspace"                        8
+            // "Tab"                              9
+            // "Enter"                           13
+            // "Escape"     (IE "Esc")           27
+            // "ArrowLeft"  (IE "Left")          37
+            // "ArrowUp"    (IE "Up")            38
+            // "ArrowRight" (IE "Right")         39
+            // "ArrowDown"  (IE "Down")          40
+            // "Delete"     (IE "Del")           46
+            var isInput = e.target === self._input;
+            var allowInput = self.config.allowInput;
+            var allowKeydown = self.isOpen && (!allowInput || !isInput);
+            var allowInlineKeydown = self.config.inline && isInput && !allowInput;
+            if (e.keyCode === 13 && isInput) {
+                if (allowInput) {
+                    self.setDate(self._input.value, true, e.target === self.altInput
+                        ? self.config.altFormat
+                        : self.config.dateFormat);
+                    return e.target.blur();
+                }
+                else
+                    self.open();
+            }
+            else if (isCalendarElem(e.target) ||
+                allowKeydown ||
+                allowInlineKeydown) {
+                var isTimeObj = !!self.timeContainer &&
+                    self.timeContainer.contains(e.target);
+                switch (e.keyCode) {
+                    case 13:
+                        if (isTimeObj) {
+                            updateTime();
+                            focusAndClose();
+                        }
+                        else
+                            selectDate(e);
+                        break;
+                    case 27: // escape
+                        e.preventDefault();
+                        focusAndClose();
+                        break;
+                    case 8:
+                    case 46:
+                        if (isInput && !self.config.allowInput) {
+                            e.preventDefault();
+                            self.clear();
+                        }
+                        break;
+                    case 37:
+                    case 39:
+                        if (!isTimeObj) {
+                            e.preventDefault();
+                            if (self.daysContainer !== undefined &&
+                                (allowInput === false ||
+                                    (document.activeElement && isInView(document.activeElement)))) {
+                                var delta_1 = e.keyCode === 39 ? 1 : -1;
+                                if (!e.ctrlKey)
+                                    focusOnDay(undefined, delta_1);
+                                else {
+                                    e.stopPropagation();
+                                    changeMonth(delta_1);
+                                    focusOnDay(getFirstAvailableDay(1), 0);
+                                }
+                            }
+                        }
+                        else if (self.hourElement)
+                            self.hourElement.focus();
+                        break;
+                    case 38:
+                    case 40:
+                        e.preventDefault();
+                        var delta = e.keyCode === 40 ? 1 : -1;
+                        if ((self.daysContainer && e.target.$i !== undefined) ||
+                            e.target === self.input) {
+                            if (e.ctrlKey) {
+                                e.stopPropagation();
+                                changeYear(self.currentYear - delta);
+                                focusOnDay(getFirstAvailableDay(1), 0);
+                            }
+                            else if (!isTimeObj)
+                                focusOnDay(undefined, delta * 7);
+                        }
+                        else if (self.config.enableTime) {
+                            if (!isTimeObj && self.hourElement)
+                                self.hourElement.focus();
+                            updateTime(e);
+                            self._debouncedChange();
+                        }
+                        break;
+                    case 9:
+                        if (isTimeObj) {
+                            var elems = [
+                                self.hourElement,
+                                self.minuteElement,
+                                self.secondElement,
+                                self.amPM,
+                            ].filter(function (x) { return x; });
+                            var i = elems.indexOf(e.target);
+                            if (i !== -1) {
+                                var target = elems[i + (e.shiftKey ? -1 : 1)];
+                                if (target !== undefined) {
+                                    e.preventDefault();
+                                    target.focus();
+                                }
+                                else if (e.shiftKey) {
+                                    e.preventDefault();
+                                    self._input.focus();
+                                }
+                            }
+                        }
+                        break;
+                    default:
+                        break;
+                }
+            }
+            if (self.amPM !== undefined && e.target === self.amPM) {
+                switch (e.key) {
+                    case self.l10n.amPM[0].charAt(0):
+                    case self.l10n.amPM[0].charAt(0).toLowerCase():
+                        self.amPM.textContent = self.l10n.amPM[0];
+                        setHoursFromInputs();
+                        updateValue();
+                        break;
+                    case self.l10n.amPM[1].charAt(0):
+                    case self.l10n.amPM[1].charAt(0).toLowerCase():
+                        self.amPM.textContent = self.l10n.amPM[1];
+                        setHoursFromInputs();
+                        updateValue();
+                        break;
+                }
+            }
+            triggerEvent("onKeyDown", e);
+        }
+        function onMouseOver(elem) {
+            if (self.selectedDates.length !== 1 ||
+                (elem &&
+                    (!elem.classList.contains("flatpickr-day") ||
+                        elem.classList.contains("disabled"))))
+                return;
+            var hoverDate = elem
+                ? elem.dateObj.getTime()
+                : self.days.firstElementChild.dateObj.getTime(), initialDate = self.parseDate(self.selectedDates[0], undefined, true).getTime(), rangeStartDate = Math.min(hoverDate, self.selectedDates[0].getTime()), rangeEndDate = Math.max(hoverDate, self.selectedDates[0].getTime()), lastDate = self.daysContainer.lastChild
+                .lastChild.dateObj.getTime();
+            var containsDisabled = false;
+            var minRange = 0, maxRange = 0;
+            for (var t = rangeStartDate; t < lastDate; t += duration.DAY) {
+                if (!isEnabled(new Date(t), true)) {
+                    containsDisabled =
+                        containsDisabled || (t > rangeStartDate && t < rangeEndDate);
+                    if (t < initialDate && (!minRange || t > minRange))
+                        minRange = t;
+                    else if (t > initialDate && (!maxRange || t < maxRange))
+                        maxRange = t;
+                }
+            }
+            for (var m = 0; m < self.config.showMonths; m++) {
+                var month = self.daysContainer.children[m];
+                var prevMonth = self.daysContainer.children[m - 1];
+                var _loop_1 = function (i, l) {
+                    var dayElem = month.children[i], date = dayElem.dateObj;
+                    var timestamp = date.getTime();
+                    var outOfRange = (minRange > 0 && timestamp < minRange) ||
+                        (maxRange > 0 && timestamp > maxRange);
+                    if (outOfRange) {
+                        dayElem.classList.add("notAllowed");
+                        ["inRange", "startRange", "endRange"].forEach(function (c) {
+                            dayElem.classList.remove(c);
+                        });
+                        return "continue";
+                    }
+                    else if (containsDisabled && !outOfRange)
+                        return "continue";
+                    ["startRange", "inRange", "endRange", "notAllowed"].forEach(function (c) {
+                        dayElem.classList.remove(c);
+                    });
+                    if (elem !== undefined) {
+                        elem.classList.add(hoverDate < self.selectedDates[0].getTime()
+                            ? "startRange"
+                            : "endRange");
+                        if (month.contains(elem) ||
+                            !(m > 0 &&
+                                prevMonth &&
+                                prevMonth.lastChild.dateObj.getTime() >= timestamp)) {
+                            if (initialDate < hoverDate && timestamp === initialDate)
+                                dayElem.classList.add("startRange");
+                            else if (initialDate > hoverDate && timestamp === initialDate)
+                                dayElem.classList.add("endRange");
+                            if (timestamp >= minRange &&
+                                (maxRange === 0 || timestamp <= maxRange) &&
+                                isBetween(timestamp, initialDate, hoverDate))
+                                dayElem.classList.add("inRange");
+                        }
+                    }
+                };
+                for (var i = 0, l = month.children.length; i < l; i++) {
+                    _loop_1(i, l);
+                }
+            }
+        }
+        function onResize() {
+            if (self.isOpen && !self.config.static && !self.config.inline)
+                positionCalendar();
+        }
+        function setDefaultTime() {
+            self.setDate(self.config.minDate !== undefined
+                ? new Date(self.config.minDate.getTime())
+                : new Date(), false);
+            setDefaultHours();
+            updateValue();
+        }
+        function open(e, positionElement) {
+            if (positionElement === void 0) { positionElement = self._positionElement; }
+            if (self.isMobile === true) {
+                if (e) {
+                    e.preventDefault();
+                    e.target && e.target.blur();
+                }
+                if (self.mobileInput !== undefined) {
+                    self.mobileInput.focus();
+                    self.mobileInput.click();
+                }
+                triggerEvent("onOpen");
+                return;
+            }
+            if (self._input.disabled || self.config.inline)
+                return;
+            var wasOpen = self.isOpen;
+            self.isOpen = true;
+            if (!wasOpen) {
+                self.calendarContainer.classList.add("open");
+                self._input.classList.add("active");
+                triggerEvent("onOpen");
+                positionCalendar(positionElement);
+            }
+            if (self.config.enableTime === true && self.config.noCalendar === true) {
+                if (self.selectedDates.length === 0) {
+                    setDefaultTime();
+                }
+                if (self.config.allowInput === false &&
+                    (e === undefined ||
+                        !self.timeContainer.contains(e.relatedTarget))) {
+                    setTimeout(function () { return self.hourElement.select(); }, 50);
+                }
+            }
+        }
+        function minMaxDateSetter(type) {
+            return function (date) {
+                var dateObj = (self.config["_" + type + "Date"] = self.parseDate(date, self.config.dateFormat));
+                var inverseDateObj = self.config["_" + (type === "min" ? "max" : "min") + "Date"];
+                if (dateObj !== undefined) {
+                    self[type === "min" ? "minDateHasTime" : "maxDateHasTime"] =
+                        dateObj.getHours() > 0 ||
+                            dateObj.getMinutes() > 0 ||
+                            dateObj.getSeconds() > 0;
+                }
+                if (self.selectedDates) {
+                    self.selectedDates = self.selectedDates.filter(function (d) { return isEnabled(d); });
+                    if (!self.selectedDates.length && type === "min")
+                        setHoursFromDate(dateObj);
+                    updateValue();
+                }
+                if (self.daysContainer) {
+                    redraw();
+                    if (dateObj !== undefined)
+                        self.currentYearElement[type] = dateObj.getFullYear().toString();
+                    else
+                        self.currentYearElement.removeAttribute(type);
+                    self.currentYearElement.disabled =
+                        !!inverseDateObj &&
+                            dateObj !== undefined &&
+                            inverseDateObj.getFullYear() === dateObj.getFullYear();
+                }
+            };
+        }
+        function parseConfig() {
+            var boolOpts = [
+                "wrap",
+                "weekNumbers",
+                "allowInput",
+                "clickOpens",
+                "time_24hr",
+                "enableTime",
+                "noCalendar",
+                "altInput",
+                "shorthandCurrentMonth",
+                "inline",
+                "static",
+                "enableSeconds",
+                "disableMobile",
+            ];
+            var userConfig = __assign({}, instanceConfig, JSON.parse(JSON.stringify(element.dataset || {})));
+            var formats = {};
+            self.config.parseDate = userConfig.parseDate;
+            self.config.formatDate = userConfig.formatDate;
+            Object.defineProperty(self.config, "enable", {
+                get: function () { return self.config._enable; },
+                set: function (dates) {
+                    self.config._enable = parseDateRules(dates);
+                }
+            });
+            Object.defineProperty(self.config, "disable", {
+                get: function () { return self.config._disable; },
+                set: function (dates) {
+                    self.config._disable = parseDateRules(dates);
+                }
+            });
+            var timeMode = userConfig.mode === "time";
+            if (!userConfig.dateFormat && (userConfig.enableTime || timeMode)) {
+                formats.dateFormat =
+                    userConfig.noCalendar || timeMode
+                        ? "H:i" + (userConfig.enableSeconds ? ":S" : "")
+                        : flatpickr.defaultConfig.dateFormat +
+                            " H:i" +
+                            (userConfig.enableSeconds ? ":S" : "");
+            }
+            if (userConfig.altInput &&
+                (userConfig.enableTime || timeMode) &&
+                !userConfig.altFormat) {
+                formats.altFormat =
+                    userConfig.noCalendar || timeMode
+                        ? "h:i" + (userConfig.enableSeconds ? ":S K" : " K")
+                        : flatpickr.defaultConfig.altFormat +
+                            (" h:i" + (userConfig.enableSeconds ? ":S" : "") + " K");
+            }
+            Object.defineProperty(self.config, "minDate", {
+                get: function () { return self.config._minDate; },
+                set: minMaxDateSetter("min")
+            });
+            Object.defineProperty(self.config, "maxDate", {
+                get: function () { return self.config._maxDate; },
+                set: minMaxDateSetter("max")
+            });
+            var minMaxTimeSetter = function (type) { return function (val) {
+                self.config[type === "min" ? "_minTime" : "_maxTime"] = self.parseDate(val, "H:i");
+            }; };
+            Object.defineProperty(self.config, "minTime", {
+                get: function () { return self.config._minTime; },
+                set: minMaxTimeSetter("min")
+            });
+            Object.defineProperty(self.config, "maxTime", {
+                get: function () { return self.config._maxTime; },
+                set: minMaxTimeSetter("max")
+            });
+            if (userConfig.mode === "time") {
+                self.config.noCalendar = true;
+                self.config.enableTime = true;
+            }
+            Object.assign(self.config, formats, userConfig);
+            for (var i = 0; i < boolOpts.length; i++)
+                self.config[boolOpts[i]] =
+                    self.config[boolOpts[i]] === true ||
+                        self.config[boolOpts[i]] === "true";
+            HOOKS.filter(function (hook) { return self.config[hook] !== undefined; }).forEach(function (hook) {
+                self.config[hook] = arrayify(self.config[hook] || []).map(bindToInstance);
+            });
+            self.isMobile =
+                !self.config.disableMobile &&
+                    !self.config.inline &&
+                    self.config.mode === "single" &&
+                    !self.config.disable.length &&
+                    !self.config.enable.length &&
+                    !self.config.weekNumbers &&
+                    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            for (var i = 0; i < self.config.plugins.length; i++) {
+                var pluginConf = self.config.plugins[i](self) || {};
+                for (var key in pluginConf) {
+                    if (HOOKS.indexOf(key) > -1) {
+                        self.config[key] = arrayify(pluginConf[key])
+                            .map(bindToInstance)
+                            .concat(self.config[key]);
+                    }
+                    else if (typeof userConfig[key] === "undefined")
+                        self.config[key] = pluginConf[key];
+                }
+            }
+            triggerEvent("onParseConfig");
+        }
+        function setupLocale() {
+            if (typeof self.config.locale !== "object" &&
+                typeof flatpickr.l10ns[self.config.locale] === "undefined")
+                self.config.errorHandler(new Error("flatpickr: invalid locale " + self.config.locale));
+            self.l10n = __assign({}, flatpickr.l10ns["default"], (typeof self.config.locale === "object"
+                ? self.config.locale
+                : self.config.locale !== "default"
+                    ? flatpickr.l10ns[self.config.locale]
+                    : undefined));
+            tokenRegex.K = "(" + self.l10n.amPM[0] + "|" + self.l10n.amPM[1] + "|" + self.l10n.amPM[0].toLowerCase() + "|" + self.l10n.amPM[1].toLowerCase() + ")";
+            self.formatDate = createDateFormatter(self);
+            self.parseDate = createDateParser({ config: self.config, l10n: self.l10n });
+        }
+        function positionCalendar(customPositionElement) {
+            if (self.calendarContainer === undefined)
+                return;
+            triggerEvent("onPreCalendarPosition");
+            var positionElement = customPositionElement || self._positionElement;
+            var calendarHeight = Array.prototype.reduce.call(self.calendarContainer.children, (function (acc, child) { return acc + child.offsetHeight; }), 0), calendarWidth = self.calendarContainer.offsetWidth, configPos = self.config.position.split(" "), configPosVertical = configPos[0], configPosHorizontal = configPos.length > 1 ? configPos[1] : null, inputBounds = positionElement.getBoundingClientRect(), distanceFromBottom = window.innerHeight - inputBounds.bottom, showOnTop = configPosVertical === "above" ||
+                (configPosVertical !== "below" &&
+                    distanceFromBottom < calendarHeight &&
+                    inputBounds.top > calendarHeight);
+            var top = window.pageYOffset +
+                inputBounds.top +
+                (!showOnTop ? positionElement.offsetHeight + 2 : -calendarHeight - 2);
+            toggleClass(self.calendarContainer, "arrowTop", !showOnTop);
+            toggleClass(self.calendarContainer, "arrowBottom", showOnTop);
+            if (self.config.inline)
+                return;
+            var left = window.pageXOffset +
+                inputBounds.left -
+                (configPosHorizontal != null && configPosHorizontal === "center"
+                    ? (calendarWidth - inputBounds.width) / 2
+                    : 0);
+            var right = window.document.body.offsetWidth - inputBounds.right;
+            var rightMost = left + calendarWidth > window.document.body.offsetWidth;
+            var centerMost = right + calendarWidth > window.document.body.offsetWidth;
+            toggleClass(self.calendarContainer, "rightMost", rightMost);
+            if (self.config.static)
+                return;
+            self.calendarContainer.style.top = top + "px";
+            if (!rightMost) {
+                self.calendarContainer.style.left = left + "px";
+                self.calendarContainer.style.right = "auto";
+            }
+            else if (!centerMost) {
+                self.calendarContainer.style.left = "auto";
+                self.calendarContainer.style.right = right + "px";
+            }
+            else {
+                var doc = document.styleSheets[0];
+                // some testing environments don't have css support
+                if (doc === undefined)
+                    return;
+                var bodyWidth = window.document.body.offsetWidth;
+                var centerLeft = Math.max(0, bodyWidth / 2 - calendarWidth / 2);
+                var centerBefore = ".flatpickr-calendar.centerMost:before";
+                var centerAfter = ".flatpickr-calendar.centerMost:after";
+                var centerIndex = doc.cssRules.length;
+                var centerStyle = "{left:" + inputBounds.left + "px;right:auto;}";
+                toggleClass(self.calendarContainer, "rightMost", false);
+                toggleClass(self.calendarContainer, "centerMost", true);
+                doc.insertRule(centerBefore + "," + centerAfter + centerStyle, centerIndex);
+                self.calendarContainer.style.left = centerLeft + "px";
+                self.calendarContainer.style.right = "auto";
+            }
+        }
+        function redraw() {
+            if (self.config.noCalendar || self.isMobile)
+                return;
+            updateNavigationCurrentMonth();
+            buildDays();
+        }
+        function focusAndClose() {
+            self._input.focus();
+            if (window.navigator.userAgent.indexOf("MSIE") !== -1 ||
+                navigator.msMaxTouchPoints !== undefined) {
+                // hack - bugs in the way IE handles focus keeps the calendar open
+                setTimeout(self.close, 0);
+            }
+            else {
+                self.close();
+            }
+        }
+        function selectDate(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var isSelectable = function (day) {
+                return day.classList &&
+                    day.classList.contains("flatpickr-day") &&
+                    !day.classList.contains("disabled") &&
+                    !day.classList.contains("notAllowed");
+            };
+            var t = findParent(e.target, isSelectable);
+            if (t === undefined)
+                return;
+            var target = t;
+            var selectedDate = (self.latestSelectedDateObj = new Date(target.dateObj.getTime()));
+            var shouldChangeMonth = (selectedDate.getMonth() < self.currentMonth ||
+                selectedDate.getMonth() >
+                    self.currentMonth + self.config.showMonths - 1) &&
+                self.config.mode !== "range";
+            self.selectedDateElem = target;
+            if (self.config.mode === "single")
+                self.selectedDates = [selectedDate];
+            else if (self.config.mode === "multiple") {
+                var selectedIndex = isDateSelected(selectedDate);
+                if (selectedIndex)
+                    self.selectedDates.splice(parseInt(selectedIndex), 1);
+                else
+                    self.selectedDates.push(selectedDate);
+            }
+            else if (self.config.mode === "range") {
+                if (self.selectedDates.length === 2) {
+                    self.clear(false, false);
+                }
+                self.latestSelectedDateObj = selectedDate;
+                self.selectedDates.push(selectedDate);
+                // unless selecting same date twice, sort ascendingly
+                if (compareDates(selectedDate, self.selectedDates[0], true) !== 0)
+                    self.selectedDates.sort(function (a, b) { return a.getTime() - b.getTime(); });
+            }
+            setHoursFromInputs();
+            if (shouldChangeMonth) {
+                var isNewYear = self.currentYear !== selectedDate.getFullYear();
+                self.currentYear = selectedDate.getFullYear();
+                self.currentMonth = selectedDate.getMonth();
+                if (isNewYear)
+                    triggerEvent("onYearChange");
+                triggerEvent("onMonthChange");
+            }
+            updateNavigationCurrentMonth();
+            buildDays();
+            updateValue();
+            if (self.config.enableTime)
+                setTimeout(function () { return (self.showTimeInput = true); }, 50);
+            // maintain focus
+            if (!shouldChangeMonth &&
+                self.config.mode !== "range" &&
+                self.config.showMonths === 1)
+                focusOnDayElem(target);
+            else if (self.selectedDateElem !== undefined &&
+                self.hourElement === undefined) {
+                self.selectedDateElem && self.selectedDateElem.focus();
+            }
+            if (self.hourElement !== undefined)
+                self.hourElement !== undefined && self.hourElement.focus();
+            if (self.config.closeOnSelect) {
+                var single = self.config.mode === "single" && !self.config.enableTime;
+                var range = self.config.mode === "range" &&
+                    self.selectedDates.length === 2 &&
+                    !self.config.enableTime;
+                if (single || range) {
+                    focusAndClose();
+                }
+            }
+            triggerChange();
+        }
+        var CALLBACKS = {
+            locale: [setupLocale, updateWeekdays],
+            showMonths: [buildMonths, setCalendarWidth, buildWeekdays]
+        };
+        function set(option, value) {
+            if (option !== null && typeof option === "object")
+                Object.assign(self.config, option);
+            else {
+                self.config[option] = value;
+                if (CALLBACKS[option] !== undefined)
+                    CALLBACKS[option].forEach(function (x) { return x(); });
+                else if (HOOKS.indexOf(option) > -1)
+                    self.config[option] = arrayify(value);
+            }
+            self.redraw();
+            updateValue(false);
+        }
+        function setSelectedDate(inputDate, format) {
+            var dates = [];
+            if (inputDate instanceof Array)
+                dates = inputDate.map(function (d) { return self.parseDate(d, format); });
+            else if (inputDate instanceof Date || typeof inputDate === "number")
+                dates = [self.parseDate(inputDate, format)];
+            else if (typeof inputDate === "string") {
+                switch (self.config.mode) {
+                    case "single":
+                    case "time":
+                        dates = [self.parseDate(inputDate, format)];
+                        break;
+                    case "multiple":
+                        dates = inputDate
+                            .split(self.config.conjunction)
+                            .map(function (date) { return self.parseDate(date, format); });
+                        break;
+                    case "range":
+                        dates = inputDate
+                            .split(self.l10n.rangeSeparator)
+                            .map(function (date) { return self.parseDate(date, format); });
+                        break;
+                    default:
+                        break;
+                }
+            }
+            else
+                self.config.errorHandler(new Error("Invalid date supplied: " + JSON.stringify(inputDate)));
+            self.selectedDates = dates.filter(function (d) { return d instanceof Date && isEnabled(d, false); });
+            if (self.config.mode === "range")
+                self.selectedDates.sort(function (a, b) { return a.getTime() - b.getTime(); });
+        }
+        function setDate(date, triggerChange, format) {
+            if (triggerChange === void 0) { triggerChange = false; }
+            if (format === void 0) { format = self.config.dateFormat; }
+            if ((date !== 0 && !date) || (date instanceof Array && date.length === 0))
+                return self.clear(triggerChange);
+            setSelectedDate(date, format);
+            self.showTimeInput = self.selectedDates.length > 0;
+            self.latestSelectedDateObj = self.selectedDates[0];
+            self.redraw();
+            jumpToDate();
+            setHoursFromDate();
+            updateValue(triggerChange);
+            if (triggerChange)
+                triggerEvent("onChange");
+        }
+        function parseDateRules(arr) {
+            return arr
+                .slice()
+                .map(function (rule) {
+                if (typeof rule === "string" ||
+                    typeof rule === "number" ||
+                    rule instanceof Date) {
+                    return self.parseDate(rule, undefined, true);
+                }
+                else if (rule &&
+                    typeof rule === "object" &&
+                    rule.from &&
+                    rule.to)
+                    return {
+                        from: self.parseDate(rule.from, undefined),
+                        to: self.parseDate(rule.to, undefined)
+                    };
+                return rule;
+            })
+                .filter(function (x) { return x; }); // remove falsy values
+        }
+        function setupDates() {
+            self.selectedDates = [];
+            self.now = self.parseDate(self.config.now) || new Date();
+            // Workaround IE11 setting placeholder as the input's value
+            var preloadedDate = self.config.defaultDate ||
+                ((self.input.nodeName === "INPUT" ||
+                    self.input.nodeName === "TEXTAREA") &&
+                    self.input.placeholder &&
+                    self.input.value === self.input.placeholder
+                    ? null
+                    : self.input.value);
+            if (preloadedDate)
+                setSelectedDate(preloadedDate, self.config.dateFormat);
+            self._initialDate =
+                self.selectedDates.length > 0
+                    ? self.selectedDates[0]
+                    : self.config.minDate &&
+                        self.config.minDate.getTime() > self.now.getTime()
+                        ? self.config.minDate
+                        : self.config.maxDate &&
+                            self.config.maxDate.getTime() < self.now.getTime()
+                            ? self.config.maxDate
+                            : self.now;
+            self.currentYear = self._initialDate.getFullYear();
+            self.currentMonth = self._initialDate.getMonth();
+            if (self.selectedDates.length > 0)
+                self.latestSelectedDateObj = self.selectedDates[0];
+            if (self.config.minTime !== undefined)
+                self.config.minTime = self.parseDate(self.config.minTime, "H:i");
+            if (self.config.maxTime !== undefined)
+                self.config.maxTime = self.parseDate(self.config.maxTime, "H:i");
+            self.minDateHasTime =
+                !!self.config.minDate &&
+                    (self.config.minDate.getHours() > 0 ||
+                        self.config.minDate.getMinutes() > 0 ||
+                        self.config.minDate.getSeconds() > 0);
+            self.maxDateHasTime =
+                !!self.config.maxDate &&
+                    (self.config.maxDate.getHours() > 0 ||
+                        self.config.maxDate.getMinutes() > 0 ||
+                        self.config.maxDate.getSeconds() > 0);
+            Object.defineProperty(self, "showTimeInput", {
+                get: function () { return self._showTimeInput; },
+                set: function (bool) {
+                    self._showTimeInput = bool;
+                    if (self.calendarContainer)
+                        toggleClass(self.calendarContainer, "showTimeInput", bool);
+                    self.isOpen && positionCalendar();
+                }
+            });
+        }
+        function setupInputs() {
+            self.input = self.config.wrap
+                ? element.querySelector("[data-input]")
+                : element;
+            /* istanbul ignore next */
+            if (!self.input) {
+                self.config.errorHandler(new Error("Invalid input element specified"));
+                return;
+            }
+            // hack: store previous type to restore it after destroy()
+            self.input._type = self.input.type;
+            self.input.type = "text";
+            self.input.classList.add("flatpickr-input");
+            self._input = self.input;
+            if (self.config.altInput) {
+                // replicate self.element
+                self.altInput = createElement(self.input.nodeName, self.input.className + " " + self.config.altInputClass);
+                self._input = self.altInput;
+                self.altInput.placeholder = self.input.placeholder;
+                self.altInput.disabled = self.input.disabled;
+                self.altInput.required = self.input.required;
+                self.altInput.tabIndex = self.input.tabIndex;
+                self.altInput.type = "text";
+                self.input.setAttribute("type", "hidden");
+                if (!self.config.static && self.input.parentNode)
+                    self.input.parentNode.insertBefore(self.altInput, self.input.nextSibling);
+            }
+            if (!self.config.allowInput)
+                self._input.setAttribute("readonly", "readonly");
+            self._positionElement = self.config.positionElement || self._input;
+        }
+        function setupMobile() {
+            var inputType = self.config.enableTime
+                ? self.config.noCalendar
+                    ? "time"
+                    : "datetime-local"
+                : "date";
+            self.mobileInput = createElement("input", self.input.className + " flatpickr-mobile");
+            self.mobileInput.step = self.input.getAttribute("step") || "any";
+            self.mobileInput.tabIndex = 1;
+            self.mobileInput.type = inputType;
+            self.mobileInput.disabled = self.input.disabled;
+            self.mobileInput.required = self.input.required;
+            self.mobileInput.placeholder = self.input.placeholder;
+            self.mobileFormatStr =
+                inputType === "datetime-local"
+                    ? "Y-m-d\\TH:i:S"
+                    : inputType === "date"
+                        ? "Y-m-d"
+                        : "H:i:S";
+            if (self.selectedDates.length > 0) {
+                self.mobileInput.defaultValue = self.mobileInput.value = self.formatDate(self.selectedDates[0], self.mobileFormatStr);
+            }
+            if (self.config.minDate)
+                self.mobileInput.min = self.formatDate(self.config.minDate, "Y-m-d");
+            if (self.config.maxDate)
+                self.mobileInput.max = self.formatDate(self.config.maxDate, "Y-m-d");
+            self.input.type = "hidden";
+            if (self.altInput !== undefined)
+                self.altInput.type = "hidden";
+            try {
+                if (self.input.parentNode)
+                    self.input.parentNode.insertBefore(self.mobileInput, self.input.nextSibling);
+            }
+            catch (_a) { }
+            bind(self.mobileInput, "change", function (e) {
+                self.setDate(e.target.value, false, self.mobileFormatStr);
+                triggerEvent("onChange");
+                triggerEvent("onClose");
+            });
+        }
+        function toggle(e) {
+            if (self.isOpen === true)
+                return self.close();
+            self.open(e);
+        }
+        function triggerEvent(event, data) {
+            // If the instance has been destroyed already, all hooks have been removed
+            if (self.config === undefined)
+                return;
+            var hooks = self.config[event];
+            if (hooks !== undefined && hooks.length > 0) {
+                for (var i = 0; hooks[i] && i < hooks.length; i++)
+                    hooks[i](self.selectedDates, self.input.value, self, data);
+            }
+            if (event === "onChange") {
+                self.input.dispatchEvent(createEvent("change"));
+                // many front-end frameworks bind to the input event
+                self.input.dispatchEvent(createEvent("input"));
+            }
+        }
+        function createEvent(name) {
+            var e = document.createEvent("Event");
+            e.initEvent(name, true, true);
+            return e;
+        }
+        function isDateSelected(date) {
+            for (var i = 0; i < self.selectedDates.length; i++) {
+                if (compareDates(self.selectedDates[i], date) === 0)
+                    return "" + i;
+            }
+            return false;
+        }
+        function isDateInRange(date) {
+            if (self.config.mode !== "range" || self.selectedDates.length < 2)
+                return false;
+            return (compareDates(date, self.selectedDates[0]) >= 0 &&
+                compareDates(date, self.selectedDates[1]) <= 0);
+        }
+        function updateNavigationCurrentMonth() {
+            if (self.config.noCalendar || self.isMobile || !self.monthNav)
+                return;
+            self.yearElements.forEach(function (yearElement, i) {
+                var d = new Date(self.currentYear, self.currentMonth, 1);
+                d.setMonth(self.currentMonth + i);
+                self.monthElements[i].textContent =
+                    monthToStr(d.getMonth(), self.config.shorthandCurrentMonth, self.l10n) +
+                        " ";
+                yearElement.value = d.getFullYear().toString();
+            });
+            self._hidePrevMonthArrow =
+                self.config.minDate !== undefined &&
+                    (self.currentYear === self.config.minDate.getFullYear()
+                        ? self.currentMonth <= self.config.minDate.getMonth()
+                        : self.currentYear < self.config.minDate.getFullYear());
+            self._hideNextMonthArrow =
+                self.config.maxDate !== undefined &&
+                    (self.currentYear === self.config.maxDate.getFullYear()
+                        ? self.currentMonth + 1 > self.config.maxDate.getMonth()
+                        : self.currentYear > self.config.maxDate.getFullYear());
+        }
+        function getDateStr(format) {
+            return self.selectedDates
+                .map(function (dObj) { return self.formatDate(dObj, format); })
+                .filter(function (d, i, arr) {
+                return self.config.mode !== "range" ||
+                    self.config.enableTime ||
+                    arr.indexOf(d) === i;
+            })
+                .join(self.config.mode !== "range"
+                ? self.config.conjunction
+                : self.l10n.rangeSeparator);
+        }
+        /**
+         * Updates the values of inputs associated with the calendar
+         */
+        function updateValue(triggerChange) {
+            if (triggerChange === void 0) { triggerChange = true; }
+            if (self.selectedDates.length === 0)
+                return self.clear(triggerChange);
+            if (self.mobileInput !== undefined && self.mobileFormatStr) {
+                self.mobileInput.value =
+                    self.latestSelectedDateObj !== undefined
+                        ? self.formatDate(self.latestSelectedDateObj, self.mobileFormatStr)
+                        : "";
+            }
+            self.input.value = getDateStr(self.config.dateFormat);
+            if (self.altInput !== undefined) {
+                self.altInput.value = getDateStr(self.config.altFormat);
+            }
+            if (triggerChange !== false)
+                triggerEvent("onValueUpdate");
+        }
+        function onMonthNavClick(e) {
+            e.preventDefault();
+            var isPrevMonth = self.prevMonthNav.contains(e.target);
+            var isNextMonth = self.nextMonthNav.contains(e.target);
+            if (isPrevMonth || isNextMonth) {
+                changeMonth(isPrevMonth ? -1 : 1);
+            }
+            else if (self.yearElements.indexOf(e.target) >= 0) {
+                e.target.select();
+            }
+            else if (e.target.classList.contains("arrowUp")) {
+                self.changeYear(self.currentYear + 1);
+            }
+            else if (e.target.classList.contains("arrowDown")) {
+                self.changeYear(self.currentYear - 1);
+            }
+        }
+        function timeWrapper(e) {
+            e.preventDefault();
+            var isKeyDown = e.type === "keydown", input = e.target;
+            if (self.amPM !== undefined && e.target === self.amPM) {
+                self.amPM.textContent =
+                    self.l10n.amPM[int(self.amPM.textContent === self.l10n.amPM[0])];
+            }
+            var min = parseFloat(input.getAttribute("min")), max = parseFloat(input.getAttribute("max")), step = parseFloat(input.getAttribute("step")), curValue = parseInt(input.value, 10), delta = e.delta ||
+                (isKeyDown ? (e.which === 38 ? 1 : -1) : 0);
+            var newValue = curValue + step * delta;
+            if (typeof input.value !== "undefined" && input.value.length === 2) {
+                var isHourElem = input === self.hourElement, isMinuteElem = input === self.minuteElement;
+                if (newValue < min) {
+                    newValue =
+                        max +
+                            newValue +
+                            int(!isHourElem) +
+                            (int(isHourElem) && int(!self.amPM));
+                    if (isMinuteElem)
+                        incrementNumInput(undefined, -1, self.hourElement);
+                }
+                else if (newValue > max) {
+                    newValue =
+                        input === self.hourElement ? newValue - max - int(!self.amPM) : min;
+                    if (isMinuteElem)
+                        incrementNumInput(undefined, 1, self.hourElement);
+                }
+                if (self.amPM &&
+                    isHourElem &&
+                    (step === 1
+                        ? newValue + curValue === 23
+                        : Math.abs(newValue - curValue) > step)) {
+                    self.amPM.textContent =
+                        self.l10n.amPM[int(self.amPM.textContent === self.l10n.amPM[0])];
+                }
+                input.value = pad(newValue);
+            }
+        }
+        init();
+        return self;
+    }
+    /* istanbul ignore next */
+    function _flatpickr(nodeList, config) {
+        // static list
+        var nodes = Array.prototype.slice
+            .call(nodeList)
+            .filter(function (x) { return x instanceof HTMLElement; });
+        var instances = [];
+        for (var i = 0; i < nodes.length; i++) {
+            var node = nodes[i];
+            try {
+                if (node.getAttribute("data-fp-omit") !== null)
+                    continue;
+                if (node._flatpickr !== undefined) {
+                    node._flatpickr.destroy();
+                    node._flatpickr = undefined;
+                }
+                node._flatpickr = FlatpickrInstance(node, config || {});
+                instances.push(node._flatpickr);
+            }
+            catch (e) {
+                console.error(e);
+            }
+        }
+        return instances.length === 1 ? instances[0] : instances;
+    }
+    /* istanbul ignore next */
+    if (typeof HTMLElement !== "undefined") {
+        // browser env
+        HTMLCollection.prototype.flatpickr = NodeList.prototype.flatpickr = function (config) {
+            return _flatpickr(this, config);
+        };
+        HTMLElement.prototype.flatpickr = function (config) {
+            return _flatpickr([this], config);
+        };
+    }
+    /* istanbul ignore next */
+    var flatpickr = function (selector, config) {
+        if (typeof selector === "string") {
+            return _flatpickr(window.document.querySelectorAll(selector), config);
+        }
+        else if (selector instanceof Node) {
+            return _flatpickr([selector], config);
+        }
+        else {
+            return _flatpickr(selector, config);
+        }
+    };
+    /* istanbul ignore next */
+    flatpickr.defaultConfig = defaults;
+    flatpickr.l10ns = {
+        en: __assign({}, english),
+        "default": __assign({}, english)
+    };
+    flatpickr.localize = function (l10n) {
+        flatpickr.l10ns["default"] = __assign({}, flatpickr.l10ns["default"], l10n);
+    };
+    flatpickr.setDefaults = function (config) {
+        flatpickr.defaultConfig = __assign({}, flatpickr.defaultConfig, config);
+    };
+    flatpickr.parseDate = createDateParser({});
+    flatpickr.formatDate = createDateFormatter({});
+    flatpickr.compareDates = compareDates;
+    /* istanbul ignore next */
+    if (typeof jQuery !== "undefined") {
+        jQuery.fn.flatpickr = function (config) {
+            return _flatpickr(this, config);
+        };
+    }
+    Date.prototype.fp_incr = function (days) {
+        return new Date(this.getFullYear(), this.getMonth(), this.getDate() + (typeof days === "string" ? parseInt(days, 10) : days));
+    };
+    if (typeof window !== "undefined") {
+        window.flatpickr = flatpickr;
+    }
+
+    return flatpickr;
+
+});
+
+define('skylark-formio/widgets/CalendarWidget',[
+    '../vendors/flatpickr/flatpickr',
+    './InputWidget',
+    '../utils/utils',
+    'skylark-moment',
+    'skylark-lodash'
+], function (Flatpickr, InputWidget, utils, moment, _) {
+    'use strict';
+    const DEFAULT_FORMAT = 'yyyy-MM-dd hh:mm a';
+    const ISO_8601_FORMAT = 'yyyy-MM-ddTHH:mm:ssZ';
+    return class CalendarWidget extends InputWidget {
+        static get defaultSettings() {
+            return {
+                type: 'calendar',
+                altInput: true,
+                allowInput: true,
+                clickOpens: true,
+                enableDate: true,
+                enableTime: true,
+                mode: 'single',
+                noCalendar: false,
+                format: DEFAULT_FORMAT,
+                dateFormat: ISO_8601_FORMAT,
+                useLocaleSettings: false,
+                language: 'us-en',
+                hourIncrement: 1,
+                minuteIncrement: 5,
+                time_24hr: false,
+                saveAs: 'date',
+                displayInTimezone: '',
+                timezone: '',
+                disable: [],
+                minDate: '',
+                maxDate: ''
+            };
+        }
+        constructor(settings, component) {
+            super(settings, component);
+            if (this.settings.noCalendar) {
+                this.settings.format = this.settings.format.replace(/yyyy-MM-dd /g, '');
+            }
+            if (!this.settings.enableTime) {
+                this.settings.format = this.settings.format.replace(/ hh:mm a$/g, '');
+            } else if (this.settings.time_24hr) {
+                this.settings.format = this.settings.format.replace(/hh:mm a$/g, 'HH:mm');
+            }
+        }
+        loadZones() {
+            const timezone = this.timezone;
+            if (!utils.zonesLoaded() && utils.shouldLoadZones(timezone)) {
+                utils.loadZones(timezone).then(() => this.emit('redraw'));
+                return true;
+            }
+            return false;
+        }
+        attach(input) {
+            const superAttach = super.attach(input);
+            if (input && !input.getAttribute('placeholder')) {
+                input.setAttribute('placeholder', this.settings.format);
+            }
+            const dateFormatInfo = utils.getLocaleDateFormatInfo(this.settings.language);
+            this.defaultFormat = {
+                date: dateFormatInfo.dayFirst ? 'd/m/Y ' : 'm/d/Y ',
+                time: 'G:i K'
+            };
+            this.closedOn = 0;
+            this.valueFormat = this.settings.dateFormat || ISO_8601_FORMAT;
+            this.valueMomentFormat = utils.convertFormatToMoment(this.valueFormat);
+            this.settings.minDate = utils.getDateSetting(this.settings.minDate);
+            this.settings.disable = this.disabledDates;
+            this.settings.disableWeekends ? this.settings.disable.push(this.disableWeekends) : '';
+            this.settings.disableWeekdays ? this.settings.disable.push(this.disableWeekdays) : '';
+            this.settings.disableFunction ? this.settings.disable.push(this.disableFunction) : '';
+            this.settings.maxDate = utils.getDateSetting(this.settings.maxDate);
+            this.settings.altFormat = utils.convertFormatToFlatpickr(this.settings.format);
+            this.settings.dateFormat = utils.convertFormatToFlatpickr(this.settings.dateFormat);
+            this.settings.onChange = () => this.emit('update');
+            this.settings.onClose = () => {
+                this.closedOn = Date.now();
+                if (this.calendar) {
+                    this.emit('blur');
+                }
+            };
+            this.settings.formatDate = (date, format) => {
+                if (this.settings.readOnly && format === this.settings.altFormat) {
+                    if (this.settings.saveAs === 'text' || this.formatDate()) {
+                        return Flatpickr.formatDate(date, format);
+                    }
+                    return utils.formatOffset(Flatpickr.undefined.bind(Flatpickr), date, format, this.timezone);
+                }
+                return Flatpickr.formatDate(date, format);
+            };
+            if (this._input) {
+                this.calendar = new Flatpickr(this._input, this.settings);
+                this.setInputMask(this.calendar._input, utils.convertFormatToMask(this.settings.format));
+                this.addEventListener(this.calendar._input, 'blur', () => this.calendar.setDate(this.calendar._input.value, true, this.settings.altFormat));
+            }
+            return superAttach;
+        }
+        get disableWeekends() {
+            return function (date) {
+                return date.getDay() === 0 || date.getDay() === 6;
+            };
+        }
+        get disableWeekdays() {
+            return date => !this.disableWeekends(date);
+        }
+        get disableFunction() {
+            return date => this.evaluate(`return ${ this.settings.disableFunction }`, { date });
+        }
+        get timezone() {
+            if (this.settings.timezone) {
+                return this.settings.timezone;
+            }
+            if (this.settings.displayInTimezone === 'submission' && this.settings.submissionTimezone) {
+                return this.settings.submissionTimezone;
+            }
+            if (this.settings.displayInTimezone === 'utc') {
+                return 'UTC';
+            }
+            return utils.currentTimezone();
+        }
+        get defaultSettings() {
+            return CalendarWidget.defaultSettings;
+        }
+        addSuffix(suffix) {
+            this.addEventListener(suffix, 'click', () => {
+                if (this.calendar && !this.calendar.isOpen && Date.now() - this.closedOn > 200) {
+                    this.calendar.open();
+                }
+            });
+            return suffix;
+        }
+        set disabled(disabled) {
+            super.disabled = disabled;
+            if (this.calendar) {
+                if (disabled) {
+                    this.calendar._input.setAttribute('disabled', 'disabled');
+                } else {
+                    this.calendar._input.removeAttribute('disabled');
+                }
+                this.calendar.close();
+                this.calendar.redraw();
+            }
+        }
+        get input() {
+            return this.calendar ? this.calendar.altInput : null;
+        }
+        get disabledDates() {
+            if (this.settings.disabledDates) {
+                const disabledDates = this.settings.disabledDates.split(',');
+                return disabledDates.map(item => {
+                    const dateMask = /\d{4}-\d{2}-\d{2}/g;
+                    const dates = item.match(dateMask);
+                    if (dates.length) {
+                        return dates.length === 1 ? item.match(dateMask)[0] : {
+                            from: item.match(dateMask)[0],
+                            to: item.match(dateMask)[1]
+                        };
+                    }
+                });
+            }
+            return [];
+        }
+        get localeFormat() {
+            let format = '';
+            if (this.settings.enableDate) {
+                format += this.defaultFormat.date;
+            }
+            if (this.settings.enableTime) {
+                format += this.defaultFormat.time;
+            }
+            return format;
+        }
+        get dateTimeFormat() {
+            return this.settings.useLocaleSettings ? this.localeFormat : utils.convertFormatToFlatpickr(this.dateFormat);
+        }
+        get dateFormat() {
+            return _.get(this.settings, 'format', DEFAULT_FORMAT);
+        }
+        getDateValue(date, format) {
+            return moment(date).format(utils.convertFormatToMoment(format));
+        }
+        getValue() {
+            if (!this.calendar) {
+                return super.getValue();
+            }
+            const dates = this.calendar.selectedDates;
+            if (!dates || !dates.length) {
+                return super.getValue();
+            }
+            if (!(dates[0] instanceof Date)) {
+                return 'Invalid Date';
+            }
+            return this.getDateValue(dates[0], this.valueFormat);
+        }
+        setValue(value) {
+            if (!this.calendar) {
+                return super.setValue(value);
+            }
+            if (value) {
+                if (this.settings.saveAs !== 'text' && this.settings.readOnly && !this.loadZones()) {
+                    this.calendar.setDate(utils.momentDate(value, this.valueFormat, this.timezone).toDate(), false);
+                } else {
+                    this.calendar.setDate(moment(value, this.valueMomentFormat).toDate(), false);
+                }
+            } else {
+                this.calendar.clear(false);
+            }
+        }
+        getValueAsString(value, format) {
+            format = format || this.dateFormat;
+            if (this.settings.saveAs === 'text') {
+                return this.getDateValue(value, format);
+            }
+            return utils.formatDate(value, format, this.timezone);
+        }
+        validationValue(value) {
+            if (typeof value === 'string') {
+                return new Date(value);
+            }
+            return value.map(val => new Date(val));
+        }
+        destroy() {
+            super.destroy();
+            if (this.calendar) {
+                this.calendar.destroy();
+            }
+        }
+    };
+});
+define('skylark-formio/widgets/index',[
+    './InputWidget',
+    './CalendarWidget'
+], function (InputWidget, CalendarWidget) {
+    'use strict';
+    return {
+        input: InputWidget,
+        calendar: CalendarWidget
+    };
+});
+define('skylark-formio/components/_classes/input/Input',[
+    '../multivalue/Multivalue',
+    '../../../utils/utils',
+    '../../../widgets/index',
+    'skylark-lodash'
+], function (Multivalue, a, Widgets, _) {
+    'use strict';
+    return class Input extends Multivalue {
+        constructor(component, options, data) {
+            super(component, options, data);
+            this.triggerUpdateValueAt = _.debounce(this.updateValueAt.bind(this), 100);
+        }
+        static schema(...extend) {
+            return Multivalue.schema({ widget: { type: 'input' } }, ...extend);
+        }
+        get inputInfo() {
+            const attr = {
+                name: this.options.name,
+                type: this.component.inputType || 'text',
+                class: 'form-control',
+                lang: this.options.language
+            };
+            if (this.component.placeholder) {
+                attr.placeholder = this.t(this.component.placeholder);
+            }
+            if (this.component.tabindex) {
+                attr.tabindex = this.component.tabindex;
+            }
+            if (this.disabled) {
+                attr.disabled = 'disabled';
+            }
+            _.defaults(attr, this.component.attributes);
+            return {
+                id: this.key,
+                type: 'input',
+                changeEvent: 'input',
+                content: '',
+                attr
+            };
+        }
+        get maskOptions() {
+            return _.map(this.component.inputMasks, mask => {
+                return {
+                    label: mask.label,
+                    value: mask.label
+                };
+            });
+        }
+        get isMultipleMasksField() {
+            return this.component.allowMultipleMasks && !!this.component.inputMasks && !!this.component.inputMasks.length;
+        }
+        getMaskByName(maskName) {
+            const inputMask = _.find(this.component.inputMasks, inputMask => {
+                return inputMask.label === maskName;
+            });
+            return inputMask ? inputMask.mask : undefined;
+        }
+        setInputMask(input, inputMask) {
+            return super.setInputMask(input, inputMask || this.component.inputMask, !this.component.placeholder);
+        }
+        getMaskOptions() {
+            return this.component.inputMasks.map(mask => ({
+                label: mask.label,
+                value: mask.label
+            }));
+        }
+        get remainingWords() {
+            const maxWords = _.parseInt(_.get(this.component, 'validate.maxWords'), 10);
+            const wordCount = _.words(this.dataValue).length;
+            return maxWords - wordCount;
+        }
+        renderElement(value, index) {
+            if (value && typeof value === 'string') {
+                value = value.replace(/"/g, '&quot;');
+            }
+            const info = this.inputInfo;
+            info.attr = info.attr || {};
+            info.attr.value = this.getValueAsString(this.formatValue(this.parseValue(value)));
+            if (this.isMultipleMasksField) {
+                info.attr.class += ' formio-multiple-mask-input';
+            }
+            if (this.component.widget && this.component.widget.type === 'calendar') {
+                const calendarIcon = this.renderTemplate('icon', {
+                    ref: 'icon',
+                    className: this.iconClass(this.component.enableDate || this.component.widget.enableDate ? 'calendar' : 'time'),
+                    styles: '',
+                    content: ''
+                }).trim();
+                if (this.component.prefix !== calendarIcon) {
+                    this.component.suffix = calendarIcon;
+                }
+            }
+            return this.isMultipleMasksField ? this.renderTemplate('multipleMasksInput', {
+                input: info,
+                value,
+                index,
+                selectOptions: this.getMaskOptions() || []
+            }) : this.renderTemplate('input', {
+                input: info,
+                value: this.formatValue(this.parseValue(value)),
+                index
+            });
+        }
+        setCounter(type, element, count, max) {
+            if (max) {
+                const remaining = max - count;
+                if (remaining > 0) {
+                    this.removeClass(element, 'text-danger');
+                } else {
+                    this.addClass(element, 'text-danger');
+                }
+                this.setContent(element, this.t(`{{ remaining }} ${ type } remaining.`, { remaining: remaining }));
+            } else {
+                this.setContent(element, this.t(`{{ count }} ${ type }`, { count: count }));
+            }
+        }
+        updateValueAt(value, flags, index) {
+            flags = flags || {};
+            if (_.get(this.component, 'showWordCount', false)) {
+                if (this.refs.wordcount && this.refs.wordcount[index]) {
+                    const maxWords = _.parseInt(_.get(this.component, 'validate.maxWords', 0), 10);
+                    this.setCounter('words', this.refs.wordcount[index], _.words(value).length, maxWords);
+                }
+            }
+            if (_.get(this.component, 'showCharCount', false)) {
+                if (this.refs.charcount && this.refs.charcount[index]) {
+                    const maxChars = _.parseInt(_.get(this.component, 'validate.maxLength', 0), 10);
+                    this.setCounter('characters', this.refs.charcount[index], value.length, maxChars);
+                }
+            }
+        }
+        getValueAt(index) {
+            const input = this.performInputMapping(this.refs.input[index]);
+            if (input && input.widget) {
+                return input.widget.getValue();
+            }
+            return input ? input.value : undefined;
+        }
+        updateValue(value, flags, index) {
+            flags = flags || {};
+            const changed = super.updateValue(value, flags);
+            this.triggerUpdateValueAt(this.dataValue, flags, index);
+            return changed;
+        }
+        parseValue(value) {
+            return value;
+        }
+        formatValue(value) {
+            return value;
+        }
+        attach(element) {
+            this.loadRefs(element, {
+                charcount: 'multiple',
+                wordcount: 'multiple',
+                prefix: 'multiple',
+                suffix: 'multiple'
+            });
+            return super.attach(element);
+        }
+        getWidget(index) {
+            index = index || 0;
+            if (this.refs.input && this.refs.input[index]) {
+                return this.refs.input[index].widget;
+            }
+            return null;
+        }
+        getValueAsString(value) {
+            return super.getValueAsString(this.getWidgetValueAsString(value));
+        }
+        attachElement(element, index) {
+            super.attachElement(element, index);
+            if (element.widget) {
+                element.widget.destroy();
+            }
+            element.widget = this.createWidget(index);
+            if (element.widget) {
+                element.widget.attach(element);
+                if (this.refs.prefix && this.refs.prefix[index]) {
+                    element.widget.addPrefix(this.refs.prefix[index]);
+                }
+                if (this.refs.suffix && this.refs.suffix[index]) {
+                    element.widget.addSuffix(this.refs.suffix[index]);
+                }
+            }
+            this.addFocusBlurEvents(element);
+            if (this.options.submitOnEnter) {
+                this.addEventListener(element, 'keypress', event => {
+                    const key = event.keyCode || event.which;
+                    if (key === 13) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        this.emit('submitButton');
+                    }
+                });
+            }
+        }
+        createWidget(index) {
+            if (!this.component.widget) {
+                return null;
+            }
+            const settings = typeof this.component.widget === 'string' ? { type: this.component.widget } : this.component.widget;
+            if (!Widgets.hasOwnProperty(settings.type)) {
+                return null;
+            }
+            const widget = new Widgets[settings.type](settings, this.component);
+            widget.on('update', () => this.updateValue(widget.getValue(), { modified: true }, index), true);
+            widget.on('redraw', () => this.redraw(), true);
+            return widget;
+        }
+        detach() {
+            super.detach();
+            if (this.refs && this.refs.input) {
+                for (let i = 0; i <= this.refs.input.length; i++) {
+                    const widget = this.getWidget(i);
+                    if (widget) {
+                        widget.destroy();
+                    }
+                }
+            }
+        }
+        addFocusBlurEvents(element) {
+            this.addEventListener(element, 'focus', () => {
+                if (this.root.focusedComponent !== this) {
+                    if (this.root.pendingBlur) {
+                        this.root.pendingBlur();
+                    }
+                    this.root.focusedComponent = this;
+                    this.emit('focus', this);
+                } else if (this.root.focusedComponent === this && this.root.pendingBlur) {
+                    this.root.pendingBlur.cancel();
+                    this.root.pendingBlur = null;
+                }
+            });
+            this.addEventListener(element, 'blur', () => {
+                this.root.pendingBlur = a.delay(() => {
+                    this.emit('blur', this);
+                    if (this.component.validateOn === 'blur') {
+                        this.root.triggerChange({}, {
+                            instance: this,
+                            component: this.component,
+                            value: this.dataValue,
+                            flags: {}
+                        });
+                    }
+                    this.root.focusedComponent = null;
+                    this.root.pendingBlur = null;
+                });
+            });
+        }
+    };
+});
+define('skylark-formio/components/button/Button',[
+    'skylark-lodash',
+    '../_classes/field/Field',
+    '../_classes/input/Input',
+    '../../utils/utils'
+], function (_, Field, Input, a) {
+    'use strict';
+    return class ButtonComponent extends Field {
+        static schema(...extend) {
+            return Input.schema({
+                type: 'button',
+                label: 'Submit',
+                key: 'submit',
+                size: 'md',
+                leftIcon: '',
+                rightIcon: '',
+                block: false,
+                action: 'submit',
+                persistent: false,
+                disableOnInvalid: false,
+                theme: 'primary',
+                dataGridLabel: true
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Button',
+                group: 'basic',
+                icon: 'stop',
+                documentation: 'http://help.form.io/userguide/#button',
+                weight: 110,
+                schema: ButtonComponent.schema()
+            };
+        }
+        get defaultSchema() {
+            return ButtonComponent.schema();
+        }
+        get inputInfo() {
+            const info = super.elementInfo();
+            info.type = 'button';
+            info.attr.type = [
+                'submit',
+                'saveState'
+            ].includes(this.component.action) ? 'submit' : 'button';
+            this.component.theme = this.component.theme || 'default';
+            info.attr.class = `btn btn-${ this.component.theme }`;
+            if (this.component.size) {
+                info.attr.class += ` btn-${ this.component.size }`;
+            }
+            if (this.component.block) {
+                info.attr.class += ' btn-block';
+            }
+            if (this.component.customClass) {
+                info.attr.class += ` ${ this.component.customClass }`;
+            }
+            info.content = this.t(this.component.label);
+            return info;
+        }
+        get labelInfo() {
+            return { hidden: true };
+        }
+        set loading(loading) {
+            this.setLoading(this.refs.button, loading);
+        }
+        createLabel() {
+        }
+        createInput(container) {
+            this.refs.button = super.createInput(container);
+            return this.refs.button;
+        }
+        get emptyValue() {
+            return false;
+        }
+        getValue() {
+            return this.dataValue;
+        }
+        get clicked() {
+            return this.dataValue;
+        }
+        get defaultValue() {
+            return false;
+        }
+        get className() {
+            let className = super.className;
+            className += ' form-group';
+            return className;
+        }
+        render() {
+            if (this.viewOnly || this.options.hideButtons) {
+                this._visible = false;
+            }
+            return super.render(this.renderTemplate('button', {
+                component: this.component,
+                input: this.inputInfo
+            }));
+        }
+        attachButton() {
+            this.addShortcut(this.refs.button);
+            let onChange = null;
+            let onError = null;
+            if (this.component.action === 'submit') {
+                this.on('submitButton', () => {
+                    this.disabled = true;
+                }, true);
+                this.on('submitDone', () => {
+                    this.loading = false;
+                    this.disabled = false;
+                    this.addClass(this.refs.button, 'btn-success submit-success');
+                    this.removeClass(this.refs.button, 'btn-danger submit-fail');
+                    this.addClass(this.refs.buttonMessageContainer, 'has-success');
+                    this.removeClass(this.refs.buttonMessageContainer, 'has-error');
+                    this.setContent(this.refs.buttonMessage, this.t('complete'));
+                }, true);
+                this.on('submitError', () => {
+                    this.loading = false;
+                    this.disabled = false;
+                    this.removeClass(this.refs.button, 'btn-success submit-success');
+                    this.addClass(this.refs.button, 'btn-danger submit-fail');
+                    this.removeClass(this.refs.buttonMessageContainer, 'has-success');
+                    this.addClass(this.refs.buttonMessageContainer, 'has-error');
+                    this.setContent(this.refs.buttonMessage, this.t(this.errorMessage('error')));
+                }, true);
+                onChange = (value, isValid) => {
+                    this.removeClass(this.refs.button, 'btn-success submit-success');
+                    this.removeClass(this.refs.button, 'btn-danger submit-fail');
+                    if (isValid && this.hasError) {
+                        this.hasError = false;
+                        this.setContent(this.refs.buttonMessage, '');
+                        this.removeClass(this.refs.buttonMessageContainer, 'has-success');
+                        this.removeClass(this.refs.buttonMessageContainer, 'has-error');
+                    }
+                };
+                onError = () => {
+                    this.hasError = true;
+                    this.removeClass(this.refs.button, 'btn-success submit-success');
+                    this.addClass(this.refs.button, 'btn-danger submit-fail');
+                    this.removeClass(this.refs.buttonMessageContainer, 'has-success');
+                    this.addClass(this.refs.buttonMessageContainer, 'has-error');
+                    this.setContent(this.refs.buttonMessage, this.t(this.errorMessage('error')));
+                };
+            }
+            if (this.component.action === 'url') {
+                this.on('requestButton', () => {
+                    this.disabled = true;
+                }, true);
+                this.on('requestDone', () => {
+                    this.loading = false;
+                    this.disabled = false;
+                }, true);
+            }
+            this.on('change', (value, flags) => {
+                const isValid = flags && flags.noValidate ? this.root ? this.root.checkValidity(this.root.data) : true : value.isValid;
+                this.loading = false;
+                this.disabled = this.shouldDisabled || this.component.disableOnInvalid && !isValid;
+                this.setDisabled(this.refs.button, this.disabled);
+                if (onChange) {
+                    onChange(value, isValid);
+                }
+            }, true);
+            this.on('error', () => {
+                this.loading = false;
+                this.disabled = false;
+                if (onError) {
+                    onError();
+                }
+            }, true);
+            this.addEventListener(this.refs.button, 'click', this.onClick.bind(this));
+            this.disabled = this.shouldDisabled;
+            function getUrlParameter(name) {
+                name = name.replace(/[[]/, '\\[').replace(/[\]]/, '\\]');
+                const regex = new RegExp(`[\\?&]${ name }=([^&#]*)`);
+                const results = regex.exec(location.search);
+                if (!results) {
+                    return results;
+                }
+                return decodeURIComponent(results[1].replace(/\+/g, ' '));
+            }
+            if (this.component.action === 'oauth' && this.component.oauth && this.component.oauth.authURI) {
+                const iss = getUrlParameter('iss');
+                if (iss && this.component.oauth.authURI.indexOf(iss) === 0) {
+                    this.openOauth();
+                }
+            }
+        }
+        attach(element) {
+            this.loadRefs(element, {
+                button: 'single',
+                buttonMessageContainer: 'single',
+                buttonMessage: 'single'
+            });
+            const superAttach = super.attach(element);
+            this.attachButton();
+            return superAttach;
+        }
+        detach(element) {
+            if (element && this.refs.button) {
+                this.removeShortcut(this.refs.button);
+            }
+        }
+        onClick(event) {
+            this.triggerReCaptcha();
+            if (this.disabled || this.options.attachMode === 'builder') {
+                return;
+            }
+            this.dataValue = true;
+            if (this.component.action !== 'submit' && this.component.showValidations) {
+                this.emit('checkValidity', this.data);
+            }
+            switch (this.component.action) {
+            case 'saveState':
+            case 'submit':
+                event.preventDefault();
+                event.stopPropagation();
+                this.loading = true;
+                this.emit('submitButton', {
+                    state: this.component.state || 'submitted',
+                    component: this.component,
+                    instance: this
+                });
+                break;
+            case 'event':
+                this.emit(this.interpolate(this.component.event), this.data);
+                this.events.emit(this.interpolate(this.component.event), this.data);
+                this.emit('customEvent', {
+                    type: this.interpolate(this.component.event),
+                    component: this.component,
+                    data: this.data,
+                    event: event
+                });
+                break;
+            case 'custom': {
+                    const form = this.getRoot();
+                    const flattened = a.flattenComponents(form.component.components, true);
+                    const components = {};
+                    _.each(flattened, (component, key) => {
+                        const element = form.getComponent(key);
+                        if (element) {
+                            components[key] = element;
+                        }
+                    });
+                    this.evaluate(this.component.custom, {
+                        form,
+                        flattened,
+                        components
+                    });
+                    break;
+                }
+            case 'url':
+                this.loading = true;
+                this.emit('requestButton', {
+                    component: this.component,
+                    instance: this
+                });
+                this.emit('requestUrl', {
+                    url: this.interpolate(this.component.url),
+                    headers: this.component.headers
+                });
+                break;
+            case 'reset':
+                this.emit('resetForm');
+                break;
+            case 'delete':
+                this.emit('deleteSubmission');
+                break;
+            case 'oauth':
+                if (this.root === this) {
+                    console.warn('You must add the OAuth button to a form for it to function properly');
+                    return;
+                }
+                if (!this.component.oauth) {
+                    this.root.setAlert('danger', 'You must assign this button to an OAuth action before it will work.');
+                    break;
+                }
+                if (this.component.oauth.error) {
+                    this.root.setAlert('danger', `The Following Error Has Occured${ this.component.oauth.error }`);
+                    break;
+                }
+                this.openOauth(this.component.oauth);
+                break;
+            }
+        }
+        openOauth() {
+            if (!this.root.formio) {
+                console.warn('You must attach a Form API url to your form in order to use OAuth buttons.');
+                return;
+            }
+            const settings = this.component.oauth;
+            let params = {
+                response_type: 'code',
+                client_id: settings.clientId,
+                redirect_uri: window.location.origin || `${ window.location.protocol }//${ window.location.host }`,
+                state: settings.state,
+                scope: settings.scope
+            };
+            if (settings.display) {
+                params.display = settings.display;
+            }
+            params = Object.keys(params).map(key => {
+                return `${ key }=${ encodeURIComponent(params[key]) }`;
+            }).join('&');
+            const url = `${ settings.authURI }?${ params }`;
+            const popup = window.open(url, settings.provider, 'width=1020,height=618');
+            const interval = setInterval(() => {
+                try {
+                    const popupHost = popup.location.host;
+                    const currentHost = window.location.host;
+                    if (popup && !popup.closed && popupHost === currentHost && popup.location.search) {
+                        popup.close();
+                        const params = popup.location.search.substr(1).split('&').reduce((params, param) => {
+                            const split = param.split('=');
+                            params[split[0]] = split[1];
+                            return params;
+                        }, {});
+                        if (params.error) {
+                            alert(params.error_description || params.error);
+                            this.root.setAlert('danger', params.error_description || params.error);
+                            return;
+                        }
+                        if (settings.state !== params.state) {
+                            this.root.setAlert('danger', 'OAuth state does not match. Please try logging in again.');
+                            return;
+                        }
+                        const submission = {
+                            data: {},
+                            oauth: {}
+                        };
+                        submission.oauth[settings.provider] = params;
+                        submission.oauth[settings.provider].redirectURI = window.location.origin || `${ window.location.protocol }//${ window.location.host }`;
+                        this.root.formio.saveSubmission(submission).then(result => {
+                            this.root.onSubmit(result, true);
+                        }).catch(err => {
+                            this.root.onSubmissionError(err);
+                        });
+                    }
+                } catch (error) {
+                    if (error.name !== 'SecurityError') {
+                        this.root.setAlert('danger', error.message || error);
+                    }
+                }
+                if (!popup || popup.closed || popup.closed === undefined) {
+                    clearInterval(interval);
+                }
+            }, 100);
+        }
+        focus() {
+            if (this.refs.button) {
+                this.refs.button.focus();
+            }
+        }
+        triggerReCaptcha() {
+            if (!this.root) {
+                return;
+            }
+            const recaptchaComponent = this.root.components.find(component => {
+                return component.component.type === 'recaptcha' && component.component.eventType === 'buttonClick' && component.component.buttonKey === this.component.key;
+            });
+            if (recaptchaComponent) {
+                recaptchaComponent.verify(`${ this.component.key }Click`);
+            }
+        }
+    };
+});
+define('skylark-formio/components/checkbox/Checkbox',['../_classes/field/Field'], function (Field) {
+    'use strict';
+    return class CheckBoxComponent extends Field {
+        static schema(...extend) {
+            return Field.schema({
+                type: 'checkbox',
+                inputType: 'checkbox',
+                label: 'Checkbox',
+                key: 'checkbox',
+                dataGridLabel: true,
+                labelPosition: 'right',
+                value: '',
+                name: ''
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Checkbox',
+                group: 'basic',
+                icon: 'check-square',
+                documentation: 'http://help.form.io/userguide/#checkbox',
+                weight: 50,
+                schema: CheckBoxComponent.schema()
+            };
+        }
+        get defaultSchema() {
+            return CheckBoxComponent.schema();
+        }
+        get defaultValue() {
+            return this.component.name ? '' : (this.component.defaultValue || false).toString() === 'true';
+        }
+        get labelClass() {
+            let className = '';
+            if (this.isInputComponent && !this.options.inputsOnly && this.component.validate && this.component.validate.required) {
+                className += ' field-required';
+            }
+            return `${ className }`;
+        }
+        get hasSetValue() {
+            return this.hasValue();
+        }
+        get inputInfo() {
+            const info = super.elementInfo();
+            info.type = 'input';
+            info.changeEvent = 'click';
+            info.attr.type = this.component.inputType || 'checkbox';
+            info.attr.class = 'form-check-input';
+            if (this.component.name) {
+                info.attr.name = `data[${ this.component.name }]`;
+            }
+            info.attr.value = this.component.value ? this.component.value : 0;
+            info.label = this.t(this.component.label);
+            info.labelClass = this.labelClass;
+            return info;
+        }
+        get labelInfo() {
+            return { hidden: true };
+        }
+        render() {
+            return super.render(this.renderTemplate('checkbox', {
+                input: this.inputInfo,
+                checked: this.dataValue,
+                tooltip: this.interpolate(this.t(this.component.tooltip) || '').replace(/(?:\r\n|\r|\n)/g, '<br />')
+            }));
+        }
+        attach(element) {
+            this.loadRefs(element, { input: 'multiple' });
+            this.input = this.refs.input[0];
+            if (this.refs.input) {
+                this.addEventListener(this.input, this.inputInfo.changeEvent, () => this.updateValue(null, { modified: true }));
+                this.addShortcut(this.input);
+            }
+            return super.attach(element);
+        }
+        detach(element) {
+            if (element && this.input) {
+                this.removeShortcut(this.input);
+            }
+        }
+        get emptyValue() {
+            return false;
+        }
+        isEmpty(value = this.dataValue) {
+            return super.isEmpty(value) || value === false;
+        }
+        get key() {
+            return this.component.name ? this.component.name : super.key;
+        }
+        getValueAt(index) {
+            if (this.component.name) {
+                return this.refs.input[index].checked ? this.component.value : '';
+            }
+            return !!this.refs.input[index].checked;
+        }
+        getValue() {
+            const value = super.getValue();
+            if (this.component.name) {
+                return value ? this.setCheckedState(value) : this.setCheckedState(this.dataValue);
+            } else {
+                return value === '' ? this.dataValue : !!value;
+            }
+        }
+        setCheckedState(value) {
+            if (!this.input) {
+                return;
+            }
+            if (this.component.name) {
+                this.input.value = value === this.component.value ? this.component.value : 0;
+                this.input.checked = value === this.component.value ? 1 : 0;
+            } else if (value === 'on') {
+                this.input.value = 1;
+                this.input.checked = 1;
+            } else if (value === 'off') {
+                this.input.value = 0;
+                this.input.checked = 0;
+            } else if (value) {
+                this.input.value = 1;
+                this.input.checked = 1;
+            } else {
+                this.input.value = 0;
+                this.input.checked = 0;
+            }
+            if (this.input.checked) {
+                this.input.setAttribute('checked', true);
+            } else {
+                this.input.removeAttribute('checked');
+            }
+            return value;
+        }
+        setValue(value, flags = {}) {
+            if (this.setCheckedState(value) !== undefined || !this.input && value !== undefined && (this.visible || !this.component.clearOnHide)) {
+                return this.updateValue(value, flags);
+            }
+            return false;
+        }
+        getValueAsString(value) {
+            return value ? 'Yes' : 'No';
+        }
+    };
+});
+define('skylark-formio/components/columns/Columns',[
+    'skylark-lodash',
+    '../_classes/nested/NestedComponent'
+], function (_, NestedComponent) {
+    'use strict';
+    return class ColumnsComponent extends NestedComponent {
+        static schema(...extend) {
+            return NestedComponent.schema({
+                label: 'Columns',
+                key: 'columns',
+                type: 'columns',
+                columns: [
+                    {
+                        components: [],
+                        width: 6,
+                        offset: 0,
+                        push: 0,
+                        pull: 0,
+                        size: 'md'
+                    },
+                    {
+                        components: [],
+                        width: 6,
+                        offset: 0,
+                        push: 0,
+                        pull: 0,
+                        size: 'md'
+                    }
+                ],
+                clearOnHide: false,
+                input: false,
+                tableView: false,
+                persistent: false,
+                autoAdjust: false,
+                hideOnChildrenHidden: false
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Columns',
+                icon: 'columns',
+                group: 'layout',
+                documentation: 'http://help.form.io/userguide/#columns',
+                weight: 10,
+                schema: ColumnsComponent.schema()
+            };
+        }
+        constructor(component, options, data) {
+            super(component, options, data);
+            this.rows = [];
+        }
+        get schema() {
+            const schema = _.omit(super.schema, ['components']);
+            schema.columns.map((column, colIndex) => {
+                column.components.map((comp, compIndex) => {
+                    const clonedComp = _.clone(comp);
+                    clonedComp.internal = true;
+                    const component = this.createComponent(clonedComp);
+                    delete component.component.internal;
+                    schema.columns[colIndex].components[compIndex] = component.schema;
+                });
+            });
+            return schema;
+        }
+        get defaultSchema() {
+            return ColumnsComponent.schema();
+        }
+        get className() {
+            return `row ${ super.className }`;
+        }
+        get columnKey() {
+            return `column-${ this.id }`;
+        }
+        init() {
+            super.init();
+            this.columns = [];
+            _.each(this.component.columns, (column, index) => {
+                this.columns[index] = [];
+                if (!column.size) {
+                    column.size = 'md';
+                }
+                if (!Array.isArray(column.components)) {
+                    column.components = [];
+                }
+                _.each(column.components, comp => {
+                    comp.hideOnChildrenHidden = this.component.hideOnChildrenHidden;
+                    const component = this.createComponent(comp);
+                    component.column = index;
+                    this.columns[index].push(component);
+                });
+            });
+            this.rows = this.groupByRow();
+        }
+        labelIsHidden() {
+            return true;
+        }
+        render() {
+            return super.render(this.renderTemplate('columns', {
+                columnKey: this.columnKey,
+                columnComponents: this.columns.map(column => this.renderComponents(column))
+            }));
+        }
+        attach(element) {
+            this.loadRefs(element, { [this.columnKey]: 'multiple' });
+            const superAttach = super.attach(element);
+            this.refs[this.columnKey].forEach((column, index) => this.attachComponents(column, this.columns[index], this.component.columns[index].components));
+            return superAttach;
+        }
+        get gridSize() {
+            return 12;
+        }
+        justifyRow(columns) {
+            const visible = _.filter(columns, 'visible');
+            const nbColumns = columns.length;
+            const nbVisible = visible.length;
+            if (nbColumns > 0 && nbVisible > 0) {
+                const w = Math.floor(this.gridSize / nbVisible);
+                const totalWidth = w * nbVisible;
+                const span = this.gridSize - totalWidth;
+                _.each(visible, column => {
+                    column.component.width = w;
+                });
+                _.last(visible).component.width += span;
+                _.each(visible, col => {
+                    if (col.element) {
+                        col.element.setAttribute('class', col.className);
+                    }
+                });
+            }
+        }
+        groupByRow() {
+            const initVal = {
+                stack: [],
+                rows: []
+            };
+            const width = x => x.component.width;
+            const result = _.reduce(this.components, (acc, next) => {
+                const stack = [
+                    ...acc.stack,
+                    next
+                ];
+                if (_.sumBy(stack, width) <= this.gridSize) {
+                    acc.stack = stack;
+                    return acc;
+                } else {
+                    acc.rows = [
+                        ...acc.rows,
+                        acc.stack
+                    ];
+                    acc.stack = [next];
+                    return acc;
+                }
+            }, initVal);
+            return _.concat(result.rows, [result.stack]);
+        }
+        justify() {
+            _.each(this.columns, this.justifyRow.bind(this));
+        }
+        checkComponentConditions(data, flags, row) {
+            if (this.component.autoAdjust) {
+                const result = super.checkComponentConditions(data, flags, row);
+                this.justify();
+                return result;
+            } else {
+                return super.checkComponentConditions(data, flags, row);
+            }
+        }
+        detach(all) {
+            super.detach(all);
+        }
+        destroy() {
+            super.destroy();
+            this.columns = [];
+        }
+    };
+});
+define('skylark-formio/components/content/Content',[
+    '../_classes/component/Component',
+    'skylark-lodash'
+], function (Component, _) {
+    'use strict';
+    return class ContentComponent extends Component {
+        static schema(...extend) {
+            return Component.schema({
+                label: 'Content',
+                type: 'content',
+                key: 'content',
+                input: false,
+                html: ''
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Content',
+                group: 'layout',
+                icon: 'html5',
+                preview: false,
+                documentation: 'http://help.form.io/userguide/#content-component',
+                weight: 5,
+                schema: ContentComponent.schema()
+            };
+        }
+        get defaultSchema() {
+            return ContentComponent.schema();
+        }
+        get content() {
+            if (this.builderMode) {
+                return this.component.html;
+            }
+            const submission = _.get(this.root, 'submission', {});
+            return this.component.html ? this.interpolate(this.component.html, {
+                metadata: submission.metadata || {},
+                submission: submission,
+                data: this.rootValue,
+                row: this.data
+            }) : '';
+        }
+        render() {
+            return super.render(this.renderTemplate('html', {
+                tag: 'div',
+                attrs: [],
+                content: this.content
+            }));
+        }
+        attach(element) {
+            this.loadRefs(element, { html: 'single' });
+            if (this.component.refreshOnChange) {
+                this.on('change', () => {
+                    if (this.refs.html) {
+                        this.setContent(this.refs.html, this.content);
+                    }
+                }, true);
+            }
+            return super.attach(element);
+        }
+        get emptyValue() {
+            return '';
+        }
+    };
+});
+define('skylark-formio/vendors/text-mask-addons/createAutoCorrectedDatePipe',[],function(){
+  const maxValueMonth = [31, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+  const formatOrder = ['yyyy', 'yy', 'mm', 'dd', 'HH', 'MM', 'SS']
+  function createAutoCorrectedDatePipe(dateFormat = 'mm dd yyyy', {
+    minYear = 1,
+    maxYear = 9999
+  } = {}) {
+    const dateFormatArray = dateFormat
+      .split(/[^dmyHMS]+/)
+      .sort((a, b) => formatOrder.indexOf(a) - formatOrder.indexOf(b))
+    return function(conformedValue) {
+      const indexesOfPipedChars = []
+      const maxValue = {'dd': 31, 'mm': 12, 'yy': 99, 'yyyy': maxYear, 'HH': 23, 'MM': 59, 'SS': 59}
+      const minValue = {'dd': 1, 'mm': 1, 'yy': 0, 'yyyy': minYear, 'HH': 0, 'MM': 0, 'SS': 0}
+      const conformedValueArr = conformedValue.split('')
+
+      // Check first digit
+      dateFormatArray.forEach((format) => {
+        const position = dateFormat.indexOf(format)
+        const maxFirstDigit = parseInt(maxValue[format].toString().substr(0, 1), 10)
+
+        if (parseInt(conformedValueArr[position], 10) > maxFirstDigit) {
+          conformedValueArr[position + 1] = conformedValueArr[position]
+          conformedValueArr[position] = 0
+          indexesOfPipedChars.push(position)
+        }
+      })
+
+      // Check for invalid date
+      let month = 0
+      const isInvalid = dateFormatArray.some((format) => {
+        const position = dateFormat.indexOf(format)
+        const length = format.length
+        const textValue = conformedValue.substr(position, length).replace(/\D/g, '')
+        const value = parseInt(textValue, 10)
+        if (format === 'mm') {
+          month = value || 0
+        }
+        const maxValueForFormat = format === 'dd' ? maxValueMonth[month] : maxValue[format]
+        if (format === 'yyyy' && (minYear !== 1 || maxYear !== 9999)) {
+          const scopedMaxValue = parseInt(maxValue[format].toString().substring(0, textValue.length), 10)
+          const scopedMinValue = parseInt(minValue[format].toString().substring(0, textValue.length), 10)
+          return value < scopedMinValue || value > scopedMaxValue
+        }
+        return value > maxValueForFormat || (textValue.length === length && value < minValue[format])
+      })
+
+      if (isInvalid) {
+        return false
+      }
+
+      return {
+        value: conformedValueArr.join(''),
+        indexesOfPipedChars
+      }
+    }
+  }
+
+  return createAutoCorrectedDatePipe;
+});
+
+
+define('skylark-formio/vendors/text-mask-addons/createNumberMask',[],function(){
+  const dollarSign = '$'
+  const emptyString = ''
+  const comma = ','
+  const period = '.'
+  const minus = '-'
+  const minusRegExp = /-/
+  const nonDigitsRegExp = /\D+/g
+  const number = 'number'
+  const digitRegExp = /\d/
+  const caretTrap = '[]'
+
+  function createNumberMask({
+    prefix = dollarSign,
+    suffix = emptyString,
+    includeThousandsSeparator = true,
+    thousandsSeparatorSymbol = comma,
+    allowDecimal = false,
+    decimalSymbol = period,
+    decimalLimit = 2,
+    requireDecimal = false,
+    allowNegative = false,
+    allowLeadingZeroes = false,
+    integerLimit = null
+  } = {}) {
+    const prefixLength = prefix && prefix.length || 0
+    const suffixLength = suffix && suffix.length || 0
+    const thousandsSeparatorSymbolLength = thousandsSeparatorSymbol && thousandsSeparatorSymbol.length || 0
+
+    function numberMask(rawValue = emptyString) {
+      const rawValueLength = rawValue.length
+
+      if (
+        rawValue === emptyString ||
+        (rawValue[0] === prefix[0] && rawValueLength === 1)
+      ) {
+        return prefix.split(emptyString).concat([digitRegExp]).concat(suffix.split(emptyString))
+      } else if(
+        rawValue === decimalSymbol &&
+        allowDecimal
+      ) {
+        return prefix.split(emptyString).concat(['0', decimalSymbol, digitRegExp]).concat(suffix.split(emptyString))
+      }
+
+      const isNegative = (rawValue[0] === minus) && allowNegative
+      //If negative remove "-" sign
+      if(isNegative) {
+        rawValue = rawValue.toString().substr(1)
+      }
+
+      const indexOfLastDecimal = rawValue.lastIndexOf(decimalSymbol)
+      const hasDecimal = indexOfLastDecimal !== -1
+
+      let integer
+      let fraction
+      let mask
+
+      // remove the suffix
+      if (rawValue.slice(suffixLength * -1) === suffix) {
+        rawValue = rawValue.slice(0, suffixLength * -1)
+      }
+
+      if (hasDecimal && (allowDecimal || requireDecimal)) {
+        integer = rawValue.slice(rawValue.slice(0, prefixLength) === prefix ? prefixLength : 0, indexOfLastDecimal)
+
+        fraction = rawValue.slice(indexOfLastDecimal + 1, rawValueLength)
+        fraction = convertToMask(fraction.replace(nonDigitsRegExp, emptyString))
+      } else {
+        if (rawValue.slice(0, prefixLength) === prefix) {
+          integer = rawValue.slice(prefixLength)
+        } else {
+          integer = rawValue
+        }
+      }
+
+      if (integerLimit && typeof integerLimit === number) {
+        const thousandsSeparatorRegex = thousandsSeparatorSymbol === '.' ? '[.]' : `${thousandsSeparatorSymbol}`
+        const numberOfThousandSeparators = (integer.match(new RegExp(thousandsSeparatorRegex, 'g')) || []).length
+
+        integer = integer.slice(0, integerLimit + (numberOfThousandSeparators * thousandsSeparatorSymbolLength))
+      }
+
+      integer = integer.replace(nonDigitsRegExp, emptyString)
+
+      if (!allowLeadingZeroes) {
+        integer = integer.replace(/^0+(0$|[^0])/, '$1')
+      }
+
+      integer = (includeThousandsSeparator) ? addThousandsSeparator(integer, thousandsSeparatorSymbol) : integer
+
+      mask = convertToMask(integer)
+
+      if ((hasDecimal && allowDecimal) || requireDecimal === true) {
+        if (rawValue[indexOfLastDecimal - 1] !== decimalSymbol) {
+          mask.push(caretTrap)
+        }
+
+        mask.push(decimalSymbol, caretTrap)
+
+        if (fraction) {
+          if (typeof decimalLimit === number) {
+            fraction = fraction.slice(0, decimalLimit)
+          }
+
+          mask = mask.concat(fraction)
+        }
+
+        if (requireDecimal === true && rawValue[indexOfLastDecimal - 1] === decimalSymbol) {
+          mask.push(digitRegExp)
+        }
+      }
+
+      if (prefixLength > 0) {
+        mask = prefix.split(emptyString).concat(mask)
+      }
+
+      if (isNegative) {
+        // If user is entering a negative number, add a mask placeholder spot to attract the caret to it.
+        if (mask.length === prefixLength) {
+          mask.push(digitRegExp)
+        }
+
+        mask = [minusRegExp].concat(mask)
+      }
+
+      if (suffix.length > 0) {
+        mask = mask.concat(suffix.split(emptyString))
+      }
+
+      return mask
+    }
+
+    numberMask.instanceOf = 'createNumberMask'
+
+    return numberMask
+  }
+
+  function convertToMask(strNumber) {
+    return strNumber
+      .split(emptyString)
+      .map((char) => digitRegExp.test(char) ? digitRegExp : char)
+  }
+
+  // http://stackoverflow.com/a/10899795/604296
+  function addThousandsSeparator(n, thousandsSeparatorSymbol) {
+    return n.replace(/\B(?=(\d{3})+(?!\d))/g, thousandsSeparatorSymbol)
+  }
+
+  return createNumberMask;
+
+});
+
+
+define('skylark-formio/vendors/text-mask-addons/emailPipe',[],function(){
+  const atSymbol = '@'
+  const allAtSymbolsRegExp = /@/g
+  const emptyString = ''
+  const atDot = '@.'
+  const dot = '.'
+  const dotDot = '..'
+  const emptyArray = []
+  const allDotsRegExp = /\./g
+
+  function emailPipe(conformedValue, config) {
+    const {currentCaretPosition, rawValue, previousConformedValue, placeholderChar} = config
+
+    let value = conformedValue
+
+    value = removeAllAtSymbolsButFirst(value)
+
+    const indexOfAtDot = value.indexOf(atDot)
+
+    const emptyEmail = rawValue.match(new RegExp(`[^@\\s.${placeholderChar}]`)) === null
+
+    if (emptyEmail) {
+      return emptyString
+    }
+
+    if (
+      value.indexOf(dotDot) !== -1 ||
+      indexOfAtDot !== -1 && currentCaretPosition !== (indexOfAtDot + 1) ||
+      rawValue.indexOf(atSymbol) === -1 && previousConformedValue !== emptyString && rawValue.indexOf(dot) !== -1
+    ) {
+      return false
+    }
+
+    const indexOfAtSymbol = value.indexOf(atSymbol)
+    const domainPart = value.slice(indexOfAtSymbol + 1, value.length)
+
+    if (
+      (domainPart.match(allDotsRegExp) || emptyArray).length > 1 &&
+      value.substr(-1) === dot &&
+      currentCaretPosition !== rawValue.length
+    ) {
+      value = value.slice(0, value.length - 1)
+    }
+
+    return value
+  }
+
+  function removeAllAtSymbolsButFirst(str) {
+    let atSymbolCount = 0
+
+    return str.replace(allAtSymbolsRegExp, () => {
+      atSymbolCount++
+
+      return (atSymbolCount === 1) ? atSymbol : emptyString
+    })
+  }
+
+  return emailPipe;
+});
+
+
+define('skylark-formio/vendors/text-mask-addons/emailMask',['./emailPipe'],function(emailPipe){
+  const asterisk = '*'
+  const dot = '.'
+  const emptyString = ''
+  const atSymbol = '@'
+  const caretTrap = '[]'
+  const space = ' '
+  const g = 'g'
+  const anyNonWhitespaceRegExp = /[^\s]/
+  const anyNonDotOrWhitespaceRegExp = /[^.\s]/
+  const allWhitespaceRegExp = /\s/g
+
+  function emailMask(rawValue, config) {
+    rawValue = rawValue.replace(allWhitespaceRegExp, emptyString)
+
+    const {placeholderChar, currentCaretPosition} = config
+    const indexOfFirstAtSymbol = rawValue.indexOf(atSymbol)
+    const indexOfLastDot = rawValue.lastIndexOf(dot)
+    const indexOfTopLevelDomainDot = (indexOfLastDot < indexOfFirstAtSymbol) ? -1 : indexOfLastDot
+
+    let localPartToDomainConnector = getConnector(rawValue, indexOfFirstAtSymbol + 1, atSymbol)
+    let domainNameToTopLevelDomainConnector = getConnector(rawValue, indexOfTopLevelDomainDot - 1, dot)
+
+    let localPart = getLocalPart(rawValue, indexOfFirstAtSymbol, placeholderChar)
+    let domainName = getDomainName(rawValue, indexOfFirstAtSymbol, indexOfTopLevelDomainDot, placeholderChar)
+    let topLevelDomain = getTopLevelDomain(rawValue, indexOfTopLevelDomainDot, placeholderChar, currentCaretPosition)
+
+    localPart = convertToMask(localPart)
+    domainName = convertToMask(domainName)
+    topLevelDomain = convertToMask(topLevelDomain, true)
+
+    const mask = localPart
+      .concat(localPartToDomainConnector)
+      .concat(domainName)
+      .concat(domainNameToTopLevelDomainConnector)
+      .concat(topLevelDomain)
+
+    return mask
+  }
+
+  function getConnector(rawValue, indexOfConnection, connectionSymbol) {
+    const connector = []
+
+    if (rawValue[indexOfConnection] === connectionSymbol) {
+      connector.push(connectionSymbol)
+    } else {
+      connector.push(caretTrap, connectionSymbol)
+    }
+
+    connector.push(caretTrap)
+
+    return connector
+  }
+
+  function getLocalPart(rawValue, indexOfFirstAtSymbol) {
+    if (indexOfFirstAtSymbol === -1) {
+      return rawValue
+    } else {
+      return rawValue.slice(0, indexOfFirstAtSymbol)
+    }
+  }
+
+  function getDomainName(rawValue, indexOfFirstAtSymbol, indexOfTopLevelDomainDot, placeholderChar) {
+    let domainName = emptyString
+
+    if (indexOfFirstAtSymbol !== -1) {
+      if (indexOfTopLevelDomainDot === -1) {
+        domainName = rawValue.slice(indexOfFirstAtSymbol + 1, rawValue.length)
+      } else {
+        domainName = rawValue.slice(indexOfFirstAtSymbol + 1, indexOfTopLevelDomainDot)
+      }
+    }
+
+    domainName = domainName.replace(new RegExp(`[\\s${placeholderChar}]`, g), emptyString)
+
+    if (domainName === atSymbol) {
+      return asterisk
+    } else if (domainName.length < 1) {
+      return space
+    } else if (domainName[domainName.length - 1] === dot) {
+      return domainName.slice(0, domainName.length - 1)
+    } else {
+      return domainName
+    }
+  }
+
+  function getTopLevelDomain(rawValue, indexOfTopLevelDomainDot, placeholderChar, currentCaretPosition) {
+    let topLevelDomain = emptyString
+
+    if (indexOfTopLevelDomainDot !== -1) {
+      topLevelDomain = rawValue.slice(indexOfTopLevelDomainDot + 1, rawValue.length)
+    }
+
+    topLevelDomain = topLevelDomain.replace(new RegExp(`[\\s${placeholderChar}.]`, g), emptyString)
+
+    if (topLevelDomain.length === 0) {
+      return (rawValue[indexOfTopLevelDomainDot - 1] === dot && currentCaretPosition !== rawValue.length) ?
+        asterisk :
+        emptyString
+    } else {
+      return topLevelDomain
+    }
+  }
+
+  function convertToMask(str, noDots) {
+    return str
+      .split(emptyString)
+      .map((char) => char === space ? char : (noDots) ? anyNonDotOrWhitespaceRegExp : anyNonWhitespaceRegExp)
+  }
+
+  return emailMask;
+});
+
+
+define('skylark-formio/vendors/text-mask-addons/index',[
+	'./createAutoCorrectedDatePipe',
+	'./createNumberMask',
+	'./emailMask',
+],function(createAutoCorrectedDatePipe,createNumberMask,emailMask){
+	return {
+		createAutoCorrectedDatePipe,
+		createNumberMask,
+		emailMask
+	};
+})
+;
+define('skylark-formio/components/number/Number',[
+    '../../vendors/vanilla-text-mask/maskInput',
+    '../../vendors/vanilla-text-mask/conformToMask',
+    'skylark-lodash',
+    '../../vendors/text-mask-addons/index',
+    '../_classes/input/Input',
+    '../../utils/utils'
+], function (maskInput,conformToMask, _, maskAddons, Input, utils) {
+    'use strict';
+    return class NumberComponent extends Input {
+        static schema(...extend) {
+            return Input.schema({
+                type: 'number',
+                label: 'Number',
+                key: 'number',
+                validate: {
+                    min: '',
+                    max: '',
+                    step: 'any',
+                    integer: ''
+                }
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Number',
+                icon: 'hashtag',
+                group: 'basic',
+                documentation: 'http://help.form.io/userguide/#number',
+                weight: 30,
+                schema: NumberComponent.schema()
+            };
+        }
+        constructor(...args) {
+            super(...args);
+            this.validators = this.validators.concat([
+                'min',
+                'max'
+            ]);
+            const separators = utils.getNumberSeparators(this.options.language);
+            this.decimalSeparator = this.options.decimalSeparator = this.options.decimalSeparator || separators.decimalSeparator;
+            if (this.component.delimiter) {
+                if (this.options.hasOwnProperty('thousandsSeparator')) {
+                    console.warn("Property 'thousandsSeparator' is deprecated. Please use i18n to specify delimiter.");
+                }
+                this.delimiter = this.options.thousandsSeparator || separators.delimiter;
+            } else {
+                this.delimiter = '';
+            }
+            const requireDecimal = _.get(this.component, 'requireDecimal', false);
+            this.decimalLimit = utils.getNumberDecimalLimit(this.component, requireDecimal ? 2 : 20);
+            if (_.has(this.options, `languageOverride.${ this.options.language }`)) {
+                const override = _.get(this.options, `languageOverride.${ this.options.language }`);
+                this.decimalSeparator = override.decimalSeparator;
+                this.delimiter = override.delimiter;
+            }
+            this.numberMask = this.createNumberMask();
+        }
+        createNumberMask() {
+            return maskAddons.createNumberMask({
+                prefix: '',
+                suffix: '',
+                requireDecimal: _.get(this.component, 'requireDecimal', false),
+                thousandsSeparatorSymbol: _.get(this.component, 'thousandsSeparator', this.delimiter),
+                decimalSymbol: _.get(this.component, 'decimalSymbol', this.decimalSeparator),
+                decimalLimit: _.get(this.component, 'decimalLimit', this.decimalLimit),
+                allowNegative: _.get(this.component, 'allowNegative', true),
+                allowDecimal: _.get(this.component, 'allowDecimal', !(this.component.validate && this.component.validate.integer))
+            });
+        }
+        get defaultSchema() {
+            return NumberComponent.schema();
+        }
+        get defaultValue() {
+            let defaultValue = super.defaultValue;
+            if (!defaultValue && this.component.defaultValue === 0) {
+                defaultValue = this.component.defaultValue;
+            }
+            return defaultValue;
+        }
+        parseNumber(value) {
+            value = value.split(this.delimiter).join('').replace(this.decimalSeparator, '.');
+            if (this.component.validate && this.component.validate.integer) {
+                return parseInt(value, 10);
+            } else {
+                return parseFloat(value);
+            }
+        }
+        setInputMask(input) {
+            let numberPattern = '[0-9';
+            numberPattern += this.decimalSeparator || '';
+            numberPattern += this.delimiter || '';
+            numberPattern += ']*';
+            input.setAttribute('pattern', numberPattern);
+            input.mask = maskInput({
+                inputElement: input,
+                mask: this.numberMask
+            });
+        }
+        get inputInfo() {
+            const info = super.inputInfo;
+            if (this.component.mask) {
+                info.attr.type = 'password';
+            } else {
+                info.attr.type = 'text';
+            }
+            info.attr.inputmode = 'numeric';
+            info.changeEvent = 'input';
+            return info;
+        }
+        getValueAt(index) {
+            if (!this.refs.input.length || !this.refs.input[index]) {
+                return null;
+            }
+            const val = this.refs.input[index].value;
+            return val ? this.parseNumber(val) : null;
+        }
+        setValueAt(index, value, flags = {}) {
+            return super.setValueAt(index, this.formatValue(this.parseValue(value)), flags);
+        }
+        parseValue(input) {
+            let value = parseFloat(input);
+            if (!_.isNaN(value)) {
+                value = String(value).replace('.', this.decimalSeparator);
+            } else {
+                value = null;
+            }
+            return value;
+        }
+        formatValue(value) {
+            if (this.component.requireDecimal && value && !value.includes(this.decimalSeparator)) {
+                return `${ value }${ this.decimalSeparator }${ _.repeat('0', this.decimalLimit) }`;
+            } else if (this.component.requireDecimal && value && value.includes(this.decimalSeparator)) {
+                return `${ value }${ _.repeat('0', this.decimalLimit - value.split(this.decimalSeparator)[1].length) }`;
+            }
+            return value;
+        }
+        focus() {
+            const input = this.refs.input[0];
+            if (input) {
+                input.focus();
+                input.setSelectionRange(0, input.value.length);
+            }
+        }
+        getMaskedValue(value) {
+            return conformToMask(value === null ? '0' : value.toString(), this.numberMask).conformedValue;
+        }
+        getValueAsString(value) {
+            if (!value && value !== 0) {
+                return '';
+            }
+            value = this.getWidgetValueAsString(value);
+            if (Array.isArray(value)) {
+                return value.map(this.getMaskedValue).join(', ');
+            }
+            return this.getMaskedValue(value);
+        }
+        addFocusBlurEvents(element) {
+            super.addFocusBlurEvents(element);
+            this.addEventListener(element, 'blur', () => {
+                element.value = this.getValueAsString(this.formatValue(this.parseValue(this.dataValue)));
+            });
+        }
+    };
+});
+define('skylark-formio/components/currency/Currency',[
+    '../../vendors/text-mask-addons/index',
+    'skylark-lodash',
+    '../../utils/utils',
+    '../number/Number'
+], function (textMasks, _, utils, NumberComponent) {
+    'use strict';
+    return class CurrencyComponent extends NumberComponent {
+        static schema(...extend) {
+            return NumberComponent.schema({
+                type: 'currency',
+                label: 'Currency',
+                key: 'currency'
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Currency',
+                group: 'advanced',
+                icon: 'usd',
+                documentation: 'http://help.form.io/userguide/#currency',
+                weight: 70,
+                schema: CurrencyComponent.schema()
+            };
+        }
+        constructor(component, options, data) {
+            if (component && !component.hasOwnProperty('delimiter')) {
+                component.delimiter = true;
+            }
+            super(component, options, data);
+        }
+        createNumberMask() {
+            const decimalLimit = _.get(this.component, 'decimalLimit', 2);
+            const affixes = utils.getCurrencyAffixes({
+                currency: this.component.currency,
+                decimalLimit: decimalLimit,
+                decimalSeparator: this.decimalSeparator,
+                lang: this.options.language
+            });
+            this.prefix = this.options.prefix || affixes.prefix;
+            this.suffix = this.options.suffix || affixes.suffix;
+            return textMasks.createNumberMask({
+                prefix: this.prefix,
+                suffix: this.suffix,
+                thousandsSeparatorSymbol: _.get(this.component, 'thousandsSeparator', this.delimiter),
+                decimalSymbol: _.get(this.component, 'decimalSymbol', this.decimalSeparator),
+                decimalLimit: decimalLimit,
+                allowNegative: _.get(this.component, 'allowNegative', true),
+                allowDecimal: _.get(this.component, 'allowDecimal', true)
+            });
+        }
+        get defaultSchema() {
+            return CurrencyComponent.schema();
+        }
+        parseNumber(value) {
+            return super.parseNumber(this.stripPrefixSuffix(value));
+        }
+        parseValue(value) {
+            return super.parseValue(this.stripPrefixSuffix(value));
+        }
+        addZerosAndFormatValue(value) {
+            if (!value && value !== 0)
+                return;
+            const decimalLimit = _.get(this.component, 'decimalLimit', 2);
+            let integerPart;
+            let decimalPart = '';
+            let decimalPartNumbers = [];
+            if (value.includes(this.decimalSeparator)) {
+                [integerPart, decimalPart] = value.split(this.decimalSeparator);
+                decimalPartNumbers = [...decimalPart.split('')];
+            } else {
+                integerPart = value;
+            }
+            if (decimalPart.length < decimalLimit) {
+                while (decimalPartNumbers.length < decimalLimit) {
+                    decimalPartNumbers.push('0');
+                }
+            }
+            const formattedValue = `${ integerPart }${ this.decimalSeparator }${ decimalPartNumbers.join('') }`;
+            return super.formatValue(formattedValue);
+        }
+        getValueAsString(value) {
+            const stringValue = super.getValueAsString(value);
+            if (value || value == '0') {
+                return this.addZerosAndFormatValue(stringValue);
+            }
+            return stringValue;
+        }
+        formatValue(value) {
+            if (value && this.disabled) {
+                return this.addZerosAndFormatValue(value);
+            }
+            return super.formatValue(value);
+        }
+        stripPrefixSuffix(value) {
+            if (typeof value === 'string') {
+                try {
+                    const hasPrefix = this.prefix ? value.includes(this.prefix) : false;
+                    const hasSuffix = this.suffix ? value.includes(this.suffix) : false;
+                    const hasDelimiter = value.includes(this.delimiter);
+                    const hasDecimalSeparator = value.includes(this.decimalSeparator);
+                    if (this.prefix) {
+                        value = value.replace(this.prefix, '');
+                    }
+                    if (this.suffix) {
+                        value = value.replace(this.suffix, '');
+                    }
+                    if ((hasPrefix || hasSuffix) && !hasDelimiter && !hasDecimalSeparator && (Number.isNaN(+value) || !value)) {
+                        value = '0';
+                    }
+                } catch (err) {
+                }
+            }
+            return value;
+        }
+        addFocusBlurEvents(element) {
+            super.addFocusBlurEvents(element);
+            this.addEventListener(element, 'blur', () => {
+                element.value = this.getValueAsString(this.addZerosAndFormatValue(this.parseValue(this.dataValue)));
+            });
+        }
+    };
+});
+define('skylark-formio/components/_classes/nestedarray/NestedArrayComponent',[
+    'skylark-lodash',
+    '../component/Component',
+    '../nesteddata/NestedDataComponent'
+], function (_, Component, NestedDataComponent) {
+    'use strict';
+    'use strict';
+    return class NestedArrayComponent extends NestedDataComponent {
+        componentContext(component) {
+            return this.iteratableRows[component.rowIndex].data;
+        }
+        get iteratableRows() {
+            throw new Error('Getter #iteratableRows() is not implemented');
+        }
+        get rowIndex() {
+            return super.rowIndex;
+        }
+        set rowIndex(value) {
+            this._rowIndex = value;
+        }
+        checkData(data, flags, row) {
+            data = data || this.rootValue;
+            flags = flags || {};
+            row = row || this.data;
+            return this.checkRows('checkData', data, flags, Component.prototype.checkData.call(this, data, flags, row));
+        }
+        checkRows(method, data, opts, defaultValue) {
+            return this.iteratableRows.reduce((valid, row) => this.checkRow(method, data, opts, row.data, row.components) && valid, defaultValue);
+        }
+        checkRow(method, data, opts, row, components) {
+            return _.reduce(components, (valid, component) => component[method](data, opts, row) && valid, true);
+        }
+        hasAddButton() {
+            const maxLength = _.get(this.component, 'validate.maxLength');
+            const conditionalAddButton = _.get(this.component, 'conditionalAddButton');
+            return !this.component.disableAddingRemovingRows && !this.options.readOnly && !this.disabled && this.fullMode && !this.options.preview && (!maxLength || this.iteratableRows.length < maxLength) && (!conditionalAddButton || this.evaluate(conditionalAddButton, { value: this.dataValue }, 'show'));
+        }
+    };
+});
+define('skylark-formio/components/datagrid/DataGrid',[
+    'skylark-lodash',
+    'skylark-dragula',
+    '../_classes/nestedarray/NestedArrayComponent',
+    '../../utils/utils'
+], function (_, dragula, NestedArrayComponent, a) {
+    'use strict';
+    return class DataGridComponent extends NestedArrayComponent {
+        static schema(...extend) {
+            return NestedArrayComponent.schema({
+                label: 'Data Grid',
+                key: 'dataGrid',
+                type: 'datagrid',
+                clearOnHide: true,
+                input: true,
+                tree: true,
+                components: []
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Data Grid',
+                icon: 'th',
+                group: 'data',
+                documentation: 'http://help.form.io/userguide/#datagrid',
+                weight: 30,
+                schema: DataGridComponent.schema()
+            };
+        }
+        constructor(...args) {
+            super(...args);
+            this.type = 'datagrid';
+        }
+        init() {
+            this.components = this.components || [];
+            this.rows = [];
+            this.createRows(true);
+            this.visibleColumns = {};
+            this.checkColumns();
+        }
+        get dataValue() {
+            const dataValue = super.dataValue;
+            if (!dataValue || !Array.isArray(dataValue)) {
+                return this.emptyValue;
+            }
+            return dataValue;
+        }
+        set dataValue(value) {
+            super.dataValue = value;
+        }
+        get defaultSchema() {
+            return DataGridComponent.schema();
+        }
+        get emptyValue() {
+            return [{}];
+        }
+        get addAnotherPosition() {
+            return _.get(this.component, 'addAnotherPosition', 'bottom');
+        }
+        get minLength() {
+            if (this.hasRowGroups()) {
+                return _.sum(this.getGroupSizes());
+            } else {
+                return _.get(this.component, 'validate.minLength', 0);
+            }
+        }
+        get defaultValue() {
+            const value = super.defaultValue;
+            let defaultValue;
+            if (Array.isArray(value)) {
+                defaultValue = value;
+            } else if (value && typeof value === 'object') {
+                defaultValue = [value];
+            } else {
+                defaultValue = this.emptyValue;
+            }
+            for (let dIndex = defaultValue.length; dIndex < this.minLength; dIndex++) {
+                defaultValue.push({});
+            }
+            return defaultValue;
+        }
+        set disabled(disabled) {
+            super.disabled = disabled;
+            _.each(this.refs[`${ this.datagridKey }-addRow`], button => {
+                button.disabled = disabled;
+            });
+            _.each(this.refs[`${ this.datagridKey }-removeRow`], button => {
+                button.disabled = disabled;
+            });
+        }
+        get disabled() {
+            return super.disabled;
+        }
+        get datagridKey() {
+            return `datagrid-${ this.key }`;
+        }
+        get allowReorder() {
+            return !this.options.readOnly && _.get(this.component, 'reorder', false);
+        }
+        get iteratableRows() {
+            return this.rows.map((row, index) => ({
+                components: row,
+                data: this.dataValue[index]
+            }));
+        }
+        getRowChunks(groups, rows) {
+            const [, chunks] = groups.reduce(([startIndex, acc], size) => {
+                const endIndex = startIndex + size;
+                return [
+                    endIndex,
+                    [
+                        ...acc,
+                        [
+                            startIndex,
+                            endIndex
+                        ]
+                    ]
+                ];
+            }, [
+                0,
+                []
+            ]);
+            return chunks.map(range => _.slice(rows, ...range));
+        }
+        getGroups() {
+            const groups = _.get(this.component, 'rowGroups', []);
+            const sizes = _.map(groups, 'numberOfRows').slice(0, -1);
+            const indexes = sizes.reduce((groupIndexes, size) => {
+                const last = groupIndexes[groupIndexes.length - 1];
+                return groupIndexes.concat(last + size);
+            }, [0]);
+            return groups.reduce((gidxs, group, idx) => {
+                return {
+                    ...gidxs,
+                    [indexes[idx]]: group
+                };
+            }, {});
+        }
+        getGroupSizes() {
+            return _.map(_.get(this.component, 'rowGroups', []), 'numberOfRows');
+        }
+        hasRowGroups() {
+            return _.get(this, 'component.enableRowGroups', false) && !this.builderMode;
+        }
+        totalRowsNumber(groups) {
+            return _.sum(_.map(groups, 'numberOfRows'));
+        }
+        setStaticValue(n) {
+            this.dataValue = _.range(n).map(() => ({}));
+        }
+        hasExtraColumn() {
+            return this.hasRemoveButtons() || this.canAddColumn;
+        }
+        hasRemoveButtons() {
+            return !this.component.disableAddingRemovingRows && !this.options.readOnly && !this.disabled && this.fullMode && this.dataValue.length > _.get(this.component, 'validate.minLength', 0);
+        }
+        hasTopSubmit() {
+            return this.hasAddButton() && [
+                'top',
+                'both'
+            ].includes(this.addAnotherPosition);
+        }
+        hasBottomSubmit() {
+            return this.hasAddButton() && [
+                'bottom',
+                'both'
+            ].includes(this.addAnotherPosition);
+        }
+        get canAddColumn() {
+            return this.builderMode;
+        }
+        render() {
+            const columns = this.getColumns();
+            return super.render(this.renderTemplate('datagrid', {
+                rows: this.getRows(),
+                columns: columns,
+                groups: this.hasRowGroups() ? this.getGroups() : [],
+                visibleColumns: this.visibleColumns,
+                hasToggle: _.get(this, 'component.groupToggle', false),
+                hasHeader: this.hasHeader(),
+                hasExtraColumn: this.hasExtraColumn(),
+                hasAddButton: this.hasAddButton(),
+                hasRemoveButtons: this.hasRemoveButtons(),
+                hasTopSubmit: this.hasTopSubmit(),
+                hasBottomSubmit: this.hasBottomSubmit(),
+                hasGroups: this.hasRowGroups(),
+                numColumns: columns.length + (this.hasExtraColumn() ? 1 : 0),
+                datagridKey: this.datagridKey,
+                allowReorder: this.allowReorder,
+                builder: this.builderMode,
+                canAddColumn: this.canAddColumn,
+                placeholder: this.renderTemplate('builderPlaceholder', { position: this.componentComponents.length })
+            }));
+        }
+        getRows() {
+            return this.rows.map(row => {
+                const components = {};
+                _.each(row, (col, key) => {
+                    components[key] = col.render();
+                });
+                return components;
+            });
+        }
+        getColumns() {
+            return this.component.components.filter(comp => {
+                return !this.visibleColumns.hasOwnProperty(comp.key) || this.visibleColumns[comp.key];
+            });
+        }
+        hasHeader() {
+            return this.component.components.reduce((hasHeader, col) => {
+                return hasHeader || (col.label || col.title) && !col.hideLabel;
+            }, false);
+        }
+        attach(element) {
+            this.loadRefs(element, {
+                [`${ this.datagridKey }-row`]: 'multiple',
+                [`${ this.datagridKey }-tbody`]: 'single',
+                [`${ this.datagridKey }-addRow`]: 'multiple',
+                [`${ this.datagridKey }-removeRow`]: 'multiple',
+                [`${ this.datagridKey }-group-header`]: 'multiple',
+                [this.datagridKey]: 'multiple'
+            });
+            if (this.allowReorder) {
+                this.refs[`${ this.datagridKey }-row`].forEach((row, index) => {
+                    row.dragInfo = { index };
+                });
+                this.dragula = dragula([this.refs[`${ this.datagridKey }-tbody`]], { moves: (_draggedElement, _oldParent, clickedElement) => clickedElement.classList.contains('formio-drag-button') }).on('drop', this.onReorder.bind(this));
+            }
+            this.refs[`${ this.datagridKey }-addRow`].forEach(addButton => {
+                this.addEventListener(addButton, 'click', this.addRow.bind(this));
+            });
+            this.refs[`${ this.datagridKey }-removeRow`].forEach((removeButton, index) => {
+                this.addEventListener(removeButton, 'click', this.removeRow.bind(this, index));
+            });
+            if (this.hasRowGroups()) {
+                this.refs.chunks = this.getRowChunks(this.getGroupSizes(), this.refs[`${ this.datagridKey }-row`]);
+                this.refs[`${ this.datagridKey }-group-header`].forEach((header, index) => {
+                    this.addEventListener(header, 'click', () => this.toggleGroup(header, index));
+                });
+            }
+            const columns = this.getColumns();
+            const rowLength = columns.length;
+            this.rows.forEach((row, rowIndex) => {
+                let columnIndex = 0;
+                columns.forEach(col => {
+                    this.attachComponents(this.refs[this.datagridKey][rowIndex * rowLength + columnIndex], [this.rows[rowIndex][col.key]], this.component.components);
+                    columnIndex++;
+                });
+            });
+            return super.attach(element);
+        }
+        onReorder(element, _target, _source, sibling) {
+            if (!element.dragInfo || sibling && !sibling.dragInfo) {
+                console.warn('There is no Drag Info available for either dragged or sibling element');
+                return;
+            }
+            const oldPosition = element.dragInfo.index;
+            const newPosition = sibling ? sibling.dragInfo.index : this.dataValue.length;
+            const movedBelow = newPosition > oldPosition;
+            const dataValue = a.fastCloneDeep(this.dataValue);
+            const draggedRowData = dataValue[oldPosition];
+            dataValue.splice(newPosition, 0, draggedRowData);
+            dataValue.splice(movedBelow ? oldPosition : oldPosition + 1, 1);
+            this.setValue(dataValue);
+            this.redraw();
+        }
+        addRow() {
+            const index = this.rows.length;
+            if (this.dataValue.length === index) {
+                this.dataValue.push({});
+            }
+            this.rows[index] = this.createRowComponents(this.dataValue[index], index);
+            this.checkConditions();
+            this.redraw();
+        }
+        removeRow(index) {
+            this.splice(index);
+            const [row] = this.rows.splice(index, 1);
+            _.each(row, component => this.removeComponent(component));
+            this.redraw();
+        }
+        getRowValues() {
+            return this.dataValue;
+        }
+        createRows(init) {
+            let added = false;
+            const rowValues = this.getRowValues();
+            rowValues.forEach((row, index) => {
+                if (this.rows[index]) {
+                    _.each(this.rows[index], component => component.data = row);
+                } else {
+                    this.rows[index] = this.createRowComponents(row, index);
+                    added = true;
+                }
+            });
+            this.rows.splice(rowValues.length);
+            if (!init && added) {
+                this.redraw();
+            }
+            return added;
+        }
+        createRowComponents(row, rowIndex) {
+            const components = {};
+            this.component.components.map((col, colIndex) => {
+                const options = _.clone(this.options);
+                options.name += `[${ rowIndex }]`;
+                options.row = `${ rowIndex }-${ colIndex }`;
+                const component = this.createComponent(col, options, row);
+                component.parentDisabled = !!this.disabled;
+                if (component.path && col.key) {
+                    component.path = component.path.replace(new RegExp(`\\.${ col.key }$`), `[${ rowIndex }].${ col.key }`);
+                }
+                component.rowIndex = rowIndex;
+                component.inDataGrid = true;
+                components[col.key] = component;
+            });
+            return components;
+        }
+        checkValidity(data, dirty, row) {
+            data = data || this.rootValue;
+            row = row || this.data;
+            if (!this.checkCondition(row, data)) {
+                this.setCustomValidity('');
+                return true;
+            }
+            if (!this.checkComponentValidity(data, dirty, row)) {
+                return false;
+            }
+            return this.checkRows('checkValidity', data, dirty, true);
+        }
+        checkColumns(data, flags = {}) {
+            data = data || this.rootValue;
+            let show = false;
+            if (!this.rows || !this.rows.length) {
+                return {
+                    rebuild: false,
+                    show: false
+                };
+            }
+            if (this.builderMode) {
+                return {
+                    rebuild: false,
+                    show: true
+                };
+            }
+            const visibility = {};
+            const dataValue = this.dataValue;
+            this.rows.forEach((row, rowIndex) => {
+                _.each(row, (col, key) => {
+                    if (col && typeof col.checkConditions === 'function') {
+                        visibility[key] = !!visibility[key] || col.checkConditions(data, flags, dataValue[rowIndex]) && col.type !== 'hidden';
+                    }
+                });
+            });
+            const rebuild = !_.isEqual(visibility, this.visibleColumns);
+            _.each(visibility, col => {
+                show |= col;
+            });
+            this.visibleColumns = visibility;
+            return {
+                rebuild,
+                show
+            };
+        }
+        checkComponentConditions(data, flags, row) {
+            if (!super.checkComponentConditions(data, flags, row)) {
+                return false;
+            }
+            const {rebuild, show} = this.checkColumns(data, flags);
+            if (rebuild) {
+                this.redraw();
+            }
+            return show;
+        }
+        setValue(value, flags = {}) {
+            if (!value) {
+                this.dataValue = this.defaultValue;
+                this.createRows();
+                return false;
+            }
+            if (!Array.isArray(value)) {
+                if (typeof value === 'object') {
+                    value = [value];
+                } else {
+                    this.createRows();
+                    value = [{}];
+                }
+            }
+            if (value && !value.length) {
+                value.push({});
+            }
+            const changed = this.hasChanged(value, this.dataValue);
+            this.dataValue = value;
+            this.createRows();
+            this.rows.forEach((row, rowIndex) => {
+                if (value.length <= rowIndex) {
+                    return;
+                }
+                _.each(row, col => {
+                    col.rowIndex = rowIndex;
+                    this.setNestedValue(col, value[rowIndex], flags);
+                });
+            });
+            this.updateOnChange(flags, changed);
+            return changed;
+        }
+        restoreComponentsContext() {
+            this.rows.forEach((row, index) => _.forIn(row, component => component.data = this.dataValue[index]));
+        }
+        getComponent(path, fn) {
+            path = Array.isArray(path) ? path : [path];
+            const [key, ...remainingPath] = path;
+            let result = [];
+            if (!_.isString(key)) {
+                return result;
+            }
+            this.everyComponent((component, components) => {
+                if (component.component.key === key) {
+                    let comp = component;
+                    if (remainingPath.length > 0 && 'getComponent' in component) {
+                        comp = component.getComponent(remainingPath, fn);
+                    } else if (fn) {
+                        fn(component, components);
+                    }
+                    result = result.concat(comp);
+                }
+            });
+            return result.length > 0 ? result : null;
+        }
+        toggleGroup(element, index) {
+            element.classList.toggle('collapsed');
+            _.each(this.refs.chunks[index], row => {
+                row.classList.toggle('hidden');
+            });
+        }
+    };
+});
+define('skylark-formio/components/datamap/DataMap',[
+    '../_classes/component/Component',
+    '../datagrid/DataGrid',
+    'skylark-lodash',
+    '../../vendors/eventemitter2/EventEmitter2',
+    '../../utils/utils'
+], function (Component, DataGridComponent, _, EventEmitter, a) {
+    'use strict';
+    return class DataMapComponent extends DataGridComponent {
+        static schema(...extend) {
+            return Component.schema({
+                label: 'Data Map',
+                key: 'dataMap',
+                type: 'datamap',
+                clearOnHide: true,
+                addAnother: 'Add Another',
+                disableAddingRemovingRows: false,
+                keyBeforeValue: true,
+                valueComponent: {
+                    type: 'textfield',
+                    key: 'value',
+                    label: 'Value',
+                    input: true
+                },
+                input: true,
+                validate: {
+                    maxLength: 0,
+                    minLength: 0
+                }
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Data Map',
+                icon: 'th-list',
+                group: 'data',
+                documentation: 'http://help.form.io/userguide/#datamap',
+                weight: 20,
+                schema: DataMapComponent.schema()
+            };
+        }
+        get schema() {
+            const schema = super.schema;
+            if (this.components && this.components.length > 0) {
+                schema.valueComponent = this.components[this.components.length - 1].schema;
+            }
+            return _.omit(schema, 'components');
+        }
+        constructor(component, options, data) {
+            super(component, options, data);
+            this.type = 'datamap';
+        }
+        init() {
+            this.components = [];
+            this.rows = [];
+            this.createRows();
+            this.visibleColumns = {
+                key: true,
+                [this.valueKey]: true
+            };
+            this.component.valueComponent.hideLabel = true;
+        }
+        get defaultSchema() {
+            return DataMapComponent.schema();
+        }
+        get emptyValue() {
+            return {};
+        }
+        get dataValue() {
+            if (!this.key || !this.visible && this.component.clearOnHide) {
+                return this.emptyValue;
+            }
+            if (!this.hasValue()) {
+                this.dataValue = this.emptyValue;
+            }
+            return _.get(this.data, this.key);
+        }
+        set dataValue(value) {
+            super.dataValue = value;
+        }
+        get defaultValue() {
+            const value = super.defaultValue;
+            if (Array.isArray(value)) {
+                return value[0];
+            }
+            return this.emptyValue;
+        }
+        get keySchema() {
+            return {
+                type: 'textfield',
+                input: true,
+                hideLabel: true,
+                label: this.component.keyLabel || 'Key',
+                key: '__key'
+            };
+        }
+        get valueKey() {
+            return this.component.valueComponent.key;
+        }
+        getRowValues() {
+            const dataValue = this.dataValue;
+            if (this.builderMode) {
+                return [dataValue];
+            }
+            if (_.isEmpty(dataValue)) {
+                return [];
+            }
+            return Object.keys(dataValue).map(() => dataValue);
+        }
+        hasHeader() {
+            return true;
+        }
+        hasRemoveButtons() {
+            return !this.component.disableAddingRemovingRows && !this.options.readOnly && !this.disabled && this.fullMode;
+        }
+        getColumns() {
+            const keySchema = Object.assign({}, this.keySchema);
+            const valueSchema = Object.assign({}, this.component.valueComponent);
+            keySchema.hideLabel = false;
+            valueSchema.hideLabel = false;
+            return this.component.keyBeforeValue ? [
+                keySchema,
+                valueSchema
+            ] : [
+                valueSchema,
+                keySchema
+            ];
+        }
+        getRowKey(rowIndex) {
+            const keys = Object.keys(this.dataValue);
+            if (!keys[rowIndex]) {
+                keys[rowIndex] = a.uniqueKey(this.dataValue, 'key');
+            }
+            return keys[rowIndex];
+        }
+        createRowComponents(row, rowIndex) {
+            let key = this.getRowKey(rowIndex);
+            const options = _.clone(this.options);
+            options.events = new EventEmitter({
+                wildcard: false,
+                maxListeners: 0
+            });
+            options.name += `[${ rowIndex }]`;
+            options.row = `${ rowIndex }`;
+            const components = {};
+            components['__key'] = this.createComponent(this.keySchema, options, { __key: key });
+            components['__key'].on('componentChange', event => {
+                const dataValue = this.dataValue;
+                const newKey = a.uniqueKey(dataValue, event.value);
+                dataValue[newKey] = dataValue[key];
+                delete dataValue[key];
+                components[this.valueKey].component.key = newKey;
+                key = newKey;
+            });
+            const valueComponent = _.clone(this.component.valueComponent);
+            valueComponent.key = key;
+            components[this.valueKey] = this.createComponent(valueComponent, this.options, this.dataValue);
+            return components;
+        }
+        get canAddColumn() {
+            return false;
+        }
+        addChildComponent(component) {
+            this.component.valueComponent = component;
+        }
+        saveChildComponent(component) {
+            this.component.valueComponent = component;
+        }
+        removeChildComponent() {
+            const defaultSchema = DataMapComponent.schema();
+            this.component.valueComponent = defaultSchema.valueComponent;
+        }
+        addRow() {
+            const index = this.rows.length;
+            this.rows[index] = this.createRowComponents(this.dataValue, index);
+            this.redraw();
+            this.triggerChange();
+        }
+        removeRow(index) {
+            const keys = Object.keys(this.dataValue);
+            if (keys[index]) {
+                delete this.dataValue[keys[index]];
+            }
+            this.rows.splice(index, 1);
+            this.redraw();
+            this.triggerChange();
+        }
+        setValue(value, flags = {}) {
+            const changed = this.hasChanged(value, this.dataValue);
+            this.dataValue = value;
+            this.createRows();
+            this.updateOnChange(flags, changed);
+            return changed;
+        }
+        checkColumns() {
+            return {
+                rebuild: false,
+                show: true
+            };
+        }
+    };
+});
+define('skylark-formio/utils/index',['./utils'], function (FormioUtils) {
+    'use strict';
+    if (typeof global === 'object') {
+        global.FormioUtils = FormioUtils;
+    }
+    return FormioUtils;
+});
+define('skylark-formio/components/datetime/DateTime',[
+    'skylark-lodash',
+    'skylark-moment',
+    '../_classes/input/Input',
+    '../../utils/index',
+    '../../widgets/index'
+], function (_, moment, Input, FormioUtils, Widgets) {
+    'use strict';
+    return class DateTimeComponent extends Input {
+        static schema(...extend) {
+            return Input.schema({
+                type: 'datetime',
+                label: 'Date / Time',
+                key: 'dateTime',
+                format: 'yyyy-MM-dd hh:mm a',
+                useLocaleSettings: false,
+                allowInput: true,
+                enableDate: true,
+                enableTime: true,
+                defaultValue: '',
+                defaultDate: '',
+                displayInTimezone: 'viewer',
+                timezone: '',
+                datepickerMode: 'day',
+                datePicker: {
+                    showWeeks: true,
+                    startingDay: 0,
+                    initDate: '',
+                    minMode: 'day',
+                    maxMode: 'year',
+                    yearRows: 4,
+                    yearColumns: 5,
+                    minDate: null,
+                    maxDate: null
+                },
+                timePicker: {
+                    hourStep: 1,
+                    minuteStep: 1,
+                    showMeridian: true,
+                    readonlyInput: false,
+                    mousewheel: true,
+                    arrowkeys: true
+                },
+                customOptions: {}
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Date / Time',
+                group: 'advanced',
+                icon: 'calendar',
+                documentation: 'http://help.form.io/userguide/#datetime',
+                weight: 40,
+                schema: DateTimeComponent.schema()
+            };
+        }
+        constructor(component, options, data) {
+            super(component, options, data);
+            const timezone = this.component.timezone || this.options.timezone;
+            const time24hr = !_.get(this.component, 'timePicker.showMeridian', true);
+            if (!this.component.enableDate) {
+                this.component.format = this.component.format.replace(/yyyy-MM-dd /g, '');
+            }
+            if (!this.component.enableTime) {
+                this.component.format = this.component.format.replace(/ hh:mm a$/g, '');
+            } else if (time24hr) {
+                this.component.format = this.component.format.replace(/hh:mm a$/g, 'HH:mm');
+            } else {
+                this.component.format = this.component.format.replace(/HH:mm$/g, 'hh:mm a');
+            }
+            let customOptions = this.component.customOptions || {};
+            if (typeof customOptions === 'string') {
+                try {
+                    customOptions = JSON.parse(customOptions);
+                } catch (err) {
+                    console.warn(err.message);
+                    customOptions = {};
+                }
+            }
+            this.component.widget = {
+                type: 'calendar',
+                timezone,
+                displayInTimezone: _.get(this.component, 'displayInTimezone', 'viewer'),
+                submissionTimezone: this.submissionTimezone,
+                language: this.options.language,
+                useLocaleSettings: _.get(this.component, 'useLocaleSettings', false),
+                allowInput: _.get(this.component, 'allowInput', true),
+                mode: this.component.multiple ? 'multiple' : 'single',
+                enableTime: _.get(this.component, 'enableTime', true),
+                noCalendar: !_.get(this.component, 'enableDate', true),
+                format: this.component.format,
+                hourIncrement: _.get(this.component, 'timePicker.hourStep', 1),
+                minuteIncrement: _.get(this.component, 'timePicker.minuteStep', 5),
+                time_24hr: time24hr,
+                readOnly: this.options.readOnly,
+                minDate: _.get(this.component, 'datePicker.minDate'),
+                disabledDates: _.get(this.component, 'datePicker.disable'),
+                disableWeekends: _.get(this.component, 'datePicker.disableWeekends'),
+                disableWeekdays: _.get(this.component, 'datePicker.disableWeekdays'),
+                disableFunction: _.get(this.component, 'datePicker.disableFunction'),
+                maxDate: _.get(this.component, 'datePicker.maxDate'),
+                ...customOptions
+            };
+            this.validators.push('date');
+        }
+        performInputMapping(input) {
+            if (input.widget && input.widget.settings) {
+                input.widget.settings.submissionTimezone = this.submissionTimezone;
+            }
+            return input;
+        }
+        get widget() {
+            const widget = this.component.widget ? new Widgets[this.component.widget.type](this.component.widget, this.component) : null;
+            return widget;
+        }
+        get defaultSchema() {
+            return DateTimeComponent.schema();
+        }
+        get defaultValue() {
+            let defaultValue = super.defaultValue;
+            if (!defaultValue && this.component.defaultDate) {
+                defaultValue = FormioUtils.getDateSetting(this.component.defaultDate);
+                defaultValue = defaultValue ? defaultValue.toISOString() : '';
+            }
+            return defaultValue;
+        }
+        get emptyValue() {
+            return '';
+        }
+        isEmpty(value = this.dataValue) {
+            if (value && value.toString() === 'Invalid Date') {
+                return true;
+            }
+            return super.isEmpty(value);
+        }
+        formatValue(input) {
+            const result = moment.utc(input).toISOString();
+            return result === 'Invalid date' ? input : result;
+        }
+        isEqual(valueA, valueB = this.dataValue) {
+            const format = FormioUtils.convertFormatToMoment(this.component.format);
+            return this.isEmpty(valueA) && this.isEmpty(valueB) || moment.utc(valueA).format(format) === moment.utc(valueB).format(format);
+        }
+        createWrapper() {
+            return false;
+        }
+        checkValidity(data, dirty, rowData) {
+            if (this.refs.input) {
+                this.refs.input.forEach(input => {
+                    if (input.widget && input.widget.enteredDate) {
+                        dirty = true;
+                    }
+                });
+            }
+            return super.checkValidity(data, dirty, rowData);
+        }
+        focus() {
+            if (this.refs.input && this.refs.input[0]) {
+                const sibling = this.refs.input[0].nextSibling;
+                if (sibling) {
+                    sibling.focus();
+                }
+            }
+        }
+    };
+});
+define('skylark-formio/components/day/Day',[
+    'skylark-lodash',
+    '../_classes/field/Field',
+    '../../utils/utils'
+], function (_, Field, a) {
+    'use strict';
+    return class DayComponent extends Field {
+        static schema(...extend) {
+            return Field.schema({
+                type: 'day',
+                label: 'Day',
+                key: 'day',
+                fields: {
+                    day: {
+                        type: 'number',
+                        placeholder: '',
+                        required: false
+                    },
+                    month: {
+                        type: 'select',
+                        placeholder: '',
+                        required: false
+                    },
+                    year: {
+                        type: 'number',
+                        placeholder: '',
+                        required: false
+                    }
+                },
+                dayFirst: false
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Day',
+                group: 'advanced',
+                icon: 'calendar',
+                documentation: 'http://help.form.io/userguide/#day',
+                weight: 50,
+                schema: DayComponent.schema()
+            };
+        }
+        get emptyValue() {
+            return '00/00/0000';
+        }
+        get valueMask() {
+            return /^\d{2}\/\d{2}\/\d{4}$/;
+        }
+        get dayRequired() {
+            return this.showDay && _.get(this.component, 'fields.day.required', false);
+        }
+        get showDay() {
+            return !_.get(this.component, 'fields.day.hide', false);
+        }
+        get monthRequired() {
+            return this.showMonth && _.get(this.component, 'fields.month.required', false);
+        }
+        get showMonth() {
+            return !_.get(this.component, 'fields.month.hide', false);
+        }
+        get yearRequired() {
+            return this.showYear && _.get(this.component, 'fields.year.required', false);
+        }
+        get showYear() {
+            return !_.get(this.component, 'fields.year.hide', false);
+        }
+        get defaultSchema() {
+            return DayComponent.schema();
+        }
+        get inputInfo() {
+            const info = super.elementInfo();
+            info.type = 'input';
+            info.attr.type = 'hidden';
+            info.changeEvent = 'input';
+            return info;
+        }
+        inputDefinition(name) {
+            let min, max;
+            if (name === 'day') {
+                min = 1;
+                max = 31;
+            }
+            if (name === 'month') {
+                min = 1;
+                max = 12;
+            }
+            if (name === 'year') {
+                min = _.get(this.component, 'fields.year.minYear', 1900) || 1900;
+                max = _.get(this.component, 'fields.year.maxYear', 2030) || 1900;
+            }
+            return {
+                type: 'input',
+                ref: name,
+                attr: {
+                    id: `${ this.component.key }-${ name }`,
+                    class: `form-control ${ this.transform('class', `formio-day-component-${ name }`) }`,
+                    type: this.component.fields[name].type === 'select' ? 'select' : 'number',
+                    placeholder: this.component.fields[name].placeholder,
+                    step: 1,
+                    min,
+                    max
+                }
+            };
+        }
+        selectDefinition(name) {
+            return {
+                multiple: false,
+                ref: name,
+                widget: 'html5',
+                attr: {
+                    id: `${ this.component.key }-${ name }`,
+                    class: 'form-control',
+                    name,
+                    lang: this.options.language
+                }
+            };
+        }
+        get days() {
+            if (this._days) {
+                return this._days;
+            }
+            this._days = [{
+                    value: '',
+                    label: _.get(this.component, 'fields.day.placeholder', '')
+                }];
+            for (let x = 1; x <= 31; x++) {
+                this._days.push({
+                    value: x,
+                    label: x.toString()
+                });
+            }
+            return this._days;
+        }
+        get months() {
+            if (this._months) {
+                return this._months;
+            }
+            this._months = [
+                {
+                    value: '',
+                    label: _.get(this.component, 'fields.month.placeholder') || (this.hideInputLabels ? this.t('Month') : '')
+                },
+                {
+                    value: 1,
+                    label: 'January'
+                },
+                {
+                    value: 2,
+                    label: 'February'
+                },
+                {
+                    value: 3,
+                    label: 'March'
+                },
+                {
+                    value: 4,
+                    label: 'April'
+                },
+                {
+                    value: 5,
+                    label: 'May'
+                },
+                {
+                    value: 6,
+                    label: 'June'
+                },
+                {
+                    value: 7,
+                    label: 'July'
+                },
+                {
+                    value: 8,
+                    label: 'August'
+                },
+                {
+                    value: 9,
+                    label: 'September'
+                },
+                {
+                    value: 10,
+                    label: 'October'
+                },
+                {
+                    value: 11,
+                    label: 'November'
+                },
+                {
+                    value: 12,
+                    label: 'December'
+                }
+            ];
+            return this._months;
+        }
+        get years() {
+            if (this._years) {
+                return this._years;
+            }
+            this._years = [{
+                    value: '',
+                    label: _.get(this.component, 'fields.year.placeholder', '')
+                }];
+            const minYears = _.get(this.component, 'fields.year.minYear', 1900) || 1900;
+            const maxYears = _.get(this.component, 'fields.year.maxYear', 2030) || 2030;
+            for (let x = minYears; x <= maxYears; x++) {
+                this._years.push({
+                    value: x,
+                    label: x.toString()
+                });
+            }
+            return this._years;
+        }
+        setErrorClasses(elements, dirty, hasError) {
+            super.setErrorClasses(elements, dirty, hasError);
+            super.setErrorClasses([
+                this.refs.day,
+                this.refs.month,
+                this.refs.year
+            ], dirty, hasError);
+        }
+        removeInputError(elements) {
+            super.removeInputError([
+                this.refs.day,
+                this.refs.month,
+                this.refs.year
+            ]);
+            super.removeInputError(elements);
+        }
+        init() {
+            super.init();
+            this.validators = this.validators.concat([
+                'day',
+                'maxDate',
+                'minDate',
+                'minYear',
+                'maxYear'
+            ]);
+            const minYear = this.component.fields.year.minYear;
+            const maxYear = this.component.fields.year.maxYear;
+            this.component.maxYear = maxYear;
+            this.component.minYear = minYear;
+            const dateFormatInfo = a.getLocaleDateFormatInfo(this.options.language);
+            this.dayFirst = this.component.useLocaleSettings ? dateFormatInfo.dayFirst : this.component.dayFirst;
+        }
+        render() {
+            return super.render(this.renderTemplate('day', {
+                dayFirst: this.dayFirst,
+                showDay: this.showDay,
+                showMonth: this.showMonth,
+                showYear: this.showYear,
+                day: this.renderField('day'),
+                month: this.renderField('month'),
+                year: this.renderField('year')
+            }));
+        }
+        renderField(name) {
+            if (this.component.fields[name].type === 'select') {
+                return this.renderTemplate('select', {
+                    input: this.selectDefinition(name),
+                    selectOptions: this[`${ name }s`].reduce((html, option) => html + this.renderTemplate('selectOption', {
+                        option,
+                        selected: false,
+                        attrs: {}
+                    }), '')
+                });
+            } else {
+                return this.renderTemplate('input', { input: this.inputDefinition(name) });
+            }
+        }
+        attach(element) {
+            this.loadRefs(element, {
+                day: 'single',
+                month: 'single',
+                year: 'single',
+                input: 'multiple'
+            });
+            const superAttach = super.attach(element);
+            if (this.shouldDisabled) {
+                this.setDisabled(this.refs.day, true);
+                this.setDisabled(this.refs.month, true);
+                this.setDisabled(this.refs.year, true);
+                if (this.refs.input) {
+                    this.refs.input.forEach(input => this.setDisabled(input, true));
+                }
+            } else {
+                this.addEventListener(this.refs.day, 'input', () => this.updateValue(null, { modified: true }));
+                this.addEventListener(this.refs.month, 'input', () => {
+                    const maxDay = this.refs.year ? parseInt(new Date(this.refs.year.value, this.refs.month.value, 0).getDate(), 10) : '';
+                    const day = this.getFieldValue('day');
+                    if (!this.component.fields.day.hide && maxDay) {
+                        this.refs.day.max = maxDay;
+                    }
+                    if (maxDay && day > maxDay) {
+                        this.refs.day.value = this.refs.day.max;
+                    }
+                    this.updateValue(null, { modified: true });
+                });
+                this.addEventListener(this.refs.year, 'input', () => this.updateValue(null, { modified: true }));
+                this.addEventListener(this.refs.input, this.info.changeEvent, () => this.updateValue(null, { modified: true }));
+            }
+            this.setValue(this.dataValue);
+            return superAttach;
+        }
+        validateRequired(setting, value) {
+            const {day, month, year} = this.parts;
+            if (this.dayRequired && !day) {
+                return false;
+            }
+            if (this.monthRequired && !month) {
+                return false;
+            }
+            if (this.yearRequired && !year) {
+                return false;
+            }
+            if (!a.boolValue(setting)) {
+                return true;
+            }
+            return !this.isEmpty(value);
+        }
+        set disabled(disabled) {
+            super.disabled = disabled;
+            if (!this.refs.year || !this.refs.month || !this.refs.day) {
+                return;
+            }
+            if (disabled) {
+                this.refs.year.setAttribute('disabled', 'disabled');
+                this.refs.month.setAttribute('disabled', 'disabled');
+                this.refs.day.setAttribute('disabled', 'disabled');
+            } else {
+                this.refs.year.removeAttribute('disabled');
+                this.refs.month.removeAttribute('disabled');
+                this.refs.day.removeAttribute('disabled');
+            }
+        }
+        normalizeValue(value) {
+            if (!value || this.valueMask.test(value)) {
+                return value;
+            }
+            const dateParts = [];
+            const valueParts = value.split('/');
+            const getNextPart = (shouldTake, defaultValue) => dateParts.push(shouldTake ? valueParts.shift() : defaultValue);
+            if (this.dayFirst) {
+                getNextPart(this.showDay, '00');
+            }
+            getNextPart(this.showMonth, '00');
+            if (!this.dayFirst) {
+                getNextPart(this.showDay, '00');
+            }
+            getNextPart(this.showYear, '0000');
+            return dateParts.join('/');
+        }
+        setValueAt(index, value) {
+            if (!value || value === 'Invalid date') {
+                return null;
+            }
+            const parts = value.split('/');
+            let day;
+            if (this.component.dayFirst) {
+                day = parts.shift();
+            }
+            const month = parts.shift();
+            if (!this.component.dayFirst) {
+                day = parts.shift();
+            }
+            const year = parts.shift();
+            if (this.refs.day && this.showDay) {
+                this.refs.day.value = day === '00' ? '' : parseInt(day, 10);
+            }
+            if (this.refs.month && this.showMonth) {
+                this.refs.month.value = month === '00' ? '' : parseInt(month, 10);
+            }
+            if (this.refs.year && this.showYear) {
+                this.refs.year.value = year === '0000' ? '' : parseInt(year, 10);
+            }
+        }
+        getFieldValue(name) {
+            const parts = this.dataValue ? this.dataValue.split('/') : [];
+            let val = 0;
+            switch (name) {
+            case 'month':
+                val = parts[this.dayFirst ? 1 : 0];
+                break;
+            case 'day':
+                val = parts[this.dayFirst ? 0 : 1];
+                break;
+            case 'year':
+                val = parts[2];
+                break;
+            }
+            val = parseInt(val, 10);
+            return !_.isNaN(val) && _.isNumber(val) ? val : 0;
+        }
+        get parts() {
+            return {
+                day: this.getFieldValue('day'),
+                month: this.getFieldValue('month'),
+                year: this.getFieldValue('year')
+            };
+        }
+        get format() {
+            let format = '';
+            if (this.component.dayFirst && this.showDay) {
+                format += 'D/';
+            }
+            if (this.showMonth) {
+                format += 'M/';
+            }
+            if (!this.component.dayFirst && this.showDay) {
+                format += 'D/';
+            }
+            if (this.showYear) {
+                format += 'YYYY';
+                return format;
+            } else {
+                return format.length ? format.substring(0, format.length - 1) : format;
+            }
+        }
+        getDate(value) {
+            let defaults = [], day, month, year;
+            const [DAY, MONTH, YEAR] = this.component.dayFirst ? [
+                0,
+                1,
+                2
+            ] : [
+                1,
+                0,
+                2
+            ];
+            const defaultValue = value || this.component.defaultValue;
+            if (defaultValue) {
+                defaults = defaultValue.split('/').map(x => parseInt(x, 10));
+            }
+            if (this.showDay && this.refs.day) {
+                day = parseInt(this.refs.day.value, 10);
+            }
+            if (day === undefined || _.isNaN(day)) {
+                day = defaults[DAY] && !_.isNaN(defaults[DAY]) ? defaults[DAY] : 0;
+            }
+            if (this.showMonth && this.refs.month) {
+                month = parseInt(this.refs.month.value, 10);
+            }
+            if (month === undefined || _.isNaN(month)) {
+                month = defaults[MONTH] && !_.isNaN(defaults[MONTH]) ? defaults[MONTH] : 0;
+            }
+            if (this.showYear && this.refs.year) {
+                year = parseInt(this.refs.year.value);
+            }
+            if (year === undefined || _.isNaN(year)) {
+                year = defaults[YEAR] && !_.isNaN(defaults[YEAR]) ? defaults[YEAR] : 0;
+            }
+            let result;
+            if (!day && !month && !year) {
+                return null;
+            }
+            day = this.showDay ? day.toString().padStart(2, 0) : '';
+            month = this.showMonth ? month.toString().padStart(2, 0) : '';
+            year = this.showYear ? year.toString().padStart(4, 0) : '';
+            if (this.component.dayFirst) {
+                result = `${ day }${ this.showDay && this.showMonth || this.showDay && this.showYear ? '/' : '' }${ month }${ this.showMonth && this.showYear ? '/' : '' }${ year }`;
+            } else {
+                result = `${ month }${ this.showDay && this.showMonth || this.showMonth && this.showYear ? '/' : '' }${ day }${ this.showDay && this.showYear ? '/' : '' }${ year }`;
+            }
+            return result;
+        }
+        get date() {
+            return this.getDate();
+        }
+        normalizeMinMaxDates() {
+            return [
+                this.component.minDate,
+                this.component.maxDate
+            ].map(date => date ? date.split('-').reverse().join('/') : date);
+        }
+        get validationValue() {
+            [this.component.minDate, this.component.maxDate] = this.dayFirst ? this.normalizeMinMaxDates() : [
+                this.component.minDate,
+                this.component.maxDate
+            ];
+            return this.dataValue;
+        }
+        getValue() {
+            const result = super.getValue();
+            return !result ? this.dataValue : result;
+        }
+        getValueAt(index) {
+            const date = this.date;
+            if (date) {
+                this.refs.input[index].value = date;
+                return this.refs.input[index].value;
+            } else {
+                this.refs.input[index].value = '';
+                return null;
+            }
+        }
+        getValueAsString(value) {
+            return this.getDate(value) || '';
+        }
+        focus() {
+            if (this.dayFirst && this.showDay || !this.dayFirst && !this.showMonth && this.showDay) {
+                this.refs.day.focus();
+            } else if (this.dayFirst && !this.showDay && this.showMonth || !this.dayFirst && this.showMonth) {
+                this.refs.month.focus();
+            } else if (!this.showDay && !this.showDay && this.showYear) {
+                this.refs.year.focus();
+            }
+        }
+        isPartialDay(value) {
+            if (!value) {
+                return false;
+            }
+            const [DAY, MONTH, YEAR] = this.component.dayFirst ? [
+                0,
+                1,
+                2
+            ] : [
+                1,
+                0,
+                2
+            ];
+            const values = value.split('/');
+            return values[DAY] === '00' || values[MONTH] === '00' || values[YEAR] === '0000';
+        }
+    };
+});
+define('skylark-formio/components/editgrid/templates/row.ejs',[],function() {
+return   `<div class="row">
+  {% ctx.util.eachComponent(ctx.components, function(component) { %}
+    {% if (!component.hasOwnProperty('tableView') || component.tableView) { %}
+      <div class="col-sm-2">
+        {{ ctx.getView(component, ctx.row[component.key]) }}
+      </div>
+    {% } %}
+  {% }) %}
+  {% if (!ctx.self.options.readOnly) { %}
+    <div class="col-sm-2">
+      <div class="btn-group pull-right">
+        <button class="btn btn-default btn-light btn-sm editRow"><i class="{{ ctx.iconClass('edit') }}"></i></button>
+        <button class="btn btn-danger btn-sm removeRow"><i class="{{ ctx.iconClass('trash') }}"></i></button>
+      </div>
+    </div>
+  {% } %}
+</div>` ;
+});
+
+define('skylark-formio/components/editgrid/templates/header.ejs',[],function() {
+return `<div class="row">
+  {% ctx.util.eachComponent(ctx.components, function(component) { %}
+    {% if (!component.hasOwnProperty('tableView') || component.tableView) { %}
+      <div class="col-sm-2">{{ component.label }}</div>
+    {% } %}
+  {% }) %}
+</div>` ;
+});
+
+define('skylark-formio/components/editgrid/templates/index',[
+    './row.ejs',
+    './header.ejs'
+], function (row, header) {
+    'use strict';
+    return {
+        row,
+        header
+    };
+});
+define('skylark-formio/components/editgrid/EditGrid',[
+    'skylark-lodash',
+//    'fast-deep-equal',
+    '../_classes/nestedarray/NestedArrayComponent',
+    '../_classes/component/Component',
+    '../../utils/utils',
+    './templates/index'
+], function (_,  NestedArrayComponent, Component, a, templates) {
+    'use strict';
+
+    var equal = _.isEqual;
+    
+    const EditRowState = {
+        New: 'new',
+        Editing: 'editing',
+        Saved: 'saved',
+        Removed: 'removed'
+    };
+    return class EditGridComponent extends NestedArrayComponent {
+        static schema(...extend) {
+            return NestedArrayComponent.schema({
+                type: 'editgrid',
+                label: 'Edit Grid',
+                key: 'editGrid',
+                clearOnHide: true,
+                input: true,
+                tree: true,
+                removeRow: 'Cancel',
+                defaultOpen: false,
+                openWhenEmpty: false,
+                components: [],
+                inlineEdit: false,
+                templates: {
+                    header: EditGridComponent.defaultHeaderTemplate,
+                    row: EditGridComponent.defaultRowTemplate,
+                    footer: ''
+                }
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Edit Grid',
+                icon: 'tasks',
+                group: 'data',
+                documentation: 'http://help.form.io/userguide/#editgrid',
+                weight: 30,
+                schema: EditGridComponent.schema()
+            };
+        }
+        static get defaultHeaderTemplate() {
+            return `<div class="row">
+  {% util.eachComponent(components, function(component) { %}
+    <div class="col-sm-2">{{ component.label }}</div>
+  {% }) %}
+</div>`;
+        }
+        static get defaultRowTemplate() {
+            return `<div class="row">
+  {% util.eachComponent(components, function(component) { %}
+    <div class="col-sm-2">
+      {{ getView(component, row[component.key]) }}
+    </div>
+  {% }) %}
+  {% if (!instance.options.readOnly && !instance.originalComponent.disabled) { %}
+    <div class="col-sm-2">
+      <div class="btn-group pull-right">
+        <button class="btn btn-default btn-light btn-sm editRow"><i class="{{ iconClass('edit') }}"></i></button>
+        {% if (!instance.hasRemoveButtons || instance.hasRemoveButtons()) { %}
+          <button class="btn btn-danger btn-sm removeRow"><i class="{{ iconClass('trash') }}"></i></button>
+        {% } %}
+      </div>
+    </div>
+  {% } %}
+</div>`;
+        }
+        get defaultSchema() {
+            return EditGridComponent.schema();
+        }
+        get emptyValue() {
+            return [];
+        }
+        get editgridKey() {
+            return `editgrid-${ this.key }`;
+        }
+        get rowRef() {
+            return `${ this.editgridKey }-row`;
+        }
+        get rowElements() {
+            return this.refs[this.rowRef];
+        }
+        get addRowRef() {
+            return `${ this.editgridKey }-addRow`;
+        }
+        get addRowElements() {
+            return this.refs[this.addRowRef];
+        }
+        get saveRowRef() {
+            return `${ this.editgridKey }-saveRow`;
+        }
+        get saveRowElements() {
+            return this.refs[this.saveRowRef];
+        }
+        get cancelRowRef() {
+            return `${ this.editgridKey }-cancelRow`;
+        }
+        get cancelRowElements() {
+            return this.refs[this.cancelRowRef];
+        }
+        get inlineEditMode() {
+            return this.component.inlineEdit;
+        }
+        get saveEditMode() {
+            return !this.inlineEditMode;
+        }
+        get minLength() {
+            return _.get(this.component, 'validate.minLength', 0);
+        }
+        get data() {
+            return this._data;
+        }
+        set data(value) {
+            this._data = value;
+            const data = this.dataValue;
+            (this.editRows || []).forEach((row, index) => {
+                const rowData = data[index];
+                row.data = rowData;
+                row.components.forEach(component => {
+                    component.data = rowData;
+                });
+            });
+        }
+        get iteratableRows() {
+            return this.editRows;
+        }
+        constructor(...args) {
+            super(...args);
+            this.type = 'editgrid';
+        }
+        hasRemoveButtons() {
+            return !this.component.disableAddingRemovingRows && !this.options.readOnly && !this.disabled && this.fullMode && this.dataValue.length > _.get(this.component, 'validate.minLength', 0);
+        }
+        init() {
+            if (this.builderMode) {
+                this.editRows = [];
+                return super.init();
+            }
+            this.components = this.components || [];
+            const dataValue = this.dataValue || [];
+            const openWhenEmpty = !dataValue.length && this.component.openWhenEmpty;
+            if (openWhenEmpty) {
+                const dataObj = {};
+                this.editRows = [{
+                        components: this.createRowComponents(dataObj, 0),
+                        data: dataObj,
+                        state: EditRowState.New,
+                        backup: null,
+                        error: null
+                    }];
+                if (this.inlineEditMode) {
+                    this.dataValue.push(dataObj);
+                }
+            } else {
+                this.editRows = dataValue.map((row, rowIndex) => ({
+                    components: this.createRowComponents(row, rowIndex),
+                    data: row,
+                    state: EditRowState.Saved,
+                    backup: null,
+                    error: null
+                }));
+            }
+            this.checkData();
+        }
+        isOpen(editRow) {
+            return [
+                EditRowState.New,
+                EditRowState.Editing
+            ].includes(editRow.state);
+        }
+        render(children) {
+            if (this.builderMode) {
+                return super.render();
+            }
+            const dataValue = this.dataValue || [];
+            const headerTemplate = a.Evaluator.noeval ? templates.header : _.get(this.component, 'templates.header');
+            return super.render(children || this.renderTemplate('editgrid', {
+                ref: {
+                    row: this.rowRef,
+                    addRow: this.addRowRef,
+                    saveRow: this.saveRowRef,
+                    cancelRow: this.cancelRowRef
+                },
+                header: this.renderString(headerTemplate, {
+                    components: this.component.components,
+                    value: dataValue
+                }),
+                footer: this.renderString(_.get(this.component, 'templates.footer'), {
+                    components: this.component.components,
+                    value: dataValue
+                }),
+                rows: this.editRows.map(this.renderRow.bind(this)),
+                openRows: this.editRows.map(row => this.isOpen(row)),
+                errors: this.editRows.map(row => row.error),
+                hasAddButton: this.hasAddButton(),
+                hasRemoveButtons: this.hasRemoveButtons()
+            }));
+        }
+        attach(element) {
+            if (this.builderMode) {
+                return super.attach(element);
+            }
+            this.loadRefs(element, {
+                [this.addRowRef]: 'multiple',
+                [this.saveRowRef]: 'multiple',
+                [this.cancelRowRef]: 'multiple',
+                [this.rowRef]: 'multiple'
+            });
+            this.addRowElements.forEach(addButton => {
+                this.addEventListener(addButton, 'click', () => this.addRow());
+            });
+            let openRowCount = 0;
+            this.rowElements.forEach((row, rowIndex) => {
+                const editRow = this.editRows[rowIndex];
+                if (this.isOpen(editRow)) {
+                    this.attachComponents(row, editRow.components);
+                    this.addEventListener(this.saveRowElements[openRowCount], 'click', () => this.saveRow(rowIndex));
+                    this.addEventListener(this.cancelRowElements[openRowCount], 'click', () => this.cancelRow(rowIndex));
+                    openRowCount++;
+                } else {
+                    [
+                        {
+                            className: 'removeRow',
+                            event: 'click',
+                            action: () => this.removeRow(rowIndex)
+                        },
+                        {
+                            className: 'editRow',
+                            event: 'click',
+                            action: () => this.editRow(rowIndex)
+                        }
+                    ].forEach(({className, event, action}) => {
+                        const elements = row.getElementsByClassName(className);
+                        Array.prototype.forEach.call(elements, element => {
+                            this.addEventListener(element, event, action);
+                        });
+                    });
+                }
+            });
+            if (openRowCount) {
+                this.addClass(this.refs.component, `formio-component-${ this.component.type }-row-open`);
+            } else {
+                this.removeClass(this.refs.component, `formio-component-${ this.component.type }-row-open`);
+            }
+            return super.attach(element);
+        }
+        clearOnHide(show) {
+            super.clearOnHide(show);
+            if (this.component.clearOnHide && !this.visible) {
+                if (!this.editRows) {
+                    return;
+                }
+                this.removeAllRows();
+            }
+        }
+        renderRow(row, rowIndex) {
+            const dataValue = this.dataValue || [];
+            if (this.isOpen(row)) {
+                return this.renderComponents(row.components);
+            } else {
+                const flattenedComponents = this.flattenComponents(rowIndex);
+                const rowTemplate = a.Evaluator.noeval ? templates.row : _.get(this.component, 'templates.row', EditGridComponent.defaultRowTemplate);
+                return this.renderString(rowTemplate, {
+                    row: dataValue[rowIndex] || {},
+                    data: this.data,
+                    rowIndex,
+                    components: this.component.components,
+                    flattenedComponents,
+                    getView: (component, data) => {
+                        const instance = flattenedComponents[component.key];
+                        let view = instance ? instance.getView(data) : '';
+                        if (instance && instance.widget && view !== '--- PROTECTED ---') {
+                            if (_.isArray(view)) {
+                                view = view.map(value => instance.widget.getValueAsString(value));
+                            } else {
+                                view = instance.widget.getValueAsString(view);
+                            }
+                        }
+                        return view;
+                    }
+                });
+            }
+        }
+        everyComponent(fn, rowIndex) {
+            const components = this.getComponents(rowIndex);
+            _.each(components, (component, index) => {
+                if (fn(component, components, index) === false) {
+                    return false;
+                }
+                if (typeof component.everyComponent === 'function') {
+                    if (component.everyComponent(fn) === false) {
+                        return false;
+                    }
+                }
+            });
+        }
+        flattenComponents(rowIndex) {
+            const result = {};
+            this.everyComponent(component => {
+                result[component.component.flattenAs || component.key] = component;
+            }, rowIndex);
+            return result;
+        }
+        getComponents(rowIndex) {
+            this.editRows = this.editRows || [];
+            return this.builderMode ? super.getComponents() : _.isNumber(rowIndex) ? this.editRows[rowIndex].components || [] : this.editRows.reduce((result, row) => result.concat(row.components || []), []);
+        }
+        destroyComponents(rowIndex) {
+            if (this.builderMode) {
+                return super.destroyComponents();
+            }
+            const components = this.getComponents(rowIndex).slice();
+            components.forEach(comp => comp.destroy());
+        }
+        addRow() {
+            if (this.options.readOnly) {
+                return;
+            }
+            const dataObj = {};
+            const rowIndex = this.editRows.length;
+            const editRow = {
+                components: this.createRowComponents(dataObj, rowIndex),
+                data: dataObj,
+                state: EditRowState.New,
+                backup: null,
+                error: null
+            };
+            this.editRows.push(editRow);
+            if (this.inlineEditMode) {
+                this.dataValue.push(dataObj);
+                this.triggerChange();
+            }
+            this.emit('editGridAddRow', {
+                component: this.component,
+                row: editRow
+            });
+            this.checkRow('checkData', null, {}, editRow.data, editRow.components);
+            if (this.component.modal) {
+                this.addRowModal(rowIndex);
+            } else {
+                this.redraw();
+            }
+            return editRow;
+        }
+        addRowModal(rowIndex) {
+            const modalContent = this.ce('div');
+            const editRow = this.editRows[rowIndex];
+            const {components} = editRow;
+            modalContent.innerHTML = this.renderComponents(components);
+            const dialog = this.component.modal ? this.createModal(modalContent) : undefined;
+            dialog.refs.dialogContents.appendChild(this.ce('button', {
+                class: 'btn btn-primary',
+                onClick: () => {
+                    if (this.validateRow(editRow, true)) {
+                        dialog.close();
+                        this.saveRow(rowIndex);
+                    }
+                }
+            }, this.component.saveRow || 'Save'));
+            this.attachComponents(modalContent, components);
+        }
+        editRow(rowIndex) {
+            const editRow = this.editRows[rowIndex];
+            editRow.state = EditRowState.Editing;
+            const dataSnapshot = a.fastCloneDeep(editRow.data);
+            if (this.inlineEditMode) {
+                editRow.backup = dataSnapshot;
+            } else {
+                editRow.backup = editRow.data;
+                editRow.data = dataSnapshot;
+                this.restoreRowContext(editRow);
+            }
+            if (this.component.modal) {
+                this.addRowModal(rowIndex);
+            } else {
+                this.redraw();
+            }
+        }
+        clearErrors(rowIndex) {
+            const editRow = this.editRows[rowIndex];
+            if (editRow && Array.isArray(editRow.components)) {
+                editRow.components.forEach(comp => {
+                    comp.setPristine(true);
+                    comp.setCustomValidity('');
+                });
+            }
+        }
+        cancelRow(rowIndex) {
+            if (this.options.readOnly) {
+                return;
+            }
+            const editRow = this.editRows[rowIndex];
+            switch (editRow.state) {
+            case EditRowState.New: {
+                    editRow.state = EditRowState.Removed;
+                    this.clearErrors(rowIndex);
+                    this.destroyComponents(rowIndex);
+                    if (this.inlineEditMode) {
+                        this.splice(rowIndex);
+                    }
+                    this.editRows.splice(rowIndex, 1);
+                    break;
+                }
+            case EditRowState.Editing: {
+                    editRow.state = EditRowState.Saved;
+                    if (this.inlineEditMode) {
+                        this.dataValue[rowIndex] = editRow.backup;
+                    }
+                    editRow.data = editRow.backup;
+                    editRow.backup = null;
+                    this.restoreRowContext(editRow);
+                    this.clearErrors(rowIndex);
+                    break;
+                }
+            }
+            this.checkValidity(null, true);
+            this.redraw();
+        }
+        saveRow(rowIndex) {
+            if (this.options.readOnly) {
+                return;
+            }
+            const editRow = this.editRows[rowIndex];
+            if (!this.validateRow(editRow, true)) {
+                return false;
+            }
+            if (this.saveEditMode) {
+                const dataValue = this.dataValue || [];
+                switch (editRow.state) {
+                case EditRowState.New: {
+                        const newIndex = dataValue.length;
+                        dataValue.push(editRow.data);
+                        if (rowIndex !== newIndex) {
+                            this.editRows.splice(rowIndex, 1);
+                            this.editRows.splice(newIndex, 0, editRow);
+                        }
+                        break;
+                    }
+                case EditRowState.Editing: {
+                        dataValue[rowIndex] = editRow.data;
+                        break;
+                    }
+                }
+            }
+            editRow.state = EditRowState.Saved;
+            editRow.backup = null;
+            this.updateValue();
+            this.triggerChange();
+            this.checkValidity(null, true);
+            this.redraw();
+            return true;
+        }
+        updateComponentsRowIndex(components, rowIndex) {
+            components.forEach((component, colIndex) => {
+                component.rowIndex = rowIndex;
+                component.row = `${ rowIndex }-${ colIndex }`;
+            });
+        }
+        updateRowsComponents(rowIndex) {
+            this.editRows.slice(rowIndex).forEach((row, index) => {
+                this.updateComponentsRowIndex(row.components, index);
+            });
+        }
+        removeRow(rowIndex) {
+            if (this.options.readOnly) {
+                return;
+            }
+            const editRow = this.editRows[rowIndex];
+            editRow.state = EditRowState.Removed;
+            this.destroyComponents(rowIndex);
+            this.splice(rowIndex);
+            this.editRows.splice(rowIndex, 1);
+            this.updateRowsComponents(rowIndex);
+            this.updateValue();
+            this.triggerChange();
+            this.checkValidity(null, true);
+            this.checkData();
+            this.redraw();
+        }
+        removeAllRows() {
+            if (this.options.readOnly) {
+                return;
+            }
+            const editRows = this.editRows || [];
+            const rowIndex = editRows.length - 1;
+            for (let index = rowIndex; index >= 0; index--) {
+                this.removeRow(index);
+            }
+        }
+        createRowComponents(row, rowIndex) {
+            return this.component.components.map((col, colIndex) => {
+                const column = _.clone(col);
+                const options = _.clone(this.options);
+                options.name += `[${ rowIndex }]`;
+                options.row = `${ rowIndex }-${ colIndex }`;
+                options.onChange = (flags, changed, modified) => {
+                    const editRow = this.editRows[rowIndex];
+                    if (this.inlineEditMode) {
+                        this.triggerRootChange(flags, changed, modified);
+                    } else if (editRow) {
+                        this.checkRow('checkData', null, { changed }, editRow.data, editRow.components);
+                    }
+                };
+                const comp = this.createComponent(_.assign({}, column, { row: options.row }), options, row);
+                comp.rowIndex = rowIndex;
+                if (comp.path && column.key) {
+                    comp.path = comp.path.replace(new RegExp(`\\.${ column.key }$`), `[${ rowIndex }].${ column.key }`);
+                }
+                return comp;
+            });
+        }
+        validateRow(editRow, dirty) {
+            let valid = true;
+            if (editRow.state === EditRowState.Editing || dirty) {
+                editRow.components.forEach(comp => {
+                    comp.setPristine(!dirty);
+                    valid &= comp.checkValidity(null, dirty, editRow.data);
+                });
+            }
+            if (this.component.validate && this.component.validate.row) {
+                valid = this.evaluate(this.component.validate.row, {
+                    valid,
+                    row: editRow.data
+                }, 'valid', true);
+                if (valid.toString() !== 'true') {
+                    editRow.error = valid;
+                    valid = false;
+                } else {
+                    editRow.error = null;
+                }
+                if (valid === null) {
+                    valid = `Invalid row validation for ${ this.key }`;
+                }
+            }
+            return !!valid;
+        }
+        checkValidity(data, dirty, row) {
+            data = data || this.rootValue;
+            row = row || this.data;
+            if (!this.checkCondition(row, data)) {
+                this.setCustomValidity('');
+                return true;
+            }
+            return this.checkComponentValidity(data, dirty, row);
+        }
+        checkComponentValidity(data, dirty, row) {
+            if (!super.checkComponentValidity(data, dirty, row)) {
+                return false;
+            }
+            let rowsValid = true;
+            let rowsEditing = false;
+            this.editRows.forEach(editRow => {
+                const rowValid = this.validateRow(editRow, dirty);
+                rowsValid &= rowValid;
+                rowsEditing |= dirty && this.isOpen(editRow);
+            });
+            if (!rowsValid) {
+                this.setCustomValidity('Please correct rows before proceeding.', dirty);
+                return false;
+            } else if (rowsEditing && this.saveEditMode) {
+                this.setCustomValidity('Please save all rows before proceeding.', dirty);
+                return false;
+            }
+            const message = this.invalid || this.invalidMessage(data, dirty);
+            this.setCustomValidity(message, dirty);
+            return true;
+        }
+        get defaultValue() {
+            const value = super.defaultValue;
+            const defaultValue = Array.isArray(value) ? value : [];
+            _.times(this.minLength - defaultValue.length, () => defaultValue.push({}));
+            return defaultValue;
+        }
+        setValue(value, flags = {}) {
+            if (equal(this.defaultValue, value)) {
+                return false;
+            }
+            if (!value) {
+                this.dataValue = this.defaultValue;
+                return false;
+            }
+            if (!Array.isArray(value)) {
+                if (typeof value === 'object') {
+                    value = [value];
+                } else {
+                    return false;
+                }
+            }
+            const changed = this.hasChanged(value, this.dataValue);
+            this.dataValue = value;
+            this.dataValue.forEach((row, rowIndex) => {
+                let editRow = this.editRows[rowIndex];
+                if (editRow) {
+                    editRow.data = row;
+                    this.restoreRowContext(editRow, flags);
+                    editRow.state = EditRowState.Saved;
+                    editRow.backup = null;
+                    editRow.error = null;
+                } else {
+                    editRow = this.editRows[rowIndex] = {
+                        components: this.createRowComponents(row, rowIndex),
+                        data: row,
+                        state: EditRowState.Saved,
+                        backup: null,
+                        error: null
+                    };
+                    this.checkRow('checkData', null, {}, editRow.data, editRow.components);
+                }
+            });
+            this.updateOnChange(flags, changed);
+            if (changed) {
+                this.redraw();
+            }
+            return changed;
+        }
+        restoreRowContext(editRow, flags = {}) {
+            editRow.components.forEach(component => {
+                component.data = editRow.data;
+                this.setNestedValue(component, editRow.data, flags);
+            });
+        }
+    };
+    EditGridComponent.prototype.hasChanged = Component.prototype.hasChanged;
+});
+define('skylark-formio/components/textfield/TextField',[
+    '../_classes/input/Input',
+    '../../vendors/vanilla-text-mask/conformToMask',
+    '../../utils/utils'
+], function (Input, conformToMask, FormioUtils) {
+    'use strict';
+    return class TextFieldComponent extends Input {
+        static schema(...extend) {
+            return Input.schema({
+                label: 'Text Field',
+                key: 'textField',
+                type: 'textfield',
+                mask: false,
+                inputType: 'text',
+                inputFormat: 'plain',
+                inputMask: '',
+                tableView: true,
+                validate: {
+                    minLength: '',
+                    maxLength: '',
+                    pattern: ''
+                }
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Text Field',
+                icon: 'terminal',
+                group: 'basic',
+                documentation: 'http://help.form.io/userguide/#textfield',
+                weight: 0,
+                schema: TextFieldComponent.schema()
+            };
+        }
+        get defaultSchema() {
+            return TextFieldComponent.schema();
+        }
+        get inputInfo() {
+            const info = super.inputInfo;
+            info.type = 'input';
+            if (this.component.hasOwnProperty('spellcheck')) {
+                info.attr.spellcheck = this.component.spellcheck;
+            }
+            if (this.component.mask) {
+                info.attr.type = 'password';
+            } else {
+                info.attr.type = this.component.inputType === 'password' ? 'password' : 'text';
+            }
+            info.changeEvent = 'input';
+            return info;
+        }
+        get emptyValue() {
+            return '';
+        }
+        maskValue(value, flags = {}) {
+            if (!value || typeof value !== 'object') {
+                value = {
+                    value,
+                    maskName: this.component.inputMasks[0].label
+                };
+            }
+            if (!value.value) {
+                const defaultValue = flags.noDefault ? this.emptyValue : this.defaultValue;
+                value.value = Array.isArray(defaultValue) ? defaultValue[0] : defaultValue;
+            }
+            return value;
+        }
+        normalizeValue(value, flags = {}) {
+            if (!this.isMultipleMasksField) {
+                return super.normalizeValue(value);
+            }
+            if (Array.isArray(value)) {
+                return super.normalizeValue(value.map(val => this.maskValue(val, flags)));
+            }
+            return super.normalizeValue(this.maskValue(value, flags));
+        }
+        setValueAt(index, value, flags = {}) {
+            if (!this.isMultipleMasksField) {
+                return super.setValueAt(index, value, flags);
+            }
+            value = this.maskValue(value, flags);
+            const textValue = value.value || '';
+            const textInput = this.refs.mask ? this.refs.mask[index] : null;
+            const maskInput = this.refs.select ? this.refs.select[index] : null;
+            const mask = this.getMaskPattern(value.maskName);
+            if (textInput && maskInput && mask) {
+                textInput.value = conformToMask(textValue, FormioUtils.getInputMask(mask)).conformedValue;
+                maskInput.value = value.maskName;
+            } else {
+                return super.setValueAt(index, textValue, flags);
+            }
+        }
+        getValueAt(index) {
+            if (!this.isMultipleMasksField) {
+                return super.getValueAt(index);
+            }
+            const textInput = this.refs.mask ? this.refs.mask[index] : null;
+            const maskInput = this.refs.select ? this.refs.select[index] : null;
+            return {
+                value: textInput ? textInput.value : undefined,
+                maskName: maskInput ? maskInput.value : undefined
+            };
+        }
+        isEmpty(value = this.dataValue) {
+            if (!this.isMultipleMasksField) {
+                return super.isEmpty((value || '').toString().trim());
+            }
+            return super.isEmpty(value) || (this.component.multiple ? value.length === 0 : !value.maskName || !value.value);
+        }
+    };
+});
+define('skylark-formio/components/email/Email',['../textfield/TextField'], function (TextFieldComponent) {
+    'use strict';
+    return class EmailComponent extends TextFieldComponent {
+        static schema(...extend) {
+            return TextFieldComponent.schema({
+                type: 'email',
+                label: 'Email',
+                key: 'email',
+                inputType: 'email',
+                kickbox: { enabled: false }
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Email',
+                group: 'advanced',
+                icon: 'at',
+                documentation: 'http://help.form.io/userguide/#email',
+                weight: 10,
+                schema: EmailComponent.schema()
+            };
+        }
+        init() {
+            super.init();
+            this.validators.push('email');
+        }
+        get defaultSchema() {
+            return EmailComponent.schema();
+        }
+        get inputInfo() {
+            const info = super.inputInfo;
+            info.attr.type = this.component.mask ? 'password' : 'email';
+            return info;
+        }
+    };
+});
+define('skylark-formio/components/fieldset/Fieldset',['../_classes/nested/NestedComponent'], function (NestedComponent) {
+    'use strict';
+    return class FieldsetComponent extends NestedComponent {
+        static schema(...extend) {
+            return NestedComponent.schema({
+                label: 'Field Set',
+                key: 'fieldSet',
+                type: 'fieldset',
+                legend: '',
+                components: [],
+                input: false,
+                persistent: false
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Field Set',
+                icon: 'th-large',
+                group: 'layout',
+                documentation: 'http://help.form.io/userguide/#fieldset',
+                weight: 20,
+                schema: FieldsetComponent.schema()
+            };
+        }
+        get defaultSchema() {
+            return FieldsetComponent.schema();
+        }
+        get className() {
+            return `form-group ${ super.className }`;
+        }
+        get templateName() {
+            return 'fieldset';
+        }
+        constructor(...args) {
+            super(...args);
+            this.noField = true;
+        }
+    };
+});
+//download.js v4.2, by dandavis; 2008-2016. [MIT] see http://danml.com/download.html for tests/usage
+// v1 landed a FF+Chrome compat way of downloading strings to local un-named files, upgraded to use a hidden frame and optional mime
+// v2 added named files via a[download], msSaveBlob, IE (10+) support, and window.URL support for larger+faster saves than dataURLs
+// v3 added dataURL and Blob Input, bind-toggle arity, and legacy dataURL fallback was improved with force-download mime and base64 support. 3.1 improved safari handling.
+// v4 adds AMD/UMD, commonJS, and plain browser support
+// v4.1 adds url download capability via solo URL argument (same domain/CORS only)
+// v4.2 adds semantic variable names, long (over 2MB) dataURL support, and hidden by default temp anchors
+// https://github.com/rndme/download
+
+define('skylark-formio/vendors/downloadjs/download',[],function() {
+
+
+	return function download(data, strFileName, strMimeType) {
+
+		var self = window, // this script is only for browsers anyway...
+			defaultMime = "application/octet-stream", // this default mime also triggers iframe downloads
+			mimeType = strMimeType || defaultMime,
+			payload = data,
+			url = !strFileName && !strMimeType && payload,
+			anchor = document.createElement("a"),
+			toString = function(a){return String(a);},
+			myBlob = (self.Blob || self.MozBlob || self.WebKitBlob || toString),
+			fileName = strFileName || "download",
+			blob,
+			reader;
+			myBlob= myBlob.call ? myBlob.bind(self) : Blob ;
+	  
+		if(String(this)==="true"){ //reverse arguments, allowing download.bind(true, "text/xml", "export.xml") to act as a callback
+			payload=[payload, mimeType];
+			mimeType=payload[0];
+			payload=payload[1];
+		}
+
+
+		if(url && url.length< 2048){ // if no filename and no mime, assume a url was passed as the only argument
+			fileName = url.split("/").pop().split("?")[0];
+			anchor.href = url; // assign href prop to temp anchor
+		  	if(anchor.href.indexOf(url) !== -1){ // if the browser determines that it's a potentially valid url path:
+        		var ajax=new XMLHttpRequest();
+        		ajax.open( "GET", url, true);
+        		ajax.responseType = 'blob';
+        		ajax.onload= function(e){ 
+				  download(e.target.response, fileName, defaultMime);
+				};
+        		setTimeout(function(){ ajax.send();}, 0); // allows setting custom ajax headers using the return:
+			    return ajax;
+			} // end if valid url?
+		} // end if url?
+
+
+		//go ahead and download dataURLs right away
+		if(/^data:([\w+-]+\/[\w+.-]+)?[,;]/.test(payload)){
+		
+			if(payload.length > (1024*1024*1.999) && myBlob !== toString ){
+				payload=dataUrlToBlob(payload);
+				mimeType=payload.type || defaultMime;
+			}else{			
+				return navigator.msSaveBlob ?  // IE10 can't do a[download], only Blobs:
+					navigator.msSaveBlob(dataUrlToBlob(payload), fileName) :
+					saver(payload) ; // everyone else can save dataURLs un-processed
+			}
+			
+		}else{//not data url, is it a string with special needs?
+			if(/([\x80-\xff])/.test(payload)){			  
+				var i=0, tempUiArr= new Uint8Array(payload.length), mx=tempUiArr.length;
+				for(i;i<mx;++i) tempUiArr[i]= payload.charCodeAt(i);
+			 	payload=new myBlob([tempUiArr], {type: mimeType});
+			}		  
+		}
+		blob = payload instanceof myBlob ?
+			payload :
+			new myBlob([payload], {type: mimeType}) ;
+
+
+		function dataUrlToBlob(strUrl) {
+			var parts= strUrl.split(/[:;,]/),
+			type= parts[1],
+			decoder= parts[2] == "base64" ? atob : decodeURIComponent,
+			binData= decoder( parts.pop() ),
+			mx= binData.length,
+			i= 0,
+			uiArr= new Uint8Array(mx);
+
+			for(i;i<mx;++i) uiArr[i]= binData.charCodeAt(i);
+
+			return new myBlob([uiArr], {type: type});
+		 }
+
+		function saver(url, winMode){
+
+			if ('download' in anchor) { //html5 A[download]
+				anchor.href = url;
+				anchor.setAttribute("download", fileName);
+				anchor.className = "download-js-link";
+				anchor.innerHTML = "downloading...";
+				anchor.style.display = "none";
+				document.body.appendChild(anchor);
+				setTimeout(function() {
+					anchor.click();
+					document.body.removeChild(anchor);
+					if(winMode===true){setTimeout(function(){ self.URL.revokeObjectURL(anchor.href);}, 250 );}
+				}, 66);
+				return true;
+			}
+
+			// handle non-a[download] safari as best we can:
+			if(/(Version)\/(\d+)\.(\d+)(?:\.(\d+))?.*Safari\//.test(navigator.userAgent)) {
+				if(/^data:/.test(url))	url="data:"+url.replace(/^data:([\w\/\-\+]+)/, defaultMime);
+				if(!window.open(url)){ // popup blocked, offer direct download:
+					if(confirm("Displaying New Document\n\nUse Save As... to download, then click back to return to this page.")){ location.href=url; }
+				}
+				return true;
+			}
+
+			//do iframe dataURL download (old ch+FF):
+			var f = document.createElement("iframe");
+			document.body.appendChild(f);
+
+			if(!winMode && /^data:/.test(url)){ // force a mime that will download:
+				url="data:"+url.replace(/^data:([\w\/\-\+]+)/, defaultMime);
+			}
+			f.src=url;
+			setTimeout(function(){ document.body.removeChild(f); }, 333);
+
+		}//end saver
+
+
+
+
+		if (navigator.msSaveBlob) { // IE10+ : (has Blob, but not a[download] or URL)
+			return navigator.msSaveBlob(blob, fileName);
+		}
+
+		if(self.URL){ // simple fast and modern way using Blob and URL:
+			saver(self.URL.createObjectURL(blob), true);
+		}else{
+			// handle non-Blob()+non-URL browsers:
+			if(typeof blob === "string" || blob.constructor===toString ){
+				try{
+					return saver( "data:" +  mimeType   + ";base64,"  +  self.btoa(blob)  );
+				}catch(y){
+					return saver( "data:" +  mimeType   + "," + encodeURIComponent(blob)  );
+				}
+			}
+
+			// Blob but not URL support:
+			reader=new FileReader();
+			reader.onload=function(e){
+				saver(this.result);
+			};
+			reader.readAsDataURL(blob);
+		}
+		return true;
+	}; /* end download() */
+});
+
+define('skylark-formio/components/file/File',[
+    '../_classes/field/Field',
+    '../../utils/utils',
+    '../../vendors/downloadjs/download',
+    'skylark-lodash',
+    '../../Formio',
+    '../../vendors/getify/npo'
+], function (Field, utils, download, _, Formio, NativePromise) {
+    'use strict';
+    let Camera;
+    let webViewCamera = navigator.camera || Camera;
+    if (!HTMLCanvasElement.prototype.toBlob) {
+        Object.defineProperty(HTMLCanvasElement.prototype, 'toBlob', {
+            value: function (callback, type, quality) {
+                var canvas = this;
+                setTimeout(function () {
+                    var binStr = atob(canvas.toDataURL(type, quality).split(',')[1]), len = binStr.length, arr = new Uint8Array(len);
+                    for (var i = 0; i < len; i++) {
+                        arr[i] = binStr.charCodeAt(i);
+                    }
+                    callback(new Blob([arr], { type: type || 'image/png' }));
+                });
+            }
+        });
+    }
+    return class FileComponent extends Field {
+        static schema(...extend) {
+            return Field.schema({
+                type: 'file',
+                label: 'Upload',
+                key: 'file',
+                image: false,
+                privateDownload: false,
+                imageSize: '200',
+                filePattern: '*',
+                fileMinSize: '0KB',
+                fileMaxSize: '1GB',
+                uploadOnly: false
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'File',
+                group: 'premium',
+                icon: 'file',
+                documentation: 'http://help.form.io/userguide/#file',
+                weight: 100,
+                schema: FileComponent.schema()
+            };
+        }
+        init() {
+            super.init();
+            webViewCamera = navigator.camera || Camera;
+            const fileReaderSupported = typeof FileReader !== 'undefined';
+            const formDataSupported = Boolean(window.FormData);
+            const progressSupported = window.XMLHttpRequest ? 'upload' in new XMLHttpRequest() : false;
+            this.support = {
+                filereader: fileReaderSupported,
+                formdata: formDataSupported,
+                hasWarning: !fileReaderSupported || !formDataSupported || !progressSupported,
+                progress: progressSupported
+            };
+            this.filesReady = new NativePromise((resolve, reject) => {
+                this.filesReadyResolve = resolve;
+                this.filesReadyReject = reject;
+            });
+            this.cameraMode = false;
+            this.statuses = [];
+        }
+        get dataReady() {
+            return this.filesReady;
+        }
+        get defaultSchema() {
+            return FileComponent.schema();
+        }
+        loadImage(fileInfo) {
+            return this.fileService.downloadFile(fileInfo).then(result => result.url);
+        }
+        get emptyValue() {
+            return [];
+        }
+        getValueAsString(value) {
+            if (_.isArray(value)) {
+                return _.map(value, 'originalName').join(', ');
+            }
+            return _.get(value, 'originalName', '');
+        }
+        getValue() {
+            return this.dataValue;
+        }
+        get defaultValue() {
+            const value = super.defaultValue;
+            return Array.isArray(value) ? value : [];
+        }
+        get hasTypes() {
+            return this.component.fileTypes && Array.isArray(this.component.fileTypes) && this.component.fileTypes.length !== 0 && (this.component.fileTypes[0].label !== '' || this.component.fileTypes[0].value !== '');
+        }
+        get fileService() {
+            if (this.options.fileService) {
+                return this.options.fileService;
+            }
+            if (this.options.formio) {
+                return this.options.formio;
+            }
+            if (this.root && this.root.formio) {
+                return this.root.formio;
+            }
+            const formio = new Formio();
+            if (this.root && this.root._form && this.root._form._id) {
+                formio.formUrl = `${ formio.projectUrl }/form/${ this.root._form._id }`;
+            }
+            return formio;
+        }
+        render() {
+            return super.render(this.renderTemplate('file', {
+                fileSize: this.fileSize,
+                files: this.dataValue || [],
+                statuses: this.statuses,
+                disabled: this.disabled,
+                support: this.support
+            }));
+        }
+        getVideoStream(constraints) {
+            return navigator.mediaDevices.getUserMedia({
+                video: {
+                    width: {
+                        min: 640,
+                        ideal: 1920
+                    },
+                    height: {
+                        min: 360,
+                        ideal: 1080
+                    },
+                    aspectRatio: { ideal: 16 / 9 },
+                    ...constraints
+                },
+                audio: false
+            });
+        }
+        stopVideoStream(videoStream) {
+            videoStream.getVideoTracks().forEach(track => track.stop());
+        }
+        getFrame(videoPlayer) {
+            return new NativePromise(resolve => {
+                const canvas = document.createElement('canvas');
+                canvas.height = videoPlayer.videoHeight;
+                canvas.width = videoPlayer.videoWidth;
+                const context = canvas.getContext('2d');
+                context.drawImage(videoPlayer, 0, 0);
+                canvas.toBlob(resolve);
+            });
+        }
+        startVideo() {
+            this.getVideoStream().then(stream => {
+                this.videoStream = stream;
+                const {videoPlayer} = this.refs;
+                if (!videoPlayer) {
+                    console.warn('Video player not found in template.');
+                    this.cameraMode = false;
+                    this.redraw();
+                    return;
+                }
+                videoPlayer.srcObject = stream;
+                const width = parseInt(this.component.webcamSize) || 320;
+                videoPlayer.setAttribute('width', width);
+                videoPlayer.play();
+            }).catch(err => {
+                console.error(err);
+                this.cameraMode = false;
+                this.redraw();
+            });
+        }
+        stopVideo() {
+            if (this.videoStream) {
+                this.stopVideoStream(this.videoStream);
+                this.videoStream = null;
+            }
+        }
+        takePicture() {
+            const {videoPlayer} = this.refs;
+            if (!videoPlayer) {
+                console.warn('Video player not found in template.');
+                this.cameraMode = false;
+                this.redraw();
+                return;
+            }
+            this.getFrame(videoPlayer).then(frame => {
+                frame.name = `photo-${ Date.now() }.png`;
+                this.upload([frame]);
+                this.cameraMode = false;
+                this.redraw();
+            });
+        }
+        browseFiles(attrs = {}) {
+            return new NativePromise(resolve => {
+                const fileInput = this.ce('input', {
+                    type: 'file',
+                    style: 'height: 0; width: 0; visibility: hidden;',
+                    tabindex: '-1',
+                    ...attrs
+                });
+                document.body.appendChild(fileInput);
+                fileInput.addEventListener('change', () => {
+                    resolve(fileInput.files);
+                    document.body.removeChild(fileInput);
+                }, true);
+                if (typeof fileInput.trigger === 'function') {
+                    fileInput.trigger('click');
+                } else {
+                    fileInput.click();
+                }
+            });
+        }
+        set cameraMode(value) {
+            this._cameraMode = value;
+            if (value) {
+                this.startVideo();
+            } else {
+                this.stopVideo();
+            }
+        }
+        get cameraMode() {
+            return this._cameraMode;
+        }
+        get useWebViewCamera() {
+            return this.imageUpload && webViewCamera;
+        }
+        get imageUpload() {
+            return Boolean(this.component.image);
+        }
+        get browseOptions() {
+            const options = {};
+            if (this.component.multiple) {
+                options.multiple = true;
+            }
+            if (this.imageUpload) {
+                options.accept = 'image/*';
+            }
+            return options;
+        }
+        deleteFile(fileInfo) {
+            if (fileInfo && this.component.storage === 'url') {
+                const fileService = this.fileService;
+                if (fileService && typeof fileService.deleteFile === 'function') {
+                    fileService.deleteFile(fileInfo);
+                } else {
+                    const formio = this.options.formio || this.root && this.root.formio;
+                    if (formio) {
+                        formio.makeRequest('', fileInfo.url, 'delete');
+                    }
+                }
+            }
+        }
+        attach(element) {
+            this.loadRefs(element, {
+                fileDrop: 'single',
+                fileBrowse: 'single',
+                galleryButton: 'single',
+                cameraButton: 'single',
+                takePictureButton: 'single',
+                toggleCameraMode: 'single',
+                videoPlayer: 'single',
+                fileLink: 'multiple',
+                removeLink: 'multiple',
+                fileStatusRemove: 'multiple',
+                fileImage: 'multiple',
+                fileType: 'multiple'
+            });
+            this.refs.input = [];
+            const superAttach = super.attach(element);
+            if (this.refs.fileDrop) {
+                const element = this;
+                this.addEventListener(this.refs.fileDrop, 'dragover', function (event) {
+                    this.className = 'fileSelector fileDragOver';
+                    event.preventDefault();
+                });
+                this.addEventListener(this.refs.fileDrop, 'dragleave', function (event) {
+                    this.className = 'fileSelector';
+                    event.preventDefault();
+                });
+                this.addEventListener(this.refs.fileDrop, 'drop', function (event) {
+                    this.className = 'fileSelector';
+                    event.preventDefault();
+                    element.upload(event.dataTransfer.files);
+                    return false;
+                });
+            }
+            if (this.refs.fileBrowse) {
+                this.addEventListener(this.refs.fileBrowse, 'click', event => {
+                    event.preventDefault();
+                    this.browseFiles(this.browseOptions).then(files => {
+                        this.upload(files);
+                    });
+                });
+            }
+            this.refs.fileLink.forEach((fileLink, index) => {
+                this.addEventListener(fileLink, 'click', event => {
+                    event.preventDefault();
+                    this.getFile(this.dataValue[index]);
+                });
+            });
+            this.refs.removeLink.forEach((removeLink, index) => {
+                this.addEventListener(removeLink, 'click', event => {
+                    const fileInfo = this.dataValue[index];
+                    this.deleteFile(fileInfo);
+                    event.preventDefault();
+                    this.splice(index);
+                    this.redraw();
+                });
+            });
+            this.refs.fileStatusRemove.forEach((fileStatusRemove, index) => {
+                this.addEventListener(fileStatusRemove, 'click', event => {
+                    event.preventDefault();
+                    this.statuses.splice(index, 1);
+                    this.redraw();
+                });
+            });
+            if (this.refs.galleryButton && webViewCamera) {
+                this.addEventListener(this.refs.galleryButton, 'click', event => {
+                    event.preventDefault();
+                    webViewCamera.getPicture(success => {
+                        window.resolveLocalFileSystemURL(success, fileEntry => {
+                            fileEntry.file(file => {
+                                this.upload([file]);
+                            });
+                        });
+                    }, err => {
+                        console.error(err);
+                    }, { sourceType: webViewCamera.PictureSourceType.PHOTOLIBRARY });
+                });
+            }
+            if (this.refs.cameraButton && webViewCamera) {
+                this.addEventListener(this.refs.cameraButton, 'click', event => {
+                    event.preventDefault();
+                    webViewCamera.getPicture(success => {
+                        window.resolveLocalFileSystemURL(success, fileEntry => {
+                            fileEntry.file(file => {
+                                this.upload([file]);
+                            });
+                        });
+                    }, err => {
+                        console.error(err);
+                    }, {
+                        sourceType: webViewCamera.PictureSourceType.CAMERA,
+                        encodingType: webViewCamera.EncodingType.PNG,
+                        mediaType: webViewCamera.MediaType.PICTURE,
+                        saveToPhotoAlbum: true,
+                        correctOrientation: false
+                    });
+                });
+            }
+            if (this.refs.takePictureButton) {
+                this.addEventListener(this.refs.takePictureButton, 'click', event => {
+                    event.preventDefault();
+                    this.takePicture();
+                });
+            }
+            if (this.refs.toggleCameraMode) {
+                this.addEventListener(this.refs.toggleCameraMode, 'click', event => {
+                    event.preventDefault();
+                    this.cameraMode = !this.cameraMode;
+                    this.redraw();
+                });
+            }
+            this.refs.fileType.forEach((fileType, index) => {
+                this.dataValue[index].fileType = this.component.fileTypes[0].label;
+                this.addEventListener(fileType, 'change', event => {
+                    event.preventDefault();
+                    const fileType = this.component.fileTypes.find(typeObj => typeObj.value === event.target.value);
+                    this.dataValue[index].fileType = fileType.label;
+                });
+            });
+            const fileService = this.fileService;
+            if (fileService) {
+                const loadingImages = [];
+                this.refs.fileImage.forEach((image, index) => {
+                    loadingImages.push(this.loadImage(this.dataValue[index]).then(url => image.src = url));
+                });
+                if (loadingImages.length) {
+                    NativePromise.all(loadingImages).then(() => {
+                        this.filesReadyResolve();
+                    }).catch(() => this.filesReadyReject());
+                }
+            }
+            return superAttach;
+        }
+        fileSize(a, b, c, d, e) {
+            return `${ (b = Math, c = b.log, d = 1024, e = c(a) / c(d) | 0, a / b.pow(d, e)).toFixed(2) } ${ e ? `${ 'kMGTPEZY'[--e] }B` : 'Bytes' }`;
+        }
+        globStringToRegex(str) {
+            let regexp = '', excludes = [];
+            if (str.length > 2 && str[0] === '/' && str[str.length - 1] === '/') {
+                regexp = str.substring(1, str.length - 1);
+            } else {
+                const split = str.split(',');
+                if (split.length > 1) {
+                    for (let i = 0; i < split.length; i++) {
+                        const r = this.globStringToRegex(split[i]);
+                        if (r.regexp) {
+                            regexp += `(${ r.regexp })`;
+                            if (i < split.length - 1) {
+                                regexp += '|';
+                            }
+                        } else {
+                            excludes = excludes.concat(r.excludes);
+                        }
+                    }
+                } else {
+                    if (str.startsWith('!')) {
+                        excludes.push(`^((?!${ this.globStringToRegex(str.substring(1)).regexp }).)*$`);
+                    } else {
+                        if (str.startsWith('.')) {
+                            str = `*${ str }`;
+                        }
+                        regexp = `^${ str.replace(new RegExp('[.\\\\+*?\\[\\^\\]$(){}=!<>|:\\-]', 'g'), '\\$&') }$`;
+                        regexp = regexp.replace(/\\\*/g, '.*').replace(/\\\?/g, '.');
+                    }
+                }
+            }
+            return {
+                regexp,
+                excludes
+            };
+        }
+        translateScalars(str) {
+            if (typeof str === 'string') {
+                if (str.search(/kb/i) === str.length - 2) {
+                    return parseFloat(str.substring(0, str.length - 2) * 1024);
+                }
+                if (str.search(/mb/i) === str.length - 2) {
+                    return parseFloat(str.substring(0, str.length - 2) * 1024 * 1024);
+                }
+                if (str.search(/gb/i) === str.length - 2) {
+                    return parseFloat(str.substring(0, str.length - 2) * 1024 * 1024 * 1024);
+                }
+                if (str.search(/b/i) === str.length - 1) {
+                    return parseFloat(str.substring(0, str.length - 1));
+                }
+                if (str.search(/s/i) === str.length - 1) {
+                    return parseFloat(str.substring(0, str.length - 1));
+                }
+                if (str.search(/m/i) === str.length - 1) {
+                    return parseFloat(str.substring(0, str.length - 1) * 60);
+                }
+                if (str.search(/h/i) === str.length - 1) {
+                    return parseFloat(str.substring(0, str.length - 1) * 3600);
+                }
+            }
+            return str;
+        }
+        validatePattern(file, val) {
+            if (!val) {
+                return true;
+            }
+            const pattern = this.globStringToRegex(val);
+            let valid = true;
+            if (pattern.regexp && pattern.regexp.length) {
+                const regexp = new RegExp(pattern.regexp, 'i');
+                valid = !_.isNil(file.type) && regexp.test(file.type) || !_.isNil(file.name) && regexp.test(file.name);
+            }
+            valid = pattern.excludes.reduce((result, excludePattern) => {
+                const exclude = new RegExp(excludePattern, 'i');
+                return result && (_.isNil(file.type) || !exclude.test(file.type)) && (_.isNil(file.name) || !exclude.test(file.name));
+            }, valid);
+            return valid;
+        }
+        validateMinSize(file, val) {
+            return file.size + 0.1 >= this.translateScalars(val);
+        }
+        validateMaxSize(file, val) {
+            return file.size - 0.1 <= this.translateScalars(val);
+        }
+        upload(files) {
+            if (!this.component.multiple) {
+                files = Array.prototype.slice.call(files, 0, 1);
+            }
+            if (this.component.storage && files && files.length) {
+                Array.prototype.forEach.call(files, file => {
+                    const fileName = utils.uniqueName(file.name, this.component.fileNameTemplate, this.evalContext());
+                    const fileUpload = {
+                        originalName: file.name,
+                        name: fileName,
+                        size: file.size,
+                        status: 'info',
+                        message: this.t('Starting upload')
+                    };
+                    if (this.component.filePattern && !this.validatePattern(file, this.component.filePattern)) {
+                        fileUpload.status = 'error';
+                        fileUpload.message = this.t('File is the wrong type; it must be {{ pattern }}', { pattern: this.component.filePattern });
+                    }
+                    if (this.component.fileMinSize && !this.validateMinSize(file, this.component.fileMinSize)) {
+                        fileUpload.status = 'error';
+                        fileUpload.message = this.t('File is too small; it must be at least {{ size }}', { size: this.component.fileMinSize });
+                    }
+                    if (this.component.fileMaxSize && !this.validateMaxSize(file, this.component.fileMaxSize)) {
+                        fileUpload.status = 'error';
+                        fileUpload.message = this.t('File is too big; it must be at most {{ size }}', { size: this.component.fileMaxSize });
+                    }
+                    const dir = this.interpolate(this.component.dir || '');
+                    const {fileService} = this;
+                    if (!fileService) {
+                        fileUpload.status = 'error';
+                        fileUpload.message = this.t('File Service not provided.');
+                    }
+                    this.statuses.push(fileUpload);
+                    this.redraw();
+                    if (fileUpload.status !== 'error') {
+                        if (this.component.privateDownload) {
+                            file.private = true;
+                        }
+                        const {storage, options = {}} = this.component;
+                        const url = this.interpolate(this.component.url);
+                        const fileKey = this.component.fileKey || 'file';
+                        fileService.uploadFile(storage, file, fileName, dir, evt => {
+                            fileUpload.status = 'progress';
+                            fileUpload.progress = parseInt(100 * evt.loaded / evt.total);
+                            delete fileUpload.message;
+                            this.redraw();
+                        }, url, options, fileKey).then(fileInfo => {
+                            const index = this.statuses.indexOf(fileUpload);
+                            if (index !== -1) {
+                                this.statuses.splice(index, 1);
+                            }
+                            fileInfo.originalName = file.name;
+                            if (!this.hasValue()) {
+                                this.dataValue = [];
+                            }
+                            this.dataValue.push(fileInfo);
+                            this.redraw();
+                            this.triggerChange();
+                        }).catch(response => {
+                            fileUpload.status = 'error';
+                            fileUpload.message = response;
+                            delete fileUpload.progress;
+                            this.redraw();
+                        });
+                    }
+                });
+            }
+        }
+        getFile(fileInfo) {
+            const {
+                options = {}
+            } = this.component;
+            const {fileService} = this;
+            if (!fileService) {
+                return alert('File Service not provided');
+            }
+            if (this.component.privateDownload) {
+                fileInfo.private = true;
+            }
+            fileService.downloadFile(fileInfo, options).then(file => {
+                if (file) {
+                    if ([
+                            'base64',
+                            'indexeddb'
+                        ].includes(file.storage)) {
+                        download(file.url, file.originalName || file.name, file.type);
+                    } else {
+                        window.open(file.url, '_blank');
+                    }
+                }
+            }).catch(response => {
+                alert(response);
+            });
+        }
+        focus() {
+            if (this.refs.fileBrowse) {
+                this.refs.fileBrowse.focus();
+            }
+        }
+    };
+});
+define('skylark-formio/i18n',[],function () {
+    'use strict';
+    return {
+        lng: 'en',
+        resources: {
+            en: {
+                translation: {
+                    complete: 'Submission Complete',
+                    error: 'Please fix the following errors before submitting.',
+                    submitError: 'Please check the form and correct all errors before submitting.',
+                    required: '{{field}} is required',
+                    unique: '{{field}} must be unique',
+                    array: '{{field}} must be an array',
+                    array_nonempty: '{{field}} must be a non-empty array',
+                    nonarray: '{{field}} must not be an array',
+                    select: '{{field}} contains an invalid selection',
+                    pattern: '{{field}} does not match the pattern {{pattern}}',
+                    minLength: '{{field}} must have at least {{length}} characters.',
+                    maxLength: '{{field}} must have no more than {{length}} characters.',
+                    minWords: '{{field}} must have at least {{length}} words.',
+                    maxWords: '{{field}} must have no more than {{length}} words.',
+                    min: '{{field}} cannot be less than {{min}}.',
+                    max: '{{field}} cannot be greater than {{max}}.',
+                    maxDate: '{{field}} should not contain date after {{- maxDate}}',
+                    minDate: '{{field}} should not contain date before {{- minDate}}',
+                    maxYear: '{{field}} should not contain year greater than {{maxYear}}',
+                    minYear: '{{field}} should not contain year less than {{minYear}}',
+                    invalid_email: '{{field}} must be a valid email.',
+                    invalid_url: '{{field}} must be a valid url.',
+                    invalid_regex: '{{field}} does not match the pattern {{regex}}.',
+                    invalid_date: '{{field}} is not a valid date.',
+                    invalid_day: '{{field}} is not a valid day.',
+                    mask: '{{field}} does not match the mask.',
+                    stripe: '{{stripe}}',
+                    month: 'Month',
+                    day: 'Day',
+                    year: 'Year',
+                    january: 'January',
+                    february: 'February',
+                    march: 'March',
+                    april: 'April',
+                    may: 'May',
+                    june: 'June',
+                    july: 'July',
+                    august: 'August',
+                    september: 'September',
+                    october: 'October',
+                    november: 'November',
+                    december: 'December',
+                    next: 'Next',
+                    previous: 'Previous',
+                    cancel: 'Cancel',
+                    submit: 'Submit Form'
+                }
+            }
+        }
+    };
+});
 define('skylark-formio/Webform',[
     'skylark-lodash',
     'skylark-moment',
@@ -16728,8 +25878,9 @@ define('skylark-formio/Webform',[
     './components/Components',
     './components/_classes/nesteddata/NestedDataComponent',
     './utils/utils',
-    './utils/formUtils'
-], function (_, moment, EventEmitter, i18next, Formio, NativePromise, Components, NestedDataComponent, a, b) {
+    './utils/formUtils',
+    "./i18n"
+], function (_, moment, EventEmitter, i18next, Formio, NativePromise, Components, NestedDataComponent, utils, formUtils,i18n) {
     'use strict';
     Formio.forms = {};
     Formio.registerComponent = Components.setComponent;
@@ -16756,7 +25907,7 @@ define('skylark-formio/Webform',[
         }
         return options;
     }
-    return class Webform extends NestedDataComponent {
+    class Webform extends NestedDataComponent {
         constructor() {
             let element, options;
             if (arguments[0] instanceof HTMLElement || arguments[1]) {
@@ -16771,7 +25922,7 @@ define('skylark-formio/Webform',[
             if (this.options.baseUrl) {
                 Formio.setBaseUrl(this.options.baseUrl);
             }
-            let i18n = require('./i18n').default;
+            //let i18n = require('./i18n').default;
             if (options && options.i18n && !options.i18nReady) {
                 if (options.i18n.resources) {
                     i18n = options.i18n;
@@ -17135,7 +26286,7 @@ define('skylark-formio/Webform',[
                 }
             }).then(submissions => {
                 if (submissions.length > 0 && !this.options.skipDraftRestore) {
-                    const draft = a.fastCloneDeep(submissions[0]);
+                    const draft = utils.fastCloneDeep(submissions[0]);
                     return this.setSubmission(draft).then(() => {
                         this.draftEnabled = true;
                         this.savingDraft = false;
@@ -17148,9 +26299,9 @@ define('skylark-formio/Webform',[
             });
         }
         get schema() {
-            const schema = a.fastCloneDeep(_.omit(this._form, ['components']));
+            const schema = utils.fastCloneDeep(_.omit(this._form, ['components']));
             schema.components = [];
-            this.undefined(component => schema.components.push(component.schema));
+            this.eachComponent(component => schema.components.push(component.schema));
             return schema;
         }
         mergeData(_this, _that) {
@@ -17269,7 +26420,7 @@ define('skylark-formio/Webform',[
         }
         hasRequiredFields() {
             let result = false;
-            b.eachComponent(this.form.components, component => {
+            formUtils.eachComponent(this.form.components, component => {
                 if (component.validate.required) {
                     result = true;
                     return true;
@@ -17426,7 +26577,7 @@ define('skylark-formio/Webform',[
             this.loading = false;
             this.submitting = false;
             this.setPristine(true);
-            this.setValue(a.fastCloneDeep(submission), {
+            this.setValue(utils.fastCloneDeep(submission), {
                 noValidate: true,
                 noCheck: true
             });
@@ -17514,10 +26665,10 @@ define('skylark-formio/Webform',[
                         saved: false
                     });
                 }
-                const submission = a.fastCloneDeep(this.submission || {});
+                const submission = utils.fastCloneDeep(this.submission || {});
                 submission.metadata = submission.metadata || {};
                 _.defaults(submission.metadata, {
-                    timezone: _.get(this, '_submission.metadata.timezone', a.currentTimezone()),
+                    timezone: _.get(this, '_submission.metadata.timezone', utils.currentTimezone()),
                     offset: parseInt(_.get(this, '_submission.metadata.offset', moment().utcOffset()), 10),
                     referrer: document.referrer,
                     browserName: navigator.appName,
@@ -17650,6 +26801,9 @@ define('skylark-formio/Webform',[
     Webform.setBaseUrl = Formio.setBaseUrl;
     Webform.setApiUrl = Formio.setApiUrl;
     Webform.setAppUrl = Formio.setAppUrl;
+
+
+    return Webform;
 });
 define('skylark-formio/PDF',[
     './vendors/getify/npo',
@@ -17658,7 +26812,7 @@ define('skylark-formio/PDF',[
     './utils/utils'
 ], function (NativePromise, Formio, Webform, a) {
     'use strict';
-    return class PDF extends Webform {
+    class PDF extends Webform {
         constructor(element, options) {
             super(element, options);
             this.components = [];
@@ -17884,6 +27038,9 @@ define('skylark-formio/PDF',[
             Formio.forms[eventData.formId].emit(`iframe-${ eventData.name }`, eventData.data);
         }
     });
+
+
+    return PDF;
 });
 define('skylark-formio/Wizard',[
     './vendors/getify/npo',
@@ -17893,7 +27050,7 @@ define('skylark-formio/Wizard',[
     './utils/utils'
 ], function (NativePromise, _, Webform, Formio, a) {
     'use strict';
-    return class Wizard extends Webform {
+    class Wizard extends Webform {
         constructor() {
             let element, options;
             if (arguments[0] instanceof HTMLElement || arguments[1]) {
@@ -18390,7 +27547,7 @@ define('skylark-formio/Wizard',[
             }
         }
         checkValidity(data, dirty, row, currentPageOnly) {
-            if (!this.undefined(row, data)) {
+            if (!this.checkCondition(row, data)) {
                 this.setCustomValidity('');
                 return true;
             }
@@ -18425,6 +27582,8 @@ define('skylark-formio/Wizard',[
     Wizard.setBaseUrl = Formio.setBaseUrl;
     Wizard.setApiUrl = Formio.setApiUrl;
     Wizard.setAppUrl = Formio.setAppUrl;
+
+    return Wizard;
 });
 define('skylark-formio/displays/Displays',[
     'skylark-lodash',
@@ -18466,7 +27625,8 @@ define('skylark-formio/Form',[
     './vendors/getify/npo'
 ], function (Element, Formio, Displays, templates, FormioUtils, NativePromise) {
     'use strict';
-    return class Form extends Element {
+    
+    class Form extends Element {
         constructor(...args) {
             let options = args[0] instanceof HTMLElement ? args[2] : args[1];
             if (Formio.options && Formio.options.form) {
@@ -18662,7 +27822,4834 @@ define('skylark-formio/Form',[
     Formio.createForm = (...args) => {
         return new Form(...args).ready;
     };
-    Formio.Form = Form;
+    
+    return Formio.Form = Form;
+});
+define('skylark-formio/components/form/Form',[
+    'skylark-lodash',
+    '../_classes/component/Component',
+    '../../vendors/eventemitter2/EventEmitter2',
+    '../../vendors/getify/npo',
+    '../../utils/utils',
+    '../../Formio',
+    '../../Form'
+], function (_, Component, EventEmitter, NativePromise, a, Formio, Form) {
+    'use strict';
+    return class FormComponent extends Component {
+        static schema(...extend) {
+            return Component.schema({
+                label: 'Form',
+                type: 'form',
+                key: 'form',
+                src: '',
+                reference: true,
+                form: '',
+                path: '',
+                tableView: true
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Nested Form',
+                icon: 'wpforms',
+                group: 'premium',
+                documentation: 'http://help.form.io/userguide/#form',
+                weight: 110,
+                schema: FormComponent.schema()
+            };
+        }
+        init() {
+            super.init();
+            this.formObj = {
+                display: this.component.display,
+                settings: this.component.settings,
+                components: this.component.components
+            };
+            this.subForm = null;
+            this.formSrc = '';
+            if (this.component.src) {
+                this.formSrc = this.component.src;
+            }
+            if (!this.component.src && !this.options.formio && (this.component.form || this.component.path)) {
+                if (this.component.project) {
+                    this.formSrc = Formio.getBaseUrl();
+                    if (a.isMongoId(this.component.project)) {
+                        this.formSrc += '/project';
+                    }
+                    this.formSrc += `/${ this.component.project }`;
+                    this.options.project = this.formSrc;
+                } else {
+                    this.formSrc = Formio.getProjectUrl();
+                    this.options.project = this.formSrc;
+                }
+                if (this.component.form) {
+                    this.formSrc += `/form/${ this.component.form }`;
+                } else if (this.component.path) {
+                    this.formSrc += `/${ this.component.path }`;
+                }
+            }
+            if (!this.formSrc && this.options.formio) {
+                const rootSrc = this.options.formio.formsUrl;
+                if (this.component.path) {
+                    const parts = rootSrc.split('/');
+                    parts.pop();
+                    this.formSrc = `${ parts.join('/') }/${ this.component.path }`;
+                }
+                if (this.component.form) {
+                    this.formSrc = `${ rootSrc }/${ this.component.form }`;
+                }
+            }
+            if (this.component.revision || this.component.revision === 0) {
+                this.formSrc += `/v/${ this.component.revision }`;
+            }
+        }
+        get dataReady() {
+            return this.subFormReady || NativePromise.resolve();
+        }
+        get defaultValue() {
+            return this.subForm ? super.defaultValue : null;
+        }
+        get defaultSchema() {
+            return FormComponent.schema();
+        }
+        get emptyValue() {
+            return { data: {} };
+        }
+        get ready() {
+            return this.subFormReady || NativePromise.resolve();
+        }
+        getSubOptions(options = {}) {
+            if (!this.options) {
+                return options;
+            }
+            if (this.options.base) {
+                options.base = this.options.base;
+            }
+            if (this.options.project) {
+                options.project = this.options.project;
+            }
+            if (this.options.readOnly) {
+                options.readOnly = this.options.readOnly;
+            }
+            if (this.options.breadcrumbSettings) {
+                options.breadcrumbSettings = this.options.breadcrumbSettings;
+            }
+            if (this.options.buttonSettings) {
+                options.buttonSettings = _.clone(this.options.buttonSettings);
+            }
+            if (this.options.viewAsHtml) {
+                options.viewAsHtml = this.options.viewAsHtml;
+            }
+            if (this.options.language) {
+                options.language = this.options.language;
+            }
+            if (this.options.template) {
+                options.template = this.options.template;
+            }
+            if (this.options.templates) {
+                options.templates = this.options.templates;
+            }
+            if (this.options.renderMode) {
+                options.renderMode = this.options.renderMode;
+            }
+            if (this.options.attachMode) {
+                options.attachMode = this.options.attachMode;
+            }
+            if (this.options.iconset) {
+                options.iconset = this.options.iconset;
+            }
+            options.events = this.createEmitter();
+            _.set(options, 'buttonSettings.showSubmit', false);
+            return options;
+        }
+        render() {
+            if (this.builderMode) {
+                return super.render(this.component.label || 'Nested form');
+            }
+            const subform = this.subForm ? this.subForm.render() : this.renderTemplate('loading');
+            return super.render(subform);
+        }
+        asString(value) {
+            return this.getValueAsString(value);
+        }
+        getValueAsString(value) {
+            if (!value) {
+                return 'No data provided';
+            }
+            if (!value.data && value._id) {
+                return value._id;
+            }
+            if (!value.data || !Object.keys(value.data).length) {
+                return 'No data provided';
+            }
+            return '[Complex Data]';
+        }
+        attach(element) {
+            if (this.builderMode) {
+                return super.attach(element);
+            }
+            return super.attach(element).then(() => this.createSubForm()).then(() => {
+                this.empty(element);
+                if (this.options.builder) {
+                    this.setContent(element, this.ce('div', { class: 'text-muted text-center p-2' }, this.text(this.formObj.title)));
+                    return;
+                }
+                this.setContent(element, this.render());
+                if (this.subForm) {
+                    this.subForm.attach(element);
+                }
+            });
+        }
+        detach() {
+            if (this.subForm) {
+                this.subForm.detach();
+            }
+            super.detach();
+        }
+        get currentForm() {
+            return this._currentForm;
+        }
+        set currentForm(instance) {
+            this._currentForm = instance;
+            if (!this.subForm) {
+                return;
+            }
+            this.subForm.getComponents().forEach(component => {
+                component.currentForm = this;
+            });
+        }
+        destroy() {
+            if (this.subForm) {
+                this.subForm.destroy();
+                this.subForm = null;
+                this.subFormReady = null;
+            }
+            super.destroy();
+        }
+        redraw() {
+            if (this.subForm) {
+                this.subForm.form = this.formObj;
+            }
+            return super.redraw();
+        }
+        everyComponent(...args) {
+            if (this.subForm) {
+                this.subForm.everyComponent(...args);
+            }
+        }
+        createSubForm() {
+            this.subFormReady = this.loadSubForm().then(form => {
+                if (!form) {
+                    return;
+                }
+                a.eachComponent(form.components, component => {
+                    if (component.type === 'button' && (component.action === 'submit' || !component.action)) {
+                        component.hidden = true;
+                    }
+                });
+                if (this.subForm) {
+                    this.subForm.destroy();
+                }
+                return new Form(form, this.getSubOptions()).ready.then(instance => {
+                    this.subForm = instance;
+                    this.subForm.currentForm = this;
+                    this.subForm.parent = this;
+                    this.subForm.parentVisible = this.visible;
+                    this.subForm.on('change', () => {
+                        if (this.subForm) {
+                            this.dataValue = this.subForm.getValue();
+                            this.triggerChange({ noEmit: true });
+                        }
+                    });
+                    this.subForm.url = this.formSrc;
+                    this.subForm.nosubmit = true;
+                    this.subForm.root = this.root;
+                    this.restoreValue();
+                    return this.subForm;
+                });
+            });
+            return this.subFormReady;
+        }
+        loadSubForm() {
+            if (this.builderMode || this.isHidden()) {
+                return NativePromise.resolve();
+            }
+            if (this.formObj && this.formObj.components && Array.isArray(this.formObj.components) && this.formObj.components.length) {
+                if (this.root && this.root.form && this.root.form.config && !this.formObj.config) {
+                    this.formObj.config = this.root.form.config;
+                }
+                return NativePromise.resolve(this.formObj);
+            } else if (this.formSrc) {
+                return new Formio(this.formSrc).loadForm({ params: { live: 1 } }).then(formObj => {
+                    this.formObj = formObj;
+                    return formObj;
+                });
+            }
+            return NativePromise.resolve();
+        }
+        checkComponentValidity(data, dirty, row) {
+            if (this.subForm) {
+                return this.subForm.checkValidity(this.dataValue.data, dirty);
+            }
+            return super.checkComponentValidity(data, dirty, row);
+        }
+        checkComponentConditions(data, flags, row) {
+            const visible = super.checkComponentConditions(data, flags, row);
+            if (!visible) {
+                return visible;
+            }
+            if (this.subForm && this.subForm.hasCondition()) {
+                return this.subForm.checkConditions(this.dataValue.data);
+            }
+            return visible;
+        }
+        calculateValue(data, flags, row) {
+            if (this.subForm) {
+                return this.subForm.calculateValue(this.dataValue.data, flags);
+            }
+            return super.calculateValue(data, flags, row);
+        }
+        setPristine(pristine) {
+            super.setPristine(pristine);
+            if (this.subForm) {
+                this.subForm.setPristine(pristine);
+            }
+        }
+        get shouldSubmit() {
+            return this.subFormReady && (!this.component.hasOwnProperty('reference') || this.component.reference) && !this.isHidden();
+        }
+        getSubFormData() {
+            if (_.get(this.subForm, 'form.display') === 'pdf') {
+                return this.subForm.getSubmission();
+            } else {
+                return NativePromise.resolve(this.dataValue);
+            }
+        }
+        submitSubForm(rejectOnError) {
+            if (this.shouldSubmit) {
+                const subFormReady = this.subFormReady || this.createSubForm();
+                return subFormReady.then(() => {
+                    if (!this.subForm) {
+                        return this.dataValue;
+                    }
+                    this.subForm.nosubmit = false;
+                    return this.subForm.submitForm().then(result => {
+                        this.subForm.loading = false;
+                        this.dataValue = result.submission;
+                        return this.dataValue;
+                    }).catch(err => {
+                        if (rejectOnError) {
+                            this.subForm.onSubmissionError(err);
+                            return NativePromise.reject(err);
+                        } else {
+                            return {};
+                        }
+                    });
+                });
+            }
+            return this.getSubFormData();
+        }
+        beforePage(next) {
+            return this.submitSubForm(true).then(() => super.beforePage(next));
+        }
+        beforeSubmit() {
+            const submission = this.dataValue;
+            if (submission && submission._id && submission.form) {
+                this.dataValue = submission;
+                return NativePromise.resolve(this.dataValue);
+            }
+            return this.submitSubForm(false).then(() => {
+                return this.dataValue;
+            }).then(() => super.beforeSubmit());
+        }
+        isHidden() {
+            if (!this.visible) {
+                return true;
+            }
+            return !super.checkConditions(this.rootValue);
+        }
+        setValue(submission, flags = {}) {
+            const changed = super.setValue(submission, flags);
+            if (this.subForm) {
+                if (submission && submission._id && this.subForm.formio && _.isEmpty(submission.data)) {
+                    const submissionUrl = `${ this.subForm.formio.formsUrl }/${ submission.form }/submission/${ submission._id }`;
+                    this.subForm.setUrl(submissionUrl, this.options);
+                    this.subForm.loadSubmission();
+                } else {
+                    this.subForm.setValue(submission, flags);
+                }
+            }
+            return changed;
+        }
+        getValue() {
+            if (this.subForm) {
+                return this.subForm.getValue();
+            }
+            return this.dataValue;
+        }
+        get errors() {
+            let errors = super.errors;
+            if (this.subForm) {
+                errors = errors.concat(this.subForm.errors);
+            }
+            return errors;
+        }
+        updateSubFormVisibility() {
+            if (this.subForm) {
+                this.subForm.parentVisible = this.visible;
+            }
+        }
+        get visible() {
+            return super.visible;
+        }
+        set visible(value) {
+            super.visible = value;
+            this.updateSubFormVisibility();
+        }
+        get parentVisible() {
+            return super.parentVisible;
+        }
+        set parentVisible(value) {
+            super.parentVisible = value;
+            this.updateSubFormVisibility();
+        }
+        isInternalEvent(event) {
+            switch (event) {
+            case 'focus':
+            case 'blur':
+            case 'componentChange':
+            case 'componentError':
+            case 'error':
+            case 'formLoad':
+            case 'languageChanged':
+            case 'render':
+            case 'checkValidity':
+            case 'initialized':
+            case 'submit':
+            case 'submitButton':
+            case 'nosubmit':
+            case 'updateComponent':
+            case 'submitDone':
+            case 'submissionDeleted':
+            case 'requestDone':
+            case 'nextPage':
+            case 'prevPage':
+            case 'wizardNavigationClicked':
+            case 'updateWizardNav':
+            case 'restoreDraft':
+            case 'saveDraft':
+            case 'saveComponent':
+            case 'pdfUploaded':
+                return true;
+            default:
+                return false;
+            }
+        }
+        createEmitter() {
+            const emitter = new EventEmitter({
+                wildcard: false,
+                maxListeners: 0
+            });
+            const nativeEmit = emitter.emit;
+            const that = this;
+            emitter.emit = function (event, ...args) {
+                const eventType = event.replace(`${ that.options.namespace }.`, '');
+                nativeEmit.call(this, event, ...args);
+                if (!that.isInternalEvent(eventType)) {
+                    that.emit(eventType, ...args);
+                }
+            };
+            return emitter;
+        }
+        deleteValue() {
+            super.setValue(null, {
+                noUpdateEvent: true,
+                noDefault: true
+            });
+            this.unset();
+        }
+    };
+});
+define('skylark-formio/components/hidden/Hidden',[
+    '../_classes/input/Input'
+], function (Input) {
+    'use strict';
+    return class HiddenComponent extends Input {
+        static schema(...extend) {
+            return Input.schema({
+                type: 'hidden',
+                tableView: false,
+                inputType: 'hidden'
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Hidden',
+                group: 'data',
+                icon: 'user-secret',
+                weight: 0,
+                documentation: 'http://help.form.io/userguide/#hidden',
+                schema: HiddenComponent.schema()
+            };
+        }
+        get defaultSchema() {
+            return HiddenComponent.schema();
+        }
+        get inputInfo() {
+            const info = super.elementInfo();
+            info.type = 'input';
+            info.attr.type = 'hidden';
+            info.changeEvent = 'change';
+            return info;
+        }
+        validateMultiple() {
+            return false;
+        }
+        labelIsHidden() {
+            return true;
+        }
+        get emptyValue() {
+            return '';
+        }
+        setValue(value, flags = {}) {
+            return this.updateValue(value, flags);
+        }
+        getValue() {
+            return this.dataValue;
+        }
+    };
+});
+define('skylark-formio/components/html/HTML',[
+    '../_classes/component/Component',
+    'skylark-lodash'
+], function (Component, _) {
+    'use strict';
+    return class HTMLComponent extends Component {
+        static schema(...extend) {
+            return Component.schema({
+                label: 'HTML',
+                type: 'htmlelement',
+                tag: 'p',
+                attrs: [],
+                content: '',
+                input: false,
+                persistent: false
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'HTML Element',
+                group: 'layout',
+                icon: 'code',
+                weight: 0,
+                documentation: 'http://help.form.io/userguide/#html-element-component',
+                schema: HTMLComponent.schema()
+            };
+        }
+        get defaultSchema() {
+            return HTMLComponent.schema();
+        }
+        get content() {
+            if (this.builderMode) {
+                return this.component.content;
+            }
+            const submission = _.get(this.root, 'submission', {});
+            return this.component.content ? this.interpolate(this.component.content, {
+                metadata: submission.metadata || {},
+                submission: submission,
+                data: this.rootValue,
+                row: this.data
+            }) : '';
+        }
+        get singleTags() {
+            return [
+                'br',
+                'img',
+                'hr'
+            ];
+        }
+        checkRefreshOn(changed) {
+            super.checkRefreshOn(changed);
+            if (!this.builderMode && this.component.refreshOnChange && this.element && this.conditionallyVisible(this.data, this.row)) {
+                this.setContent(this.element, this.renderContent());
+            }
+        }
+        renderContent() {
+            const submission = _.get(this.root, 'submission', {});
+            return this.renderTemplate('html', {
+                component: this.component,
+                tag: this.component.tag,
+                attrs: (this.component.attrs || []).map(attr => {
+                    return {
+                        attr: attr.attr,
+                        value: this.interpolate(attr.value, {
+                            metadata: submission.metadata || {},
+                            submission: submission,
+                            data: this.rootValue,
+                            row: this.data
+                        })
+                    };
+                }),
+                content: this.content,
+                singleTags: this.singleTags
+            });
+        }
+        render() {
+            return super.render(this.renderContent());
+        }
+        attach(element) {
+            this.loadRefs(element, { html: 'single' });
+            return super.attach(element);
+        }
+    };
+});
+define('skylark-formio/components/panel/Panel',[
+    '../_classes/nested/NestedComponent'
+], function (NestedComponent) {
+    'use strict';
+    return class PanelComponent extends NestedComponent {
+        static schema(...extend) {
+            return NestedComponent.schema({
+                label: 'Panel',
+                type: 'panel',
+                key: 'panel',
+                title: 'Panel',
+                theme: 'default',
+                breadcrumb: 'default',
+                components: [],
+                clearOnHide: false,
+                input: false,
+                tableView: false,
+                persistent: false
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Panel',
+                icon: 'list-alt',
+                group: 'layout',
+                documentation: 'http://help.form.io/userguide/#panels',
+                weight: 30,
+                schema: PanelComponent.schema()
+            };
+        }
+        get defaultSchema() {
+            return PanelComponent.schema();
+        }
+        checkValidity(data, dirty, row) {
+            if (!this.checkCondition(row, data)) {
+                this.setCustomValidity('');
+                return true;
+            }
+            return this.getComponents().reduce((check, comp) => {
+                if (!comp.checkValidity(data, dirty, row) && this.collapsed) {
+                    this.collapsed = false;
+                }
+                return comp.checkValidity(data, dirty, row) && check;
+            }, super.checkValidity(data, dirty, row));
+        }
+        get templateName() {
+            return 'panel';
+        }
+        constructor(...args) {
+            super(...args);
+            this.noField = true;
+        }
+    };
+});
+define('skylark-formio/components/password/Password',[
+    '../textfield/TextField',
+    'skylark-lodash'
+], function (TextFieldComponent, _) {
+    'use strict';
+    return class PasswordComponent extends TextFieldComponent {
+        static schema(...extend) {
+            return TextFieldComponent.schema({
+                type: 'password',
+                label: 'Password',
+                key: 'password',
+                protected: true,
+                tableView: false
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Password',
+                icon: 'asterisk',
+                group: 'basic',
+                documentation: 'http://help.form.io/userguide/#password',
+                weight: 40,
+                schema: PasswordComponent.schema()
+            };
+        }
+        get defaultSchema() {
+            return _.omit(PasswordComponent.schema(), [
+                'protected',
+                'tableView'
+            ]);
+        }
+        get inputInfo() {
+            const info = super.inputInfo;
+            info.attr.type = 'password';
+            return info;
+        }
+    };
+});
+define('skylark-formio/components/phonenumber/PhoneNumber',[
+    '../textfield/TextField'
+], function (TextFieldComponent) {
+    'use strict';
+    return class PhoneNumberComponent extends TextFieldComponent {
+        static schema(...extend) {
+            return TextFieldComponent.schema({
+                type: 'phoneNumber',
+                label: 'Phone Number',
+                key: 'phoneNumber',
+                inputType: 'tel',
+                inputMask: '(999) 999-9999'
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Phone Number',
+                group: 'advanced',
+                icon: 'phone-square',
+                weight: 30,
+                documentation: 'http://help.form.io/userguide/#phonenumber',
+                schema: PhoneNumberComponent.schema()
+            };
+        }
+        get defaultSchema() {
+            return PhoneNumberComponent.schema();
+        }
+    };
+});
+define('skylark-formio/components/radio/Radio',[
+    'skylark-lodash',
+    '../_classes/field/Field'
+], function (_, Field) {
+    'use strict';
+    return class RadioComponent extends Field {
+        static schema(...extend) {
+            return Field.schema({
+                type: 'radio',
+                inputType: 'radio',
+                label: 'Radio',
+                key: 'radio',
+                values: [{
+                        label: '',
+                        value: ''
+                    }],
+                fieldSet: false
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Radio',
+                group: 'basic',
+                icon: 'dot-circle-o',
+                weight: 80,
+                documentation: 'http://help.form.io/userguide/#radio',
+                schema: RadioComponent.schema()
+            };
+        }
+        constructor(component, options, data) {
+            super(component, options, data);
+            this.previousValue = this.dataValue || null;
+        }
+        get defaultSchema() {
+            return RadioComponent.schema();
+        }
+        get inputInfo() {
+            const info = super.elementInfo();
+            info.type = 'input';
+            info.changeEvent = 'click';
+            info.attr.class = 'form-check-input';
+            info.attr.name = info.attr.name += `[${ this.id }]`;
+            return info;
+        }
+        get emptyValue() {
+            return '';
+        }
+        get isRadio() {
+            return this.component.inputType === 'radio';
+        }
+        render() {
+            return super.render(this.renderTemplate('radio', {
+                input: this.inputInfo,
+                inline: this.component.inline,
+                values: this.component.values,
+                value: this.dataValue,
+                row: this.row
+            }));
+        }
+        attach(element) {
+            this.loadRefs(element, {
+                input: 'multiple',
+                wrapper: 'multiple'
+            });
+            this.refs.input.forEach((input, index) => {
+                this.addEventListener(input, this.inputInfo.changeEvent, () => this.updateValue(null, { modified: true }));
+                this.addShortcut(input, this.component.values[index].shortcut);
+                if (this.isRadio) {
+                    input.checked = this.dataValue === input.value;
+                    this.addEventListener(input, 'keyup', event => {
+                        if (event.key === ' ' && this.dataValue === input.value) {
+                            event.preventDefault();
+                            this.updateValue(null, { modified: true });
+                        }
+                    });
+                }
+            });
+            return super.attach(element);
+        }
+        detach(element) {
+            if (element && this.refs.input) {
+                this.refs.input.forEach((input, index) => {
+                    this.removeShortcut(input, this.component.values[index].shortcut);
+                });
+            }
+        }
+        getValue() {
+            if (this.viewOnly || !this.refs.input || !this.refs.input.length) {
+                return this.dataValue;
+            }
+            let value = this.dataValue;
+            this.refs.input.forEach(input => {
+                if (input.checked) {
+                    value = input.value;
+                }
+            });
+            return value;
+        }
+        getValueAsString(value) {
+            if (!value) {
+                return '';
+            }
+            if (!_.isString(value)) {
+                return _.toString(value);
+            }
+            const option = _.find(this.component.values, v => v.value === value);
+            return _.get(option, 'label', '');
+        }
+        setValueAt(index, value) {
+            if (this.refs.input && this.refs.input[index] && value !== null && value !== undefined) {
+                const inputValue = this.refs.input[index].value;
+                this.refs.input[index].checked = inputValue === value.toString();
+            }
+        }
+        updateValue(value, flags) {
+            const changed = super.updateValue(value, flags);
+            if (changed && this.refs.wrapper) {
+                const value = this.dataValue;
+                const optionSelectedClass = 'radio-selected';
+                this.refs.wrapper.forEach((wrapper, index) => {
+                    const input = this.refs.input[index];
+                    if (input && input.value.toString() === value.toString()) {
+                        this.addClass(wrapper, optionSelectedClass);
+                    } else {
+                        this.removeClass(wrapper, optionSelectedClass);
+                    }
+                });
+            }
+            if (!flags || !flags.modified || !this.isRadio) {
+                return changed;
+            }
+            this.currentValue = this.dataValue;
+            const shouldResetValue = !(flags && flags.noUpdateEvent) && this.previousValue === this.currentValue;
+            if (shouldResetValue) {
+                this.resetValue();
+                this.triggerChange();
+            }
+            this.previousValue = this.dataValue;
+            return changed;
+        }
+        normalizeValue(value) {
+            const dataType = this.component['dataType'] || 'auto';
+            switch (dataType) {
+            case 'auto':
+                if (!isNaN(parseFloat(value)) && isFinite(value)) {
+                    value = +value;
+                }
+                if (value === 'true') {
+                    value = true;
+                }
+                if (value === 'false') {
+                    value = false;
+                }
+                break;
+            case 'number':
+                value = +value;
+                break;
+            case 'string':
+                if (typeof value === 'object') {
+                    value = JSON.stringify(value);
+                } else {
+                    value = value.toString();
+                }
+                break;
+            case 'boolean':
+                value = !(!value || value.toString() === 'false');
+                break;
+            }
+            return super.normalizeValue(value);
+        }
+    };
+});
+define('skylark-formio/components/recaptcha/ReCaptcha',[
+    '../_classes/component/Component',
+    '../../Formio',
+    'skylark-lodash',
+    '../../vendors/getify/npo'
+], function (Component, Formio, _, NativePromise) {
+    'use strict';
+
+    var _get = _.get;
+
+    return class ReCaptchaComponent extends Component {
+        static schema(...extend) {
+            return Component.schema({
+                type: 'recaptcha',
+                key: 'recaptcha',
+                label: 'reCAPTCHA'
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'reCAPTCHA',
+                group: 'premium',
+                icon: 'refresh',
+                documentation: 'http://help.form.io/userguide/#recaptcha',
+                weight: 40,
+                schema: ReCaptchaComponent.schema()
+            };
+        }
+        render() {
+            if (this.builderMode) {
+                return super.render('reCAPTCHA');
+            } else {
+                return super.render('', true);
+            }
+        }
+        createInput() {
+            if (this.builderMode) {
+                this.append(this.text(this.name));
+            } else {
+                const siteKey = _get(this.root.form, 'settings.recaptcha.siteKey');
+                if (siteKey) {
+                    const recaptchaApiScriptUrl = `https://www.google.com/recaptcha/api.js?render=${ siteKey }`;
+                    this.recaptchaApiReady = Formio.requireLibrary('googleRecaptcha', 'grecaptcha', recaptchaApiScriptUrl, true);
+                } else {
+                    console.warn('There is no Site Key specified in settings in form JSON');
+                }
+            }
+        }
+        createLabel() {
+            return;
+        }
+        verify(actionName) {
+            const siteKey = _get(this.root.form, 'settings.recaptcha.siteKey');
+            if (!siteKey) {
+                console.warn('There is no Site Key specified in settings in form JSON');
+                return;
+            }
+            if (!this.recaptchaApiReady) {
+                const recaptchaApiScriptUrl = `https://www.google.com/recaptcha/api.js?render=${ _get(this.root.form, 'settings.recaptcha.siteKey') }`;
+                this.recaptchaApiReady = Formio.requireLibrary('googleRecaptcha', 'grecaptcha', recaptchaApiScriptUrl, true);
+            }
+            if (this.recaptchaApiReady) {
+                this.recaptchaVerifiedPromise = new NativePromise((resolve, reject) => {
+                    this.recaptchaApiReady.then(() => {
+                        grecaptcha.ready(() => {
+                            grecaptcha.execute(siteKey, { action: actionName }).then(token => {
+                                return this.sendVerificationRequest(token);
+                            }).then(verificationResult => {
+                                this.setValue(verificationResult);
+                                return resolve(verificationResult);
+                            });
+                        });
+                    }).catch(() => {
+                        return reject();
+                    });
+                });
+            }
+        }
+        beforeSubmit() {
+            if (this.recaptchaVerifiedPromise) {
+                return this.recaptchaVerifiedPromise.then(() => super.beforeSubmit());
+            }
+            return super.beforeSubmit();
+        }
+        sendVerificationRequest(token) {
+            return Formio.makeStaticRequest(`${ Formio.projectUrl }/recaptcha?recaptchaToken=${ token }`);
+        }
+        setValue(value) {
+            const changed = this.hasChanged(value, this.dataValue);
+            this.dataValue = value;
+            return changed;
+        }
+        getValue() {
+            return this.dataValue;
+        }
+    };
+});
+define('skylark-formio/components/select/Select',[
+//    '../../utils/ChoicesWrapper',
+    'skylark-lodash',
+    '../../Formio',
+    '../_classes/field/Field',
+    '../../Form',
+    '../../vendors/getify/npo'
+], function (
+   //Choices,  //TODO : lwf
+    _, Formio, Field, Form, NativePromise) {
+    'use strict';
+    return class SelectComponent extends Field {
+        static schema(...extend) {
+            return Field.schema({
+                type: 'select',
+                label: 'Select',
+                key: 'select',
+                data: {
+                    values: [],
+                    json: '',
+                    url: '',
+                    resource: '',
+                    custom: ''
+                },
+                clearOnRefresh: false,
+                limit: 100,
+                dataSrc: 'values',
+                valueProperty: '',
+                lazyLoad: true,
+                filter: '',
+                searchEnabled: true,
+                searchField: '',
+                minSearch: 0,
+                readOnlyValue: false,
+                authenticate: false,
+                template: '<span>{{ item.label }}</span>',
+                selectFields: '',
+                searchThreshold: 0.3,
+                tableView: true,
+                fuseOptions: {
+                    include: 'score',
+                    threshold: 0.3
+                },
+                customOptions: {}
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Select',
+                group: 'basic',
+                icon: 'th-list',
+                weight: 70,
+                documentation: 'http://help.form.io/userguide/#select',
+                schema: SelectComponent.schema()
+            };
+        }
+        init() {
+            super.init();
+            this.validators = this.validators.concat(['select']);
+            let updateArgs = [];
+            const triggerUpdate = _.debounce((...args) => {
+                updateArgs = [];
+                return this.updateItems.apply(this, args);
+            }, 100);
+            this.triggerUpdate = (...args) => {
+                if (args.length) {
+                    updateArgs = args;
+                }
+                return triggerUpdate(...updateArgs);
+            };
+            this.selectOptions = [];
+            if (this.isInfiniteScrollProvided) {
+                this.isFromSearch = false;
+                this.searchServerCount = null;
+                this.defaultServerCount = null;
+                this.isScrollLoading = false;
+                this.searchDownloadedResources = [];
+                this.defaultDownloadedResources = [];
+            }
+            this.activated = false;
+            this.itemsLoaded = new NativePromise(resolve => {
+                this.itemsLoadedResolve = resolve;
+            });
+        }
+        get dataReady() {
+            return this.itemsLoaded;
+        }
+        get defaultSchema() {
+            return SelectComponent.schema();
+        }
+        get emptyValue() {
+            if (this.valueProperty) {
+                return '';
+            }
+            return {};
+        }
+        get valueProperty() {
+            if (this.component.valueProperty) {
+                return this.component.valueProperty;
+            }
+            if (this.component.dataSrc === 'values') {
+                return 'value';
+            }
+            return '';
+        }
+        get inputInfo() {
+            const info = super.elementInfo();
+            info.type = 'select';
+            info.changeEvent = 'change';
+            return info;
+        }
+        get isSelectResource() {
+            return this.component.dataSrc === 'resource';
+        }
+        get isSelectURL() {
+            return this.component.dataSrc === 'url';
+        }
+        get isInfiniteScrollProvided() {
+            return this.isSelectResource || this.isSelectURL;
+        }
+        get shouldDisabled() {
+            return super.shouldDisabled || this.parentDisabled;
+        }
+        itemTemplate(data) {
+            if (!data) {
+                return '';
+            }
+            if (this.options.readOnly && this.component.readOnlyValue) {
+                return this.itemValue(data);
+            }
+            if (data && !this.component.template) {
+                const itemLabel = data.label || data;
+                return typeof itemLabel === 'string' ? this.t(itemLabel) : itemLabel;
+            }
+            if (typeof data === 'string') {
+                return this.t(data);
+            }
+            const template = this.component.template ? this.interpolate(this.component.template, { item: data }) : data.label;
+            if (template) {
+                const label = template.replace(/<\/?[^>]+(>|$)/g, '');
+                return template.replace(label, this.t(label));
+            } else {
+                return JSON.stringify(data);
+            }
+        }
+        addOption(value, label, attrs = {}, id) {
+            const option = {
+                value: _.isObject(value) ? value : _.isNull(value) ? this.emptyValue : String(this.normalizeSingleValue(value)),
+                label: label
+            };
+            if (value) {
+                this.selectOptions.push(option);
+            }
+            if (this.refs.selectContainer && this.component.widget === 'html5') {
+                const div = document.createElement('div');
+                div.innerHTML = this.sanitize(this.renderTemplate('selectOption', {
+                    selected: _.isEqual(this.dataValue, option.value),
+                    option,
+                    attrs,
+                    id,
+                    useId: this.valueProperty === '' && _.isObject(value) && id
+                })).trim();
+                option.element = div.firstChild;
+                this.refs.selectContainer.appendChild(option.element);
+            }
+        }
+        addValueOptions(items) {
+            items = items || [];
+            if (!this.selectOptions.length) {
+                if (this.choices) {
+                    const currentChoices = Array.isArray(this.dataValue) ? this.dataValue : [this.dataValue];
+                    return this.addCurrentChoices(currentChoices, items);
+                } else if (!this.component.multiple) {
+                    this.addPlaceholder();
+                }
+            }
+            return false;
+        }
+        disableInfiniteScroll() {
+            if (!this.downloadedResources) {
+                return;
+            }
+            this.downloadedResources.serverCount = this.downloadedResources.length;
+            this.serverCount = this.downloadedResources.length;
+        }
+        setItems(items, fromSearch) {
+            if (typeof items == 'string') {
+                try {
+                    items = JSON.parse(items);
+                } catch (err) {
+                    console.warn(err.message);
+                    items = [];
+                }
+            }
+            if (this.component.onSetItems && typeof this.component.onSetItems === 'function') {
+                const newItems = this.component.onSetItems(this, items);
+                if (newItems) {
+                    items = newItems;
+                }
+            }
+            if (!this.choices && this.refs.selectContainer) {
+                if (this.loading) {
+                }
+                this.empty(this.refs.selectContainer);
+            }
+            if (this.component.selectValues) {
+                items = _.get(items, this.component.selectValues, items) || [];
+            }
+            let areItemsEqual;
+            if (this.isInfiniteScrollProvided) {
+                areItemsEqual = this.isSelectURL ? _.isEqual(items, this.downloadedResources) : false;
+                const areItemsEnded = this.component.limit > items.length;
+                const areItemsDownloaded = areItemsEqual && this.downloadedResources && this.downloadedResources.length === items.length;
+                if (areItemsEnded) {
+                    this.disableInfiniteScroll();
+                } else if (areItemsDownloaded) {
+                    this.selectOptions = [];
+                } else {
+                    this.serverCount = items.serverCount;
+                }
+            }
+            if (this.isScrollLoading && items) {
+                if (!areItemsEqual) {
+                    this.downloadedResources = this.downloadedResources ? this.downloadedResources.concat(items) : items;
+                }
+                this.downloadedResources.serverCount = items.serverCount || this.downloadedResources.serverCount;
+            } else {
+                this.downloadedResources = items || [];
+                this.selectOptions = [];
+            }
+            if (!fromSearch) {
+                this.addValueOptions(items);
+            }
+            if (this.component.widget === 'html5' && !this.component.placeholder) {
+                this.addOption(null, '');
+            }
+            _.each(items, (item, index) => {
+                this.addOption(this.itemValue(item), this.itemTemplate(item), {}, String(index));
+            });
+            if (this.choices) {
+                this.choices.setChoices(this.selectOptions, 'value', 'label', true);
+            } else if (this.loading) {
+            }
+            this.isScrollLoading = false;
+            this.loading = false;
+            if (this.dataValue) {
+                this.setValue(this.dataValue, { noUpdateEvent: true });
+            } else {
+                const defaultValue = this.multiple ? this.defaultValue || [] : this.defaultValue;
+                if (defaultValue) {
+                    this.setValue(defaultValue);
+                }
+            }
+            this.itemsLoadedResolve();
+        }
+        loadItems(url, search, headers, options, method, body) {
+            options = options || {};
+            const minSearch = parseInt(this.component.minSearch, 10);
+            if (this.component.searchField && minSearch > 0 && (!search || search.length < minSearch)) {
+                return this.setItems([]);
+            }
+            method = method || 'GET';
+            if (method.toUpperCase() === 'GET') {
+                body = null;
+            }
+            const limit = this.component.limit || 100;
+            const skip = this.isScrollLoading ? this.selectOptions.length : 0;
+            const query = this.component.dataSrc === 'url' ? {} : {
+                limit,
+                skip
+            };
+            url = this.interpolate(url, {
+                formioBase: Formio.getBaseUrl(),
+                search,
+                limit,
+                skip,
+                page: Math.abs(Math.floor(skip / limit))
+            });
+            if (this.component.searchField && search) {
+                if (Array.isArray(search)) {
+                    query[`${ this.component.searchField }`] = search.join(',');
+                } else {
+                    query[`${ this.component.searchField }`] = search;
+                }
+            }
+            if (this.component.selectFields) {
+                query.select = this.component.selectFields;
+            }
+            if (this.component.sort) {
+                query.sort = this.component.sort;
+            }
+            if (!_.isEmpty(query)) {
+                url += (!url.includes('?') ? '?' : '&') + Formio.serialize(query, item => this.interpolate(item));
+            }
+            if (this.component.filter) {
+                url += (!url.includes('?') ? '?' : '&') + this.interpolate(this.component.filter);
+            }
+            options.header = headers;
+            this.loading = true;
+            Formio.makeRequest(this.options.formio, 'select', url, method, body, options).then(response => {
+                this.loading = false;
+                this.setItems(response, !!search);
+            }).catch(err => {
+                if (this.isInfiniteScrollProvided) {
+                    this.setItems([]);
+                    this.disableInfiniteScroll();
+                }
+                this.isScrollLoading = false;
+                this.loading = false;
+                this.itemsLoadedResolve();
+                this.emit('componentError', {
+                    component: this.component,
+                    message: err.toString()
+                });
+                console.warn(`Unable to load resources for ${ this.key }`);
+            });
+        }
+        get requestHeaders() {
+            const headers = new Formio.Headers();
+            if (this.component.data && this.component.data.headers) {
+                try {
+                    _.each(this.component.data.headers, header => {
+                        if (header.key) {
+                            headers.set(header.key, this.interpolate(header.value));
+                        }
+                    });
+                } catch (err) {
+                    console.warn(err.message);
+                }
+            }
+            return headers;
+        }
+        getCustomItems() {
+            return this.evaluate(this.component.data.custom, { values: [] }, 'values');
+        }
+        updateCustomItems() {
+            this.setItems(this.getCustomItems() || []);
+        }
+        refresh() {
+            if (this.component.clearOnRefresh) {
+                this.setValue(this.emptyValue);
+            }
+            if (this.component.lazyLoad) {
+                this.activated = false;
+                this.loading = true;
+                this.setItems([]);
+            }
+            this.updateItems(null, true);
+        }
+        get additionalResourcesAvailable() {
+            return _.isNil(this.serverCount) || this.serverCount > this.downloadedResources.length;
+        }
+        get serverCount() {
+            if (this.isFromSearch) {
+                return this.searchServerCount;
+            }
+            return this.defaultServerCount;
+        }
+        set serverCount(value) {
+            if (this.isFromSearch) {
+                this.searchServerCount = value;
+            } else {
+                this.defaultServerCount = value;
+            }
+        }
+        get downloadedResources() {
+            if (this.isFromSearch) {
+                return this.searchDownloadedResources;
+            }
+            return this.defaultDownloadedResources;
+        }
+        set downloadedResources(value) {
+            if (this.isFromSearch) {
+                this.searchDownloadedResources = value;
+            } else {
+                this.defaultDownloadedResources = value;
+            }
+        }
+        updateItems(searchInput, forceUpdate) {
+            if (!this.component.data) {
+                console.warn(`Select component ${ this.key } does not have data configuration.`);
+                this.itemsLoadedResolve();
+                return;
+            }
+            if (!this.checkConditions()) {
+                this.itemsLoadedResolve();
+                return;
+            }
+            switch (this.component.dataSrc) {
+            case 'values':
+                this.setItems(this.component.data.values);
+                break;
+            case 'json':
+                this.setItems(this.component.data.json);
+                break;
+            case 'custom':
+                this.updateCustomItems();
+                break;
+            case 'resource': {
+                    if (!this.component.data.resource || !forceUpdate && !this.active) {
+                        return;
+                    }
+                    let resourceUrl = this.options.formio ? this.options.formio.formsUrl : `${ Formio.getProjectUrl() }/form`;
+                    resourceUrl += `/${ this.component.data.resource }/submission`;
+                    if (forceUpdate || this.additionalResourcesAvailable) {
+                        try {
+                            this.loadItems(resourceUrl, searchInput, this.requestHeaders);
+                        } catch (err) {
+                            console.warn(`Unable to load resources for ${ this.key }`);
+                        }
+                    } else {
+                        this.setItems(this.downloadedResources);
+                    }
+                    break;
+                }
+            case 'url': {
+                    if (!forceUpdate && !this.active) {
+                        return;
+                    }
+                    let {url} = this.component.data;
+                    let method;
+                    let body;
+                    if (url.startsWith('/')) {
+                        const baseUrl = url.startsWith('/project') ? Formio.getBaseUrl() : Formio.getProjectUrl() || Formio.getBaseUrl();
+                        url = baseUrl + url;
+                    }
+                    if (!this.component.data.method) {
+                        method = 'GET';
+                    } else {
+                        method = this.component.data.method;
+                        if (method.toUpperCase() === 'POST') {
+                            body = this.component.data.body;
+                        } else {
+                            body = null;
+                        }
+                    }
+                    const options = this.component.authenticate ? {} : { noToken: true };
+                    this.loadItems(url, searchInput, this.requestHeaders, options, method, body);
+                    break;
+                }
+            case 'indexeddb': {
+                    if (!window.indexedDB) {
+                        window.alert("Your browser doesn't support current version of indexedDB");
+                    }
+                    if (this.component.indexeddb && this.component.indexeddb.database && this.component.indexeddb.table) {
+                        const request = window.indexedDB.open(this.component.indexeddb.database);
+                        request.onupgradeneeded = event => {
+                            if (this.component.customOptions) {
+                                const db = event.target.result;
+                                const objectStore = db.createObjectStore(this.component.indexeddb.table, {
+                                    keyPath: 'myKey',
+                                    autoIncrement: true
+                                });
+                                objectStore.transaction.oncomplete = () => {
+                                    const transaction = db.transaction(this.component.indexeddb.table, 'readwrite');
+                                    this.component.customOptions.forEach(item => {
+                                        transaction.objectStore(this.component.indexeddb.table).put(item);
+                                    });
+                                };
+                            }
+                        };
+                        request.onerror = () => {
+                            window.alert(request.errorCode);
+                        };
+                        request.onsuccess = event => {
+                            const db = event.target.result;
+                            const transaction = db.transaction(this.component.indexeddb.table, 'readwrite');
+                            const objectStore = transaction.objectStore(this.component.indexeddb.table);
+                            new NativePromise(resolve => {
+                                const responseItems = [];
+                                objectStore.getAll().onsuccess = event => {
+                                    event.target.result.forEach(item => {
+                                        responseItems.push(item);
+                                    });
+                                    resolve(responseItems);
+                                };
+                            }).then(items => {
+                                if (!_.isEmpty(this.component.indexeddb.filter)) {
+                                    items = _.filter(items, this.component.indexeddb.filter);
+                                }
+                                this.setItems(items);
+                            });
+                        };
+                    }
+                }
+            }
+        }
+        addPlaceholder() {
+            if (!this.component.placeholder) {
+                return;
+            }
+            this.addOption('', this.component.placeholder, { placeholder: true });
+        }
+        activate() {
+            if (this.active) {
+                return;
+            }
+            this.activated = true;
+            if (this.choices) {
+                this.choices.setChoices([{
+                        value: '',
+                        label: `<i class="${ this.iconClass('refresh') }" style="font-size:1.3em;"></i>`,
+                        disabled: true
+                    }], 'value', 'label', true);
+            } else if (this.component.dataSrc === 'url' || this.component.dataSrc === 'resource') {
+                this.addOption('', this.t('loading...'));
+            }
+            this.triggerUpdate();
+        }
+        get active() {
+            return !this.component.lazyLoad || this.activated || this.options.readOnly;
+        }
+        render() {
+            const info = this.inputInfo;
+            info.attr = info.attr || {};
+            info.multiple = this.component.multiple;
+            return super.render(this.wrapElement(this.renderTemplate('select', {
+                input: info,
+                selectOptions: '',
+                index: null
+            })));
+        }
+        wrapElement(element) {
+            return this.component.addResource ? this.renderTemplate('resourceAdd', { element }) : element;
+        }
+        choicesOptions() {
+            const useSearch = this.component.hasOwnProperty('searchEnabled') ? this.component.searchEnabled : true;
+            const placeholderValue = this.t(this.component.placeholder);
+            let customOptions = this.component.customOptions || {};
+            if (typeof customOptions == 'string') {
+                try {
+                    customOptions = JSON.parse(customOptions);
+                } catch (err) {
+                    console.warn(err.message);
+                    customOptions = {};
+                }
+            }
+            return {
+                removeItemButton: this.component.disabled ? false : _.get(this.component, 'removeItemButton', true),
+                itemSelectText: '',
+                classNames: {
+                    containerOuter: 'choices form-group formio-choices',
+                    containerInner: this.transform('class', 'form-control ui fluid selection dropdown')
+                },
+                addItemText: false,
+                placeholder: !!this.component.placeholder,
+                placeholderValue: placeholderValue,
+                noResultsText: this.t('No results found'),
+                noChoicesText: this.t('No choices to choose from'),
+                searchPlaceholderValue: this.t('Type to search'),
+                shouldSort: false,
+                position: this.component.dropdown || 'auto',
+                searchEnabled: useSearch,
+                searchChoices: !this.component.searchField,
+                searchFields: _.get(this, 'component.searchFields', ['label']),
+                fuseOptions: Object.assign({}, _.get(this, 'component.fuseOptions', {}), {
+                    include: 'score',
+                    threshold: _.get(this, 'component.searchThreshold', 0.3)
+                }),
+                valueComparer: _.isEqual,
+                resetScrollPosition: false,
+                ...customOptions
+            };
+        }
+        attach(element) {
+            const superAttach = super.attach(element);
+            this.loadRefs(element, {
+                selectContainer: 'single',
+                addResource: 'single',
+                autocompleteInput: 'single'
+            });
+            const autocompleteInput = this.refs.autocompleteInput;
+            if (autocompleteInput) {
+                this.addEventListener(autocompleteInput, 'change', event => {
+                    this.setValue(event.target.value);
+                });
+            }
+            const input = this.refs.selectContainer;
+            if (!input) {
+                return;
+            }
+            this.addEventListener(input, this.inputInfo.changeEvent, () => this.updateValue(null, { modified: true }));
+            if (this.component.widget === 'html5') {
+                this.triggerUpdate();
+                this.focusableElement = input;
+                this.addEventListener(input, 'focus', () => this.update());
+                this.addEventListener(input, 'keydown', event => {
+                    const {key} = event;
+                    if ([
+                            'Backspace',
+                            'Delete'
+                        ].includes(key)) {
+                        this.setValue(this.emptyValue);
+                    }
+                });
+                return;
+            }
+            const tabIndex = input.tabIndex;
+            this.addPlaceholder();
+            input.setAttribute('dir', this.i18next.dir());
+            if (this.choices) {
+                this.choices.destroy();
+            }
+            const choicesOptions = this.choicesOptions();
+            this.choices = new Choices(input, choicesOptions);
+            this.addEventListener(input, 'hideDropdown', () => {
+                this.choices.input.element.value = '';
+                this.updateItems(null, true);
+            });
+            if (this.selectOptions && this.selectOptions.length) {
+                this.choices.setChoices(this.selectOptions, 'value', 'label', true);
+            }
+            if (this.component.multiple) {
+                this.focusableElement = this.choices.input.element;
+            } else {
+                this.focusableElement = this.choices.containerInner.element;
+                this.choices.containerOuter.element.setAttribute('tabIndex', '-1');
+                if (choicesOptions.searchEnabled) {
+                    this.addEventListener(this.choices.containerOuter.element, 'focus', () => this.focusableElement.focus());
+                }
+            }
+            if (this.isInfiniteScrollProvided) {
+                this.scrollList = this.choices.choiceList.element;
+                this.onScroll = () => {
+                    const isLoadingAvailable = !this.isScrollLoading && this.additionalResourcesAvailable && this.scrollList.scrollTop + this.scrollList.clientHeight >= this.scrollList.scrollHeight;
+                    if (isLoadingAvailable) {
+                        this.isScrollLoading = true;
+                        this.choices.setChoices([{
+                                value: `${ this.id }-loading`,
+                                label: 'Loading...',
+                                disabled: true
+                            }], 'value', 'label');
+                        this.triggerUpdate(this.choices.input.element.value);
+                    }
+                };
+                this.addEventListener(this.scrollList, 'scroll', this.onScroll);
+            }
+            this.focusableElement.setAttribute('tabIndex', tabIndex);
+            if (this.component.searchField) {
+                if (this.choices && this.choices.input && this.choices.input.element) {
+                    this.addEventListener(this.choices.input.element, 'input', event => {
+                        this.isFromSearch = !!event.target.value;
+                        if (!event.target.value) {
+                            this.triggerUpdate();
+                        } else {
+                            this.serverCount = null;
+                            this.downloadedResources = [];
+                        }
+                    });
+                }
+                this.addEventListener(input, 'search', event => this.triggerUpdate(event.detail.value));
+                this.addEventListener(input, 'stopSearch', () => this.triggerUpdate());
+            }
+            this.addEventListener(input, 'showDropdown', () => {
+                if (this.dataValue) {
+                    this.triggerUpdate();
+                }
+                this.update();
+            });
+            if (choicesOptions.placeholderValue && this.choices._isSelectOneElement) {
+                this.addPlaceholderItem(choicesOptions.placeholderValue);
+                this.addEventListener(input, 'removeItem', () => {
+                    this.addPlaceholderItem(choicesOptions.placeholderValue);
+                });
+            }
+            this.addValueOptions();
+            this.setChoicesValue(this.dataValue);
+            if (this.isSelectResource && this.refs.addResource) {
+                this.addEventListener(this.refs.addResource, 'click', event => {
+                    event.preventDefault();
+                    const formioForm = this.ce('div');
+                    const dialog = this.createModal(formioForm);
+                    const projectUrl = _.get(this.root, 'formio.projectUrl', Formio.getBaseUrl());
+                    const formUrl = `${ projectUrl }/form/${ this.component.data.resource }`;
+                    new Form(formioForm, formUrl, {}).ready.then(form => {
+                        form.on('submit', submission => {
+                            if (this.component.multiple) {
+                                submission = [
+                                    ...this.dataValue,
+                                    submission
+                                ];
+                            }
+                            this.setValue(submission);
+                            dialog.close();
+                        });
+                    });
+                });
+            }
+            this.disabled = this.shouldDisabled;
+            this.triggerUpdate();
+            return superAttach;
+        }
+        addPlaceholderItem(placeholderValue) {
+            const items = this.choices._store.activeItems;
+            if (!items.length) {
+                this.choices._addItem({
+                    value: placeholderValue,
+                    label: placeholderValue,
+                    choiceId: 0,
+                    groupId: -1,
+                    customProperties: null,
+                    placeholder: true,
+                    keyCode: null
+                });
+            }
+        }
+        update() {
+            if (this.component.dataSrc === 'custom') {
+                this.updateCustomItems();
+            }
+            this.activate();
+        }
+        set disabled(disabled) {
+            super.disabled = disabled;
+            if (!this.choices) {
+                return;
+            }
+            if (disabled) {
+                this.setDisabled(this.choices.containerInner.element, true);
+                this.focusableElement.removeAttribute('tabIndex');
+                this.choices.disable();
+            } else {
+                this.setDisabled(this.choices.containerInner.element, false);
+                this.focusableElement.setAttribute('tabIndex', this.component.tabindex || 0);
+                this.choices.enable();
+            }
+        }
+        get disabled() {
+            return super.disabled;
+        }
+        set visible(value) {
+            if (value && !this._visible !== !value) {
+                this.triggerUpdate();
+            }
+            super.visible = value;
+        }
+        get visible() {
+            return super.visible;
+        }
+        addCurrentChoices(values, items, keyValue) {
+            if (!values) {
+                return false;
+            }
+            const notFoundValuesToAdd = [];
+            const added = values.reduce((defaultAdded, value) => {
+                if (!value || _.isEmpty(value)) {
+                    return defaultAdded;
+                }
+                let found = false;
+                const isSelectOptions = items === this.selectOptions;
+                if (items && items.length) {
+                    _.each(items, choice => {
+                        if (choice._id && value._id && choice._id === value._id) {
+                            found = true;
+                            return false;
+                        }
+                        const itemValue = keyValue ? choice.value : this.itemValue(choice, isSelectOptions);
+                        found |= _.isEqual(itemValue, value);
+                        return found ? false : true;
+                    });
+                }
+                if (!found) {
+                    notFoundValuesToAdd.push({
+                        value: this.itemValue(value),
+                        label: this.itemTemplate(value)
+                    });
+                    return true;
+                }
+                return found || defaultAdded;
+            }, false);
+            if (notFoundValuesToAdd.length) {
+                if (this.choices) {
+                    this.choices.setChoices(notFoundValuesToAdd, 'value', 'label', true);
+                } else {
+                    notFoundValuesToAdd.map(notFoundValue => {
+                        this.addOption(notFoundValue.value, notFoundValue.label);
+                    });
+                }
+            }
+            return added;
+        }
+        getValueAsString(data) {
+            return this.component.multiple && Array.isArray(data) ? data.map(this.asString.bind(this)).join(', ') : this.asString(data);
+        }
+        getValue() {
+            if (this.viewOnly || this.loading || !this.component.lazyLoad && !this.selectOptions.length || !this.element) {
+                return this.dataValue;
+            }
+            let value = this.emptyValue;
+            if (this.choices) {
+                value = this.choices.getValue(true);
+                if (!this.component.multiple && this.component.placeholder && value === this.t(this.component.placeholder)) {
+                    value = this.emptyValue;
+                }
+            } else if (this.refs.selectContainer) {
+                value = this.refs.selectContainer.value;
+                if (this.valueProperty === '') {
+                    if (value === '') {
+                        return {};
+                    }
+                    const option = this.selectOptions[value];
+                    if (option && _.isObject(option.value)) {
+                        value = option.value;
+                    }
+                }
+            } else {
+                value = this.dataValue;
+            }
+            if (value === undefined || value === null) {
+                value = '';
+            }
+            return value;
+        }
+        redraw() {
+            const done = super.redraw();
+            this.triggerUpdate();
+            return done;
+        }
+        normalizeSingleValue(value) {
+            if (!value) {
+                return;
+            }
+            const dataType = this.component['dataType'] || 'auto';
+            const denormalizedValue = typeof value === 'string' ? value.toLowerCase() : value;
+            const normalize = {
+                value: denormalizedValue,
+                toNumber() {
+                    try {
+                        const numberValue = parseFloat(this.value);
+                        if (!Number.isNaN(numberValue) && isFinite(numberValue)) {
+                            this.value = numberValue;
+                            return this;
+                        }
+                        return this;
+                    } catch (e) {
+                        return this;
+                    }
+                },
+                toBoolean() {
+                    try {
+                        const booleanValue = this.value === 'true' || this.value === 'false';
+                        if (booleanValue) {
+                            this.value = this.value === 'true';
+                            return this;
+                        }
+                        return this;
+                    } catch (e) {
+                        return this;
+                    }
+                },
+                toString() {
+                    try {
+                        const stringValue = typeof this.value === 'object' ? JSON.stringify(this.value) : this.value.toString();
+                        if (stringValue) {
+                            this.value = stringValue;
+                            return this;
+                        }
+                        return this;
+                    } catch (e) {
+                        return this;
+                    }
+                },
+                auto() {
+                    try {
+                        const autoValue = this.toString().toNumber().toBoolean();
+                        if (autoValue && !_.isObject(autoValue)) {
+                            this.value = autoValue;
+                        }
+                        return this;
+                    } catch (e) {
+                        return this;
+                    }
+                }
+            };
+            switch (dataType) {
+            case 'auto': {
+                    return normalize.auto().value;
+                }
+            case 'number': {
+                    return normalize.toNumber().value;
+                }
+            case 'string': {
+                    return normalize.toString().value;
+                }
+            case 'boolean':
+                return normalize.toBoolean().value;
+            }
+        }
+        normalizeValue(value) {
+            if (this.component.multiple && Array.isArray(value)) {
+                return value.map(singleValue => this.normalizeSingleValue(singleValue));
+            }
+            return super.normalizeValue(this.normalizeSingleValue(value));
+        }
+        setValue(value, flags = {}) {
+            const previousValue = this.dataValue;
+            const changed = this.updateValue(value, flags);
+            value = this.dataValue;
+            const hasPreviousValue = Array.isArray(previousValue) ? previousValue.length : previousValue;
+            const hasValue = Array.isArray(value) ? value.length : value;
+            if (this.component.multiple && Array.isArray(value)) {
+                value = value.map(value => {
+                    if (typeof value === 'boolean' || typeof value === 'number') {
+                        return value.toString();
+                    }
+                    return value;
+                });
+            } else {
+                if (typeof value === 'boolean' || typeof value === 'number') {
+                    value = value.toString();
+                }
+            }
+            if (this.loading) {
+                return changed;
+            }
+            if (this.isInitApiCallNeeded(hasValue)) {
+                this.loading = true;
+                this.lazyLoadInit = true;
+                const searchProperty = this.component.searchField || this.component.valueProperty;
+                this.triggerUpdate(_.get(value.data || value, searchProperty, value), true);
+                return changed;
+            }
+            this.addValueOptions();
+            this.setChoicesValue(value, hasPreviousValue);
+            return changed;
+        }
+        isInitApiCallNeeded(hasValue) {
+            return this.component.lazyLoad && !this.lazyLoadInit && !this.active && !this.selectOptions.length && hasValue && this.visible && (this.component.searchField || this.component.valueProperty);
+        }
+        setChoicesValue(value, hasPreviousValue) {
+            const hasValue = Array.isArray(value) ? value.length : value;
+            hasPreviousValue = hasPreviousValue === undefined ? true : hasPreviousValue;
+            if (this.choices) {
+                if (hasValue) {
+                    this.choices.removeActiveItems();
+                    const currentChoices = Array.isArray(value) ? value : [value];
+                    if (!this.addCurrentChoices(currentChoices, this.selectOptions, true)) {
+                        this.choices.setChoices(this.selectOptions, 'value', 'label', true);
+                    }
+                    this.choices.setChoiceByValue(value);
+                } else if (hasPreviousValue) {
+                    this.choices.removeActiveItems();
+                }
+            } else {
+                if (hasValue) {
+                    const values = Array.isArray(value) ? value : [value];
+                    _.each(this.selectOptions, selectOption => {
+                        _.each(values, val => {
+                            if (_.isEqual(val, selectOption.value) && selectOption.element) {
+                                selectOption.element.selected = true;
+                                selectOption.element.setAttribute('selected', 'selected');
+                                return false;
+                            }
+                        });
+                    });
+                } else {
+                    _.each(this.selectOptions, selectOption => {
+                        if (selectOption.element) {
+                            selectOption.element.selected = false;
+                            selectOption.element.removeAttribute('selected');
+                        }
+                    });
+                }
+            }
+        }
+        deleteValue() {
+            this.setValue('', { noUpdateEvent: true });
+            this.unset();
+        }
+        validateMultiple() {
+            return false;
+        }
+        isBooleanOrNumber(value) {
+            return typeof value === 'number' || typeof value === 'boolean';
+        }
+        asString(value) {
+            value = value || this.getValue();
+            if (this.isBooleanOrNumber(value)) {
+                value = value.toString();
+            }
+            if (Array.isArray(value) && value.some(item => this.isBooleanOrNumber(item))) {
+                value = value.map(item => {
+                    if (this.isBooleanOrNumber(item)) {
+                        item = item.toString();
+                    }
+                });
+            }
+            if ([
+                    'values',
+                    'custom'
+                ].includes(this.component.dataSrc)) {
+                const {items, valueProperty} = this.component.dataSrc === 'values' ? {
+                    items: this.component.data.values,
+                    valueProperty: 'value'
+                } : {
+                    items: this.getCustomItems(),
+                    valueProperty: this.valueProperty
+                };
+                value = this.component.multiple && Array.isArray(value) ? _.filter(items, item => value.includes(item.value)) : valueProperty ? _.find(items, [
+                    valueProperty,
+                    value
+                ]) : value;
+            }
+            if (_.isString(value)) {
+                return value;
+            }
+            if (Array.isArray(value)) {
+                const items = [];
+                value.forEach(item => items.push(this.itemTemplate(item)));
+                return items.length > 0 ? items.join('<br />') : '-';
+            }
+            return !_.isNil(value) ? this.itemTemplate(value) : '-';
+        }
+        detach() {
+            super.detach();
+            if (this.choices) {
+                this.choices.destroy();
+                this.choices = null;
+            }
+        }
+        focus() {
+            if (this.focusableElement) {
+                this.focusableElement.focus();
+            }
+        }
+        setErrorClasses(elements, dirty, hasError) {
+            super.setErrorClasses(elements, dirty, hasError);
+            if (this.choices) {
+                super.setErrorClasses([this.choices.containerInner.element], dirty, hasError);
+            } else {
+                super.setErrorClasses([this.refs.selectContainer], dirty, hasError);
+            }
+        }
+    };
+});
+define('skylark-formio/components/resource/Resource',[
+    '../select/Select'
+], function (SelectComponent) {
+    'use strict';
+    return class ResourceComponent extends SelectComponent {
+        static schema(...extend) {
+            return SelectComponent.schema({
+                type: 'resource',
+                label: 'Resource',
+                key: 'resource',
+                dataSrc: 'resource',
+                resource: '',
+                project: '',
+                template: '<span>{{ item.data }}</span>'
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Resource',
+                group: 'premium',
+                icon: 'files-o',
+                weight: 90,
+                documentation: 'http://help.form.io/userguide/#resource',
+                schema: ResourceComponent.schema()
+            };
+        }
+        init() {
+            super.init();
+            this.component.dataSrc = 'resource';
+            this.component.data = { resource: this.component.resource };
+        }
+        get defaultSchema() {
+            return ResourceComponent.schema();
+        }
+    };
+});
+define('skylark-formio/components/selectboxes/SelectBoxes',[
+    'skylark-lodash',
+    '../radio/Radio'
+], function (_, RadioComponent) {
+    'use strict';
+    return class SelectBoxesComponent extends RadioComponent {
+        static schema(...extend) {
+            return RadioComponent.schema({
+                type: 'selectboxes',
+                label: 'Select Boxes',
+                key: 'selectBoxes',
+                inline: false
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Select Boxes',
+                group: 'basic',
+                icon: 'plus-square',
+                weight: 60,
+                documentation: 'http://help.form.io/userguide/#selectboxes',
+                schema: SelectBoxesComponent.schema()
+            };
+        }
+        constructor(...args) {
+            super(...args);
+            this.validators = this.validators.concat('minSelectedCount', 'maxSelectedCount');
+        }
+        init() {
+            super.init();
+            this.component.inputType = 'checkbox';
+        }
+        get defaultSchema() {
+            return SelectBoxesComponent.schema();
+        }
+        get inputInfo() {
+            const info = super.elementInfo();
+            info.attr.name += '[]';
+            info.attr.type = 'checkbox';
+            info.attr.class = 'form-check-input';
+            return info;
+        }
+        get emptyValue() {
+            return this.component.values.reduce((prev, value) => {
+                prev[value.value] = false;
+                return prev;
+            }, {});
+        }
+        isEmpty(value = this.dataValue) {
+            let empty = true;
+            for (const key in value) {
+                if (value.hasOwnProperty(key) && value[key]) {
+                    empty = false;
+                    break;
+                }
+            }
+            return empty;
+        }
+        getValue() {
+            if (this.viewOnly || !this.refs.input || !this.refs.input.length) {
+                return this.dataValue;
+            }
+            const value = {};
+            _.each(this.refs.input, input => {
+                value[input.value] = !!input.checked;
+            });
+            return value;
+        }
+        normalizeValue(value) {
+            value = value || {};
+            if (typeof value !== 'object') {
+                if (typeof value === 'string') {
+                    value = { [value]: true };
+                } else {
+                    value = {};
+                }
+            }
+            if (Array.isArray(value)) {
+                _.each(value, val => {
+                    value[val] = true;
+                });
+            }
+            return value;
+        }
+        setValue(value, flags = {}) {
+            const changed = this.updateValue(value, flags);
+            value = this.dataValue;
+            _.each(this.refs.input, input => {
+                if (_.isUndefined(value[input.value])) {
+                    value[input.value] = false;
+                }
+                input.checked = !!value[input.value];
+            });
+            return changed;
+        }
+        getValueAsString(value) {
+            if (!value) {
+                return '';
+            }
+            return _(this.component.values || []).filter(v => value[v.value]).map('label').join(', ');
+        }
+        checkComponentValidity(data, dirty, rowData) {
+            const minCount = this.component.validate.minSelectedCount;
+            const maxCount = this.component.validate.maxSelectedCount;
+            if ((maxCount || minCount) && !this.isValid(data, dirty)) {
+                const count = Object.keys(this.validationValue).reduce((total, key) => {
+                    if (this.validationValue[key]) {
+                        total++;
+                    }
+                    return total;
+                }, 0);
+                if (maxCount && count >= maxCount) {
+                    if (this.refs.input) {
+                        this.refs.input.forEach(item => {
+                            if (!item.checked) {
+                                item.disabled = true;
+                            }
+                        });
+                    }
+                    if (maxCount && count > maxCount) {
+                        const message = this.component.maxSelectedCountMessage ? this.component.maxSelectedCountMessage : `You can only select up to ${ maxCount } items.`;
+                        this.setCustomValidity(message, dirty);
+                        return false;
+                    }
+                } else if (minCount && count < minCount) {
+                    if (this.refs.input) {
+                        this.refs.input.forEach(item => {
+                            item.disabled = false;
+                        });
+                    }
+                    const message = this.component.minSelectedCountMessage ? this.component.minSelectedCountMessage : `You must select at least ${ minCount } items.`;
+                    this.setCustomValidity(message, dirty);
+                    return false;
+                } else {
+                    if (this.refs.input) {
+                        this.refs.input.forEach(item => {
+                            item.disabled = false;
+                        });
+                    }
+                }
+            }
+            return super.checkComponentValidity(data, dirty, rowData);
+        }
+    };
+});
+define('skylark-formio/vendors/signature_pad/Point',[],function(){
+	function Point(x, y, time) {
+	  this.x = x;
+	  this.y = y;
+	  this.time = time || new Date().getTime();
+	}
+
+	Point.prototype.velocityFrom = function (start) {
+	  return (this.time !== start.time) ? this.distanceTo(start) / (this.time - start.time) : 1;
+	};
+
+	Point.prototype.distanceTo = function (start) {
+	  return Math.sqrt(Math.pow(this.x - start.x, 2) + Math.pow(this.y - start.y, 2));
+	};
+
+	Point.prototype.equals = function (other) {
+	  return this.x === other.x && this.y === other.y && this.time === other.time;
+	};
+	return Point;
+});
+
+define('skylark-formio/vendors/signature_pad/bezier',[],function(){
+
+  function Bezier(startPoint, control1, control2, endPoint) {
+    this.startPoint = startPoint;
+    this.control1 = control1;
+    this.control2 = control2;
+    this.endPoint = endPoint;
+  }
+
+  // Returns approximated length.
+  Bezier.prototype.length = function () {
+    const steps = 10;
+    let length = 0;
+    let px;
+    let py;
+
+    for (let i = 0; i <= steps; i += 1) {
+      const t = i / steps;
+      const cx = this._point(
+        t,
+        this.startPoint.x,
+        this.control1.x,
+        this.control2.x,
+        this.endPoint.x,
+      );
+      const cy = this._point(
+        t,
+        this.startPoint.y,
+        this.control1.y,
+        this.control2.y,
+        this.endPoint.y,
+      );
+      if (i > 0) {
+        const xdiff = cx - px;
+        const ydiff = cy - py;
+        length += Math.sqrt((xdiff * xdiff) + (ydiff * ydiff));
+      }
+      px = cx;
+      py = cy;
+    }
+
+    return length;
+  };
+
+  /* eslint-disable no-multi-spaces, space-in-parens */
+  Bezier.prototype._point = function (t, start, c1, c2, end) {
+    return (       start * (1.0 - t) * (1.0 - t)  * (1.0 - t))
+         + (3.0 *  c1    * (1.0 - t) * (1.0 - t)  * t)
+         + (3.0 *  c2    * (1.0 - t) * t          * t)
+         + (       end   * t         * t          * t);
+  };
+  /* eslint-enable no-multi-spaces, space-in-parens */
+
+  return Bezier;
+
+});
+
+define('skylark-formio/vendors/signature_pad/throttle',[],function(){
+/* eslint-disable */
+
+// http://stackoverflow.com/a/27078401/815507
+return function throttle(func, wait, options) {
+  var context, args, result;
+  var timeout = null;
+  var previous = 0;
+  if (!options) options = {};
+  var later = function () {
+    previous = options.leading === false ? 0 : Date.now();
+    timeout = null;
+    result = func.apply(context, args);
+    if (!timeout) context = args = null;
+  };
+  return function () {
+    var now = Date.now();
+    if (!previous && options.leading === false) previous = now;
+    var remaining = wait - (now - previous);
+    context = this;
+    args = arguments;
+    if (remaining <= 0 || remaining > wait) {
+      if (timeout) {
+        clearTimeout(timeout);
+        timeout = null;
+      }
+      previous = now;
+      result = func.apply(context, args);
+      if (!timeout) context = args = null;
+    } else if (!timeout && options.trailing !== false) {
+      timeout = setTimeout(later, remaining);
+    }
+    return result;
+  };
+}
+
+});
+
+define('skylark-formio/vendors/signature_pad/SignaturePad',[
+  './Point',
+  './bezier',
+  './throttle'
+],function(Point,Bezier,throttle){
+
+  function SignaturePad(canvas, options) {
+    const self = this;
+    const opts = options || {};
+
+    this.velocityFilterWeight = opts.velocityFilterWeight || 0.7;
+    this.minWidth = opts.minWidth || 0.5;
+    this.maxWidth = opts.maxWidth || 2.5;
+    this.throttle = 'throttle' in opts ? opts.throttle : 16; // in miliseconds
+    this.minDistance = 'minDistance' in opts ? opts.minDistance : 5;
+
+    if (this.throttle) {
+      this._strokeMoveUpdate = throttle(SignaturePad.prototype._strokeUpdate, this.throttle);
+    } else {
+      this._strokeMoveUpdate = SignaturePad.prototype._strokeUpdate;
+    }
+
+    this.dotSize = opts.dotSize || function () {
+      return (this.minWidth + this.maxWidth) / 2;
+    };
+    this.penColor = opts.penColor || 'black';
+    this.backgroundColor = opts.backgroundColor || 'rgba(0,0,0,0)';
+    this.onBegin = opts.onBegin;
+    this.onEnd = opts.onEnd;
+
+    this._canvas = canvas;
+    this._ctx = canvas.getContext('2d');
+    this.clear();
+
+    // We need add these inline so they are available to unbind while still having
+    // access to 'self' we could use _.bind but it's not worth adding a dependency.
+    this._handleMouseDown = function (event) {
+      if (event.which === 1) {
+        self._mouseButtonDown = true;
+        self._strokeBegin(event);
+      }
+    };
+
+    this._handleMouseMove = function (event) {
+      if (self._mouseButtonDown) {
+        self._strokeMoveUpdate(event);
+      }
+    };
+
+    this._handleMouseUp = function (event) {
+      if (event.which === 1 && self._mouseButtonDown) {
+        self._mouseButtonDown = false;
+        self._strokeEnd(event);
+      }
+    };
+
+    this._handleTouchStart = function (event) {
+      if (event.targetTouches.length === 1) {
+        const touch = event.changedTouches[0];
+        self._strokeBegin(touch);
+      }
+    };
+
+    this._handleTouchMove = function (event) {
+      // Prevent scrolling.
+      event.preventDefault();
+
+      const touch = event.targetTouches[0];
+      self._strokeMoveUpdate(touch);
+    };
+
+    this._handleTouchEnd = function (event) {
+      const wasCanvasTouched = event.target === self._canvas;
+      if (wasCanvasTouched) {
+        event.preventDefault();
+        self._strokeEnd(event);
+      }
+    };
+
+    // Enable mouse and touch event handlers
+    this.on();
+  }
+
+  // Public methods
+  SignaturePad.prototype.clear = function () {
+    const ctx = this._ctx;
+    const canvas = this._canvas;
+
+    ctx.fillStyle = this.backgroundColor;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    this._data = [];
+    this._reset();
+    this._isEmpty = true;
+  };
+
+  SignaturePad.prototype.fromDataURL = function (dataUrl, options = {}) {
+    const image = new Image();
+    const ratio = options.ratio || window.devicePixelRatio || 1;
+    const width = options.width || (this._canvas.width / ratio);
+    const height = options.height || (this._canvas.height / ratio);
+
+    this._reset();
+    image.src = dataUrl;
+    image.onload = () => {
+      this._ctx.drawImage(image, 0, 0, width, height);
+    };
+    this._isEmpty = false;
+  };
+
+  SignaturePad.prototype.toDataURL = function (type, ...options) {
+    switch (type) {
+      case 'image/svg+xml':
+        return this._toSVG();
+      default:
+        return this._canvas.toDataURL(type, ...options);
+    }
+  };
+
+  SignaturePad.prototype.on = function () {
+    this._handleMouseEvents();
+    this._handleTouchEvents();
+  };
+
+  SignaturePad.prototype.off = function () {
+    this._canvas.removeEventListener('mousedown', this._handleMouseDown);
+    this._canvas.removeEventListener('mousemove', this._handleMouseMove);
+    document.removeEventListener('mouseup', this._handleMouseUp);
+
+    this._canvas.removeEventListener('touchstart', this._handleTouchStart);
+    this._canvas.removeEventListener('touchmove', this._handleTouchMove);
+    this._canvas.removeEventListener('touchend', this._handleTouchEnd);
+  };
+
+  SignaturePad.prototype.isEmpty = function () {
+    return this._isEmpty;
+  };
+
+  // Private methods
+  SignaturePad.prototype._strokeBegin = function (event) {
+    this._data.push([]);
+    this._reset();
+    this._strokeUpdate(event);
+
+    if (typeof this.onBegin === 'function') {
+      this.onBegin(event);
+    }
+  };
+
+  SignaturePad.prototype._strokeUpdate = function (event) {
+    const x = event.clientX;
+    const y = event.clientY;
+
+    const point = this._createPoint(x, y);
+    const lastPointGroup = this._data[this._data.length - 1];
+    const lastPoint = lastPointGroup && lastPointGroup[lastPointGroup.length - 1];
+    const isLastPointTooClose = lastPoint && point.distanceTo(lastPoint) < this.minDistance;
+
+    // Skip this point if it's too close to the previous one
+    if (!(lastPoint && isLastPointTooClose)) {
+      const { curve, widths } = this._addPoint(point);
+
+      if (curve && widths) {
+        this._drawCurve(curve, widths.start, widths.end);
+      }
+
+      this._data[this._data.length - 1].push({
+        x: point.x,
+        y: point.y,
+        time: point.time,
+        color: this.penColor,
+      });
+    }
+  };
+
+  SignaturePad.prototype._strokeEnd = function (event) {
+    const canDrawCurve = this.points.length > 2;
+    const point = this.points[0]; // Point instance
+
+    if (!canDrawCurve && point) {
+      this._drawDot(point);
+    }
+
+    if (point) {
+      const lastPointGroup = this._data[this._data.length - 1];
+      const lastPoint = lastPointGroup[lastPointGroup.length - 1]; // plain object
+
+      // When drawing a dot, there's only one point in a group, so without this check
+      // such group would end up with exactly the same 2 points.
+      if (!point.equals(lastPoint)) {
+        lastPointGroup.push({
+          x: point.x,
+          y: point.y,
+          time: point.time,
+          color: this.penColor,
+        });
+      }
+    }
+
+    if (typeof this.onEnd === 'function') {
+      this.onEnd(event);
+    }
+  };
+
+  SignaturePad.prototype._handleMouseEvents = function () {
+    this._mouseButtonDown = false;
+
+    this._canvas.addEventListener('mousedown', this._handleMouseDown);
+    this._canvas.addEventListener('mousemove', this._handleMouseMove);
+    document.addEventListener('mouseup', this._handleMouseUp);
+  };
+
+  SignaturePad.prototype._handleTouchEvents = function () {
+    // Pass touch events to canvas element on mobile IE11 and Edge.
+    this._canvas.style.msTouchAction = 'none';
+    this._canvas.style.touchAction = 'none';
+
+    this._canvas.addEventListener('touchstart', this._handleTouchStart);
+    this._canvas.addEventListener('touchmove', this._handleTouchMove);
+    this._canvas.addEventListener('touchend', this._handleTouchEnd);
+  };
+
+  SignaturePad.prototype._reset = function () {
+    this.points = [];
+    this._lastVelocity = 0;
+    this._lastWidth = (this.minWidth + this.maxWidth) / 2;
+    this._ctx.fillStyle = this.penColor;
+  };
+
+  SignaturePad.prototype._createPoint = function (x, y, time) {
+    const rect = this._canvas.getBoundingClientRect();
+
+    return new Point(
+      x - rect.left,
+      y - rect.top,
+      time || new Date().getTime(),
+    );
+  };
+
+  SignaturePad.prototype._addPoint = function (point) {
+    const points = this.points;
+    let tmp;
+
+    points.push(point);
+
+    if (points.length > 2) {
+      // To reduce the initial lag make it work with 3 points
+      // by copying the first point to the beginning.
+      if (points.length === 3) points.unshift(points[0]);
+
+      tmp = this._calculateCurveControlPoints(points[0], points[1], points[2]);
+      const c2 = tmp.c2;
+      tmp = this._calculateCurveControlPoints(points[1], points[2], points[3]);
+      const c3 = tmp.c1;
+      const curve = new Bezier(points[1], c2, c3, points[2]);
+      const widths = this._calculateCurveWidths(curve);
+
+      // Remove the first element from the list,
+      // so that we always have no more than 4 points in points array.
+      points.shift();
+
+      return { curve, widths };
+    }
+
+    return {};
+  };
+
+  SignaturePad.prototype._calculateCurveControlPoints = function (s1, s2, s3) {
+    const dx1 = s1.x - s2.x;
+    const dy1 = s1.y - s2.y;
+    const dx2 = s2.x - s3.x;
+    const dy2 = s2.y - s3.y;
+
+    const m1 = { x: (s1.x + s2.x) / 2.0, y: (s1.y + s2.y) / 2.0 };
+    const m2 = { x: (s2.x + s3.x) / 2.0, y: (s2.y + s3.y) / 2.0 };
+
+    const l1 = Math.sqrt((dx1 * dx1) + (dy1 * dy1));
+    const l2 = Math.sqrt((dx2 * dx2) + (dy2 * dy2));
+
+    const dxm = (m1.x - m2.x);
+    const dym = (m1.y - m2.y);
+
+    const k = l2 / (l1 + l2);
+    const cm = { x: m2.x + (dxm * k), y: m2.y + (dym * k) };
+
+    const tx = s2.x - cm.x;
+    const ty = s2.y - cm.y;
+
+    return {
+      c1: new Point(m1.x + tx, m1.y + ty),
+      c2: new Point(m2.x + tx, m2.y + ty),
+    };
+  };
+
+  SignaturePad.prototype._calculateCurveWidths = function (curve) {
+    const startPoint = curve.startPoint;
+    const endPoint = curve.endPoint;
+    const widths = { start: null, end: null };
+
+    const velocity = (this.velocityFilterWeight * endPoint.velocityFrom(startPoint))
+     + ((1 - this.velocityFilterWeight) * this._lastVelocity);
+
+    const newWidth = this._strokeWidth(velocity);
+
+    widths.start = this._lastWidth;
+    widths.end = newWidth;
+
+    this._lastVelocity = velocity;
+    this._lastWidth = newWidth;
+
+    return widths;
+  };
+
+  SignaturePad.prototype._strokeWidth = function (velocity) {
+    return Math.max(this.maxWidth / (velocity + 1), this.minWidth);
+  };
+
+  SignaturePad.prototype._drawPoint = function (x, y, size) {
+    const ctx = this._ctx;
+
+    ctx.moveTo(x, y);
+    ctx.arc(x, y, size, 0, 2 * Math.PI, false);
+    this._isEmpty = false;
+  };
+
+  SignaturePad.prototype._drawCurve = function (curve, startWidth, endWidth) {
+    const ctx = this._ctx;
+    const widthDelta = endWidth - startWidth;
+    const drawSteps = Math.floor(curve.length());
+
+    ctx.beginPath();
+
+    for (let i = 0; i < drawSteps; i += 1) {
+      // Calculate the Bezier (x, y) coordinate for this step.
+      const t = i / drawSteps;
+      const tt = t * t;
+      const ttt = tt * t;
+      const u = 1 - t;
+      const uu = u * u;
+      const uuu = uu * u;
+
+      let x = uuu * curve.startPoint.x;
+      x += 3 * uu * t * curve.control1.x;
+      x += 3 * u * tt * curve.control2.x;
+      x += ttt * curve.endPoint.x;
+
+      let y = uuu * curve.startPoint.y;
+      y += 3 * uu * t * curve.control1.y;
+      y += 3 * u * tt * curve.control2.y;
+      y += ttt * curve.endPoint.y;
+
+      const width = startWidth + (ttt * widthDelta);
+      this._drawPoint(x, y, width);
+    }
+
+    ctx.closePath();
+    ctx.fill();
+  };
+
+  SignaturePad.prototype._drawDot = function (point) {
+    const ctx = this._ctx;
+    const width = (typeof this.dotSize) === 'function' ? this.dotSize() : this.dotSize;
+
+    ctx.beginPath();
+    this._drawPoint(point.x, point.y, width);
+    ctx.closePath();
+    ctx.fill();
+  };
+
+  SignaturePad.prototype._fromData = function (pointGroups, drawCurve, drawDot) {
+    for (let i = 0; i < pointGroups.length; i += 1) {
+      const group = pointGroups[i];
+
+      if (group.length > 1) {
+        for (let j = 0; j < group.length; j += 1) {
+          const rawPoint = group[j];
+          const point = new Point(rawPoint.x, rawPoint.y, rawPoint.time);
+          const color = rawPoint.color;
+
+          if (j === 0) {
+            // First point in a group. Nothing to draw yet.
+
+            // All points in the group have the same color, so it's enough to set
+            // penColor just at the beginning.
+            this.penColor = color;
+            this._reset();
+
+            this._addPoint(point);
+          } else if (j !== group.length - 1) {
+            // Middle point in a group.
+            const { curve, widths } = this._addPoint(point);
+            if (curve && widths) {
+              drawCurve(curve, widths, color);
+            }
+          } else {
+            // Last point in a group. Do nothing.
+          }
+        }
+      } else {
+        this._reset();
+        const rawPoint = group[0];
+        drawDot(rawPoint);
+      }
+    }
+  };
+
+  SignaturePad.prototype._toSVG = function () {
+    const pointGroups = this._data;
+    const canvas = this._canvas;
+    const ratio = Math.max(window.devicePixelRatio || 1, 1);
+    const minX = 0;
+    const minY = 0;
+    const maxX = canvas.width / ratio;
+    const maxY = canvas.height / ratio;
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+
+    svg.setAttributeNS(null, 'width', canvas.width);
+    svg.setAttributeNS(null, 'height', canvas.height);
+
+    this._fromData(
+      pointGroups,
+      (curve, widths, color) => {
+        const path = document.createElement('path');
+
+        // Need to check curve for NaN values, these pop up when drawing
+        // lines on the canvas that are not continuous. E.g. Sharp corners
+        // or stopping mid-stroke and than continuing without lifting mouse.
+        if (!isNaN(curve.control1.x) &&
+            !isNaN(curve.control1.y) &&
+            !isNaN(curve.control2.x) &&
+            !isNaN(curve.control2.y)) {
+          const attr = `M ${curve.startPoint.x.toFixed(3)},${curve.startPoint.y.toFixed(3)} `
+                     + `C ${curve.control1.x.toFixed(3)},${curve.control1.y.toFixed(3)} `
+                     + `${curve.control2.x.toFixed(3)},${curve.control2.y.toFixed(3)} `
+                     + `${curve.endPoint.x.toFixed(3)},${curve.endPoint.y.toFixed(3)}`;
+
+          path.setAttribute('d', attr);
+          path.setAttribute('stroke-width', (widths.end * 2.25).toFixed(3));
+          path.setAttribute('stroke', color);
+          path.setAttribute('fill', 'none');
+          path.setAttribute('stroke-linecap', 'round');
+
+          svg.appendChild(path);
+        }
+      },
+      (rawPoint) => {
+        const circle = document.createElement('circle');
+        const dotSize = (typeof this.dotSize) === 'function' ? this.dotSize() : this.dotSize;
+        circle.setAttribute('r', dotSize);
+        circle.setAttribute('cx', rawPoint.x);
+        circle.setAttribute('cy', rawPoint.y);
+        circle.setAttribute('fill', rawPoint.color);
+
+        svg.appendChild(circle);
+      },
+    );
+
+    const prefix = 'data:image/svg+xml;base64,';
+    const header = '<svg'
+      + ' xmlns="http://www.w3.org/2000/svg"'
+      + ' xmlns:xlink="http://www.w3.org/1999/xlink"'
+      + ` viewBox="${minX} ${minY} ${maxX} ${maxY}"`
+      + ` width="${maxX}"`
+      + ` height="${maxY}"`
+      + '>';
+    let body = svg.innerHTML;
+
+    // IE hack for missing innerHTML property on SVGElement
+    if (body === undefined) {
+      const dummy = document.createElement('dummy');
+      const nodes = svg.childNodes;
+      dummy.innerHTML = '';
+
+      for (let i = 0; i < nodes.length; i += 1) {
+        dummy.appendChild(nodes[i].cloneNode(true));
+      }
+
+      body = dummy.innerHTML;
+    }
+
+    const footer = '</svg>';
+    const data = header + body + footer;
+
+    return prefix + btoa(data);
+  };
+
+  SignaturePad.prototype.fromData = function (pointGroups) {
+    this.clear();
+
+    this._fromData(
+      pointGroups,
+      (curve, widths) => this._drawCurve(curve, widths.start, widths.end),
+      rawPoint => this._drawDot(rawPoint),
+    );
+
+    this._data = pointGroups;
+  };
+
+  SignaturePad.prototype.toData = function () {
+    return this._data;
+  };
+
+  return SignaturePad;
+});
+
+define('skylark-formio/components/signature/Signature',[
+    '../../vendors/signature_pad/SignaturePad',
+    '../_classes/input/Input',
+    'skylark-lodash'
+], function (SignaturePad, Input, _) {
+    'use strict';
+    return class SignatureComponent extends Input {
+        static schema(...extend) {
+            return Input.schema({
+                type: 'signature',
+                label: 'Signature',
+                key: 'signature',
+                footer: 'Sign above',
+                width: '100%',
+                height: '150px',
+                penColor: 'black',
+                backgroundColor: 'rgb(245,245,235)',
+                minWidth: '0.5',
+                maxWidth: '2.5'
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Signature',
+                group: 'advanced',
+                icon: 'pencil',
+                weight: 120,
+                documentation: 'http://help.form.io/userguide/#signature',
+                schema: SignatureComponent.schema()
+            };
+        }
+        init() {
+            super.init();
+            this.currentWidth = 0;
+            this.scale = 1;
+            if (!this.component.width) {
+                this.component.width = '100%';
+            }
+            if (!this.component.height) {
+                this.component.height = '200px';
+            }
+        }
+        get emptyValue() {
+            return '';
+        }
+        get defaultSchema() {
+            return SignatureComponent.schema();
+        }
+        get inputInfo() {
+            const info = super.inputInfo;
+            info.type = 'input';
+            info.attr.type = 'hidden';
+            return info;
+        }
+        get className() {
+            return `${ super.className } signature-pad`;
+        }
+        labelIsHidden() {
+            return true;
+        }
+        setValue(value, flags = {}) {
+            const changed = super.setValue(value, flags);
+            if (value && this.refs.signatureImage && this.options.readOnly) {
+                this.refs.signatureImage.setAttribute('src', value);
+                this.showCanvas(false);
+            }
+            if (this.signaturePad) {
+                if (!value) {
+                    this.signaturePad.clear();
+                } else if (changed) {
+                    this.triggerChange();
+                }
+            }
+            return changed;
+        }
+        showCanvas(show) {
+            if (show) {
+                if (this.refs.canvas) {
+                    this.refs.canvas.style.display = 'inherit';
+                }
+                if (this.refs.signatureImage) {
+                    this.refs.signatureImage.style.display = 'none';
+                }
+            } else {
+                if (this.refs.canvas) {
+                    this.refs.canvas.style.display = 'none';
+                }
+                if (this.refs.signatureImage) {
+                    this.refs.signatureImage.style.display = 'inherit';
+                }
+            }
+        }
+        onDisabled() {
+            this.showCanvas(!super.disabled);
+            if (this.signaturePad) {
+                if (super.disabled) {
+                    this.signaturePad.off();
+                    if (this.refs.refresh) {
+                        this.refs.refresh.classList.add('disabled');
+                    }
+                } else {
+                    this.signaturePad.on();
+                    if (this.refs.refresh) {
+                        this.refs.refresh.classList.remove('disabled');
+                    }
+                }
+            }
+        }
+        checkSize(force, scale) {
+            if (force || this.refs.padBody.offsetWidth !== this.currentWidth) {
+                this.scale = force ? scale : this.scale;
+                this.currentWidth = this.refs.padBody.offsetWidth;
+                this.refs.canvas.width = this.currentWidth * this.scale;
+                this.refs.canvas.height = this.refs.padBody.offsetHeight * this.scale;
+                const ctx = this.refs.canvas.getContext('2d');
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+                ctx.scale(1 / this.scale, 1 / this.scale);
+                ctx.fillStyle = this.signaturePad.backgroundColor;
+                ctx.fillRect(0, 0, this.refs.canvas.width, this.refs.canvas.height);
+                this.signaturePad.clear();
+                if (this.dataValue) {
+                    this.signaturePad.fromDataURL(this.dataValue);
+                }
+            }
+        }
+        renderElement(value, index) {
+            return this.renderTemplate('signature', {
+                element: super.renderElement(value, index),
+                required: _.get(this.component, 'validate.required', false)
+            });
+        }
+        setOpenModalElement() {
+            const template = `
+      <label class="control-label">${ this.component.label }</label><br>
+      <button lang='en' class='btn btn-light btn-md open-modal-button' ref='openModal'>Click to Sign</button>
+    `;
+            this.componentModal.setOpenModalElement(template);
+        }
+        getModalPreviewTemplate() {
+            return `
+      <label class="control-label">${ this.component.label }</label><br>
+      <img src=${ this.dataValue } ref='openModal' />
+    `;
+        }
+        attach(element) {
+            this.loadRefs(element, {
+                canvas: 'single',
+                refresh: 'single',
+                padBody: 'single',
+                signatureImage: 'single'
+            });
+            const superAttach = super.attach(element);
+            this.onDisabled();
+            if (this.refs.refresh && this.options.readOnly) {
+                this.refs.refresh.classList.add('disabled');
+            }
+            if (this.refs.canvas) {
+                this.signaturePad = new SignaturePad(this.refs.canvas, {
+                    minWidth: this.component.minWidth,
+                    maxWidth: this.component.maxWidth,
+                    penColor: this.component.penColor,
+                    backgroundColor: this.component.backgroundColor
+                });
+                this.signaturePad.onEnd = () => this.setValue(this.signaturePad.toDataURL());
+                this.refs.signatureImage.setAttribute('src', this.signaturePad.toDataURL());
+                if (this.refs.padBody) {
+                    if (!this.refs.padBody.style.maxWidth) {
+                        this.refs.padBody.style.maxWidth = '100%';
+                    }
+                    this.addEventListener(window, 'resize', _.debounce(() => this.checkSize(), 100));
+                    setTimeout(function checkWidth() {
+                        if (this.refs.padBody && this.refs.padBody.offsetWidth) {
+                            this.checkSize();
+                        } else {
+                            setTimeout(checkWidth.bind(this), 200);
+                        }
+                    }.bind(this), 200);
+                }
+            }
+            this.addEventListener(this.refs.refresh, 'click', event => {
+                event.preventDefault();
+                this.showCanvas(true);
+                this.signaturePad.clear();
+                this.setValue(this.defaultValue);
+            });
+            this.setValue(this.dataValue);
+            return superAttach;
+        }
+        detach() {
+            if (this.signaturePad) {
+                this.signaturePad.off();
+            }
+            this.signaturePad = null;
+            this.currentWidth = 0;
+            super.detach();
+        }
+        getValueAsString(value) {
+            return value ? 'Yes' : 'No';
+        }
+        focus() {
+            this.refs.padBody.focus();
+        }
+    };
+});
+define('skylark-formio/components/survey/Survey',[
+    'skylark-lodash',
+    '../_classes/field/Field',
+    '../../utils/utils'
+], function (_, Field, a) {
+    'use strict';
+    return class SurveyComponent extends Field {
+        static schema(...extend) {
+            return Field.schema({
+                type: 'survey',
+                label: 'Survey',
+                key: 'survey',
+                questions: [],
+                values: []
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Survey',
+                group: 'advanced',
+                icon: 'list',
+                weight: 110,
+                documentation: 'http://help.form.io/userguide/#survey',
+                schema: SurveyComponent.schema()
+            };
+        }
+        get defaultSchema() {
+            return SurveyComponent.schema();
+        }
+        render() {
+            return super.render(this.renderTemplate('survey'));
+        }
+        attach(element) {
+            this.loadRefs(element, { input: 'multiple' });
+            const superAttach = super.attach(element);
+            this.refs.input.forEach(input => {
+                if (this.disabled) {
+                    input.setAttribute('disabled', 'disabled');
+                } else {
+                    this.addEventListener(input, 'change', () => this.updateValue(null, { modified: true }));
+                }
+            });
+            this.setValue(this.dataValue);
+            return superAttach;
+        }
+        setValue(value, flags = {}) {
+            if (!value) {
+                return false;
+            }
+            _.each(this.component.questions, question => {
+                _.each(this.refs.input, input => {
+                    if (input.name === this.getInputName(question)) {
+                        input.checked = input.value === value[question.value];
+                    }
+                });
+            });
+            return this.updateValue(value, flags);
+        }
+        get emptyValue() {
+            return {};
+        }
+        getValue() {
+            if (this.viewOnly || !this.refs.input || !this.refs.input.length) {
+                return this.dataValue;
+            }
+            const value = {};
+            _.each(this.component.questions, question => {
+                _.each(this.refs.input, input => {
+                    if (input.checked && input.name === this.getInputName(question)) {
+                        value[question.value] = input.value;
+                        return false;
+                    }
+                });
+            });
+            return value;
+        }
+        set disabled(disabled) {
+            super.disabled = disabled;
+            _.each(this.refs.input, input => {
+                input.disabled = true;
+            });
+        }
+        get disabled() {
+            return super.disabled;
+        }
+        validateRequired(setting, value) {
+            if (!a.boolValue(setting)) {
+                return true;
+            }
+            return this.component.questions.reduce((result, question) => result && Boolean(value[question.value]), true);
+        }
+        getInputName(question) {
+            return `${ this.options.name }[${ question.value }]`;
+        }
+    };
+});
+define('skylark-formio/utils/builder',[
+    'skylark-lodash',
+    './utils'
+], function (_, a) {
+    'use strict';
+    return {
+        uniquify(container, component) {
+            let changed = false;
+            const formKeys = {};
+            a.eachComponent(container, function (comp) {
+                formKeys[comp.key] = true;
+            }, true);
+            a.eachComponent([component], component => {
+                if (!component.key) {
+                    return;
+                }
+                const newKey = a.uniqueKey(formKeys, component.key);
+                if (newKey !== component.key) {
+                    component.key = newKey;
+                    formKeys[newKey] = true;
+                    changed = true;
+                }
+            }, true);
+            return changed;
+        },
+        additionalShortcuts: {
+            button: [
+                'Enter',
+                'Esc'
+            ]
+        },
+        getAlphaShortcuts() {
+            return _.range('A'.charCodeAt(), 'Z'.charCodeAt() + 1).map(charCode => String.fromCharCode(charCode));
+        },
+        getAdditionalShortcuts(type) {
+            return this.additionalShortcuts[type] || [];
+        },
+        getBindedShortcuts(components, input) {
+            const result = [];
+            a.eachComponent(components, component => {
+                if (component === input) {
+                    return;
+                }
+                if (component.shortcut) {
+                    result.push(component.shortcut);
+                }
+                if (component.values) {
+                    component.values.forEach(value => {
+                        if (value.shortcut) {
+                            result.push(value.shortcut);
+                        }
+                    });
+                }
+            }, true);
+            return result;
+        },
+        getAvailableShortcuts(form, component) {
+            if (!component) {
+                return [];
+            }
+            return [''].concat(_.difference(this.getAlphaShortcuts().concat(this.getAdditionalShortcuts(component.type)), this.getBindedShortcuts(form.components, component))).map(shortcut => ({
+                label: shortcut,
+                value: shortcut
+            }));
+        }
+    };
+});
+define('skylark-formio/components/table/Table',[
+    'skylark-lodash',
+    '../../utils/builder',
+    '../_classes/nested/NestedComponent'
+], function (_, BuilderUtils, NestedComponent) {
+    'use strict';
+    return class TableComponent extends NestedComponent {
+        static emptyTable(numRows, numCols) {
+            const rows = [];
+            for (let i = 0; i < numRows; i++) {
+                const cols = [];
+                for (let j = 0; j < numCols; j++) {
+                    cols.push({ components: [] });
+                }
+                rows.push(cols);
+            }
+            return rows;
+        }
+        static schema(...extend) {
+            return NestedComponent.schema({
+                label: 'Table',
+                type: 'table',
+                input: false,
+                key: 'table',
+                numRows: 3,
+                numCols: 3,
+                rows: TableComponent.emptyTable(3, 3),
+                header: [],
+                caption: '',
+                cloneRows: false,
+                striped: false,
+                bordered: false,
+                hover: false,
+                condensed: false,
+                persistent: false
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Table',
+                group: 'layout',
+                icon: 'table',
+                weight: 40,
+                documentation: 'http://help.form.io/userguide/#table',
+                schema: TableComponent.schema()
+            };
+        }
+        get defaultSchema() {
+            return TableComponent.schema();
+        }
+        get schema() {
+            const schema = _.omit(super.schema, 'components');
+            schema.rows = [];
+            this.eachComponent(component => {
+                if (!schema.rows || !schema.rows.length) {
+                    schema.rows = TableComponent.emptyTable(this.component.numRows, this.component.numCols);
+                }
+                if (!schema.rows[component.tableRow]) {
+                    schema.rows[component.tableRow] = [];
+                }
+                if (!schema.rows[component.tableRow][component.tableColumn]) {
+                    schema.rows[component.tableRow][component.column] = { components: [] };
+                }
+                schema.rows[component.tableRow][component.tableColumn].components.push(component.schema);
+            });
+            if (!schema.rows.length) {
+                schema.rows = TableComponent.emptyTable(this.component.numRows, this.component.numCols);
+            }
+            return schema;
+        }
+        get className() {
+            let name = `table-responsive ${ super.className }`;
+            if (!this.component.bordered) {
+                name += ' no-top-border-table';
+            }
+            return name;
+        }
+        get cellClassName() {
+            let name = '';
+            if (this.component.cellAlignment) {
+                name = `cell-align-${ this.component.cellAlignment }`;
+            }
+            return name;
+        }
+        get tableKey() {
+            return `table-${ this.key }`;
+        }
+        constructor(...args) {
+            super(...args);
+            this.noField = true;
+        }
+        init() {
+            super.init();
+            for (let rowIndex = 0; rowIndex < this.component.numRows; rowIndex++) {
+                this.component.rows[rowIndex] = this.component.rows[rowIndex] || [];
+                for (let colIndex = 0; colIndex < this.component.numCols; colIndex++) {
+                    this.component.rows[rowIndex][colIndex] = this.component.rows[rowIndex][colIndex] || { components: [] };
+                }
+                this.component.rows[rowIndex] = this.component.rows[rowIndex].slice(0, this.component.numCols);
+            }
+            this.component.rows = this.component.rows.slice(0, this.component.numRows);
+            const lastNonEmptyRow = [];
+            this.table = [];
+            _.each(this.component.rows, (row, rowIndex) => {
+                this.table[rowIndex] = [];
+                _.each(row, (column, colIndex) => {
+                    this.table[rowIndex][colIndex] = [];
+                    if (this.component.cloneRows) {
+                        if (column.components.length) {
+                            lastNonEmptyRow[colIndex] = column;
+                        } else if (lastNonEmptyRow[colIndex]) {
+                            column.components = _.cloneDeep(lastNonEmptyRow[colIndex].components);
+                            BuilderUtils.uniquify(this.root._form.components, column);
+                        }
+                    }
+                    _.each(column.components, comp => {
+                        const component = this.createComponent(comp);
+                        component.tableRow = rowIndex;
+                        component.tableColumn = colIndex;
+                        this.table[rowIndex][colIndex].push(component);
+                    });
+                });
+            });
+        }
+        render() {
+            return super.render(this.renderTemplate('table', {
+                cellClassName: this.cellClassName,
+                tableKey: this.tableKey,
+                tableComponents: this.table.map(row => row.map(column => this.renderComponents(column)))
+            }));
+        }
+        attach(element) {
+            const keys = this.table.reduce((prev, row, rowIndex) => {
+                prev[`${ this.tableKey }-${ rowIndex }`] = 'multiple';
+                return prev;
+            }, {});
+            this.loadRefs(element, keys);
+            const superAttach = super.attach(element);
+            this.table.forEach((row, rowIndex) => {
+                row.forEach((column, columnIndex) => {
+                    this.attachComponents(this.refs[`${ this.tableKey }-${ rowIndex }`][columnIndex], this.table[rowIndex][columnIndex], this.component.rows[rowIndex][columnIndex].components);
+                });
+            });
+            return superAttach;
+        }
+        destroy(all) {
+            super.destroy(all);
+            delete this.table;
+        }
+    };
+});
+define('skylark-formio/components/tabs/Tabs',[
+    'skylark-lodash',
+    '../_classes/nested/NestedComponent'
+], function (_, NestedComponent) {
+    'use strict';
+    return class TabsComponent extends NestedComponent {
+        static schema(...extend) {
+            return NestedComponent.schema({
+                label: 'Tabs',
+                type: 'tabs',
+                input: false,
+                key: 'tabs',
+                persistent: false,
+                tableView: false,
+                components: [{
+                        label: 'Tab 1',
+                        key: 'tab1',
+                        components: []
+                    }]
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Tabs',
+                group: 'layout',
+                icon: 'folder-o',
+                weight: 50,
+                documentation: 'http://help.form.io/userguide/#tabs',
+                schema: TabsComponent.schema()
+            };
+        }
+        get defaultSchema() {
+            return TabsComponent.schema();
+        }
+        get schema() {
+            const schema = super.schema;
+            const components = _.cloneDeep(this.component.components);
+            schema.components = components.map((tab, index) => {
+                tab.components = this.tabs[index].map(component => component.schema);
+                return tab;
+            });
+            return schema;
+        }
+        get tabKey() {
+            return `tab-${ this.key }`;
+        }
+        get tabLikey() {
+            return `tabLi-${ this.key }`;
+        }
+        get tabLinkKey() {
+            return `tabLink-${ this.key }`;
+        }
+        constructor(...args) {
+            super(...args);
+            this.currentTab = 0;
+            this.noField = true;
+        }
+        init() {
+            this.components = [];
+            this.tabs = [];
+            _.each(this.component.components, (tab, index) => {
+                this.tabs[index] = [];
+                tab.components = tab.components || [];
+                _.each(tab.components, comp => {
+                    const component = this.createComponent(comp);
+                    component.tab = index;
+                    this.tabs[index].push(component);
+                });
+            });
+        }
+        render() {
+            return super.render(this.renderTemplate('tab', {
+                tabKey: this.tabKey,
+                tabLikey: this.tabLikey,
+                tabLinkKey: this.tabLinkKey,
+                currentTab: this.currentTab,
+                tabComponents: this.tabs.map(tab => this.renderComponents(tab))
+            }, this.options.flatten || this.options.pdf ? 'flat' : null));
+        }
+        attach(element) {
+            this.loadRefs(element, {
+                [this.tabLinkKey]: 'multiple',
+                [this.tabKey]: 'multiple',
+                [this.tabLikey]: 'multiple'
+            });
+            const superAttach = super.attach(element);
+            this.refs[this.tabLinkKey].forEach((tabLink, index) => {
+                this.addEventListener(tabLink, 'click', event => {
+                    event.preventDefault();
+                    this.setTab(index);
+                });
+            });
+            this.refs[this.tabKey].forEach((tab, index) => {
+                this.attachComponents(tab, this.tabs[index], this.component.components[index].components);
+            });
+            return superAttach;
+        }
+        detach(all) {
+            super.detach(all);
+        }
+        setTab(index) {
+            if (!this.tabs || !this.tabs[index] || !this.refs[this.tabKey] || !this.refs[this.tabKey][index]) {
+                return;
+            }
+            this.currentTab = index;
+            _.each(this.refs[this.tabKey], tab => {
+                this.removeClass(tab, 'formio-tab-panel-active');
+                tab.style.display = 'none';
+            });
+            this.addClass(this.refs[this.tabKey][index], 'formio-tab-panel-active');
+            this.refs[this.tabKey][index].style.display = 'block';
+            _.each(this.refs[this.tabLinkKey], (tabLink, tabIndex) => {
+                if (this.refs[this.tabLinkKey][tabIndex]) {
+                    this.removeClass(tabLink, 'formio-tab-link-active');
+                }
+                if (this.refs[this.tabLikey][tabIndex]) {
+                    this.removeClass(this.refs[this.tabLikey][tabIndex], 'formio-tab-link-container-active');
+                }
+            });
+            if (this.refs[this.tabLikey][index]) {
+                this.addClass(this.refs[this.tabLikey][index], 'formio-tab-link-container-active');
+            }
+            if (this.refs[this.tabLinkKey][index]) {
+                this.addClass(this.refs[this.tabLinkKey][index], 'formio-tab-link-active');
+            }
+            this.triggerChange();
+        }
+    };
+});
+define('skylark-formio/components/tags/Tags',[
+    '../_classes/input/Input',
+ //   'choices.js'
+], function (Input, Choices) {
+    'use strict';
+    //TODO: lwf
+    return class TagsComponent extends Input {
+        static schema(...extend) {
+            return Input.schema({
+                type: 'tags',
+                label: 'Tags',
+                key: 'tags',
+                delimeter: ',',
+                storeas: 'string',
+                maxTags: 0
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Tags',
+                icon: 'tags',
+                group: 'advanced',
+                documentation: 'http://help.form.io/userguide/#tags',
+                weight: 30,
+                schema: TagsComponent.schema()
+            };
+        }
+        init() {
+            super.init();
+        }
+        get emptyValue() {
+            return this.component.storeas === 'string' ? '' : [];
+        }
+        get defaultSchema() {
+            return TagsComponent.schema();
+        }
+        get inputInfo() {
+            const info = super.inputInfo;
+            info.type = 'input';
+            info.attr.type = 'text';
+            info.changeEvent = 'change';
+            return info;
+        }
+        get delimiter() {
+            return this.component.delimeter || ',';
+        }
+        attachElement(element, index) {
+            super.attachElement(element, index);
+            if (!element) {
+                return;
+            }
+            element.setAttribute('dir', this.i18next.dir());
+            if (this.choices) {
+                this.choices.destroy();
+            }
+            this.choices = new Choices(element, {
+                delimiter: this.delimiter,
+                editItems: true,
+                maxItemCount: this.component.maxTags,
+                removeItemButton: true,
+                duplicateItemsAllowed: false
+            });
+            this.choices.itemList.element.tabIndex = element.tabIndex;
+            this.addEventListener(this.choices.input.element, 'blur', () => {
+                const value = this.choices.input.value;
+                if (value) {
+                    this.choices.setValue([value]);
+                    this.choices.clearInput();
+                    this.choices.hideDropdown(true);
+                    this.updateValue(null, { modified: true });
+                }
+            });
+        }
+        detach() {
+            super.detach();
+            if (this.choices) {
+                this.choices.destroy();
+                this.choices = null;
+            }
+        }
+        normalizeValue(value) {
+            if (this.component.storeas === 'string' && Array.isArray(value)) {
+                return value.join(this.delimiter);
+            } else if (this.component.storeas === 'array' && typeof value === 'string') {
+                return value.split(this.delimiter).filter(result => result);
+            }
+            return value;
+        }
+        setValue(value, flags = {}) {
+            const changed = super.setValue(value, flags);
+            if (this.choices) {
+                let dataValue = this.dataValue;
+                this.choices.removeActiveItems();
+                if (dataValue) {
+                    if (typeof dataValue === 'string') {
+                        dataValue = dataValue.split(this.delimiter).filter(result => result);
+                    }
+                    this.choices.setValue(Array.isArray(dataValue) ? dataValue : [dataValue]);
+                }
+            }
+            return changed;
+        }
+        set disabled(disabled) {
+            super.disabled = disabled;
+            if (!this.choices) {
+                return;
+            }
+            if (disabled) {
+                this.choices.disable();
+            } else {
+                this.choices.enable();
+            }
+        }
+        get disabled() {
+            return super.disabled;
+        }
+        focus() {
+            if (this.refs.input && this.refs.input.length) {
+                this.refs.input[0].parentNode.lastChild.focus();
+            }
+        }
+    };
+});
+define('skylark-formio/components/textarea/TextArea',[
+    '../textfield/TextField',
+    'skylark-lodash',
+    '../../vendors/getify/npo',
+    '../../utils/utils'
+], function (TextFieldComponent, _, NativePromise, a) {
+    'use strict';
+    return class TextAreaComponent extends TextFieldComponent {
+        static schema(...extend) {
+            return TextFieldComponent.schema({
+                type: 'textarea',
+                label: 'Text Area',
+                key: 'textArea',
+                rows: 3,
+                wysiwyg: false,
+                editor: '',
+                inputFormat: 'html',
+                validate: {
+                    minWords: '',
+                    maxWords: ''
+                }
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Text Area',
+                group: 'basic',
+                icon: 'font',
+                documentation: 'http://help.form.io/userguide/#textarea',
+                weight: 20,
+                schema: TextAreaComponent.schema()
+            };
+        }
+        init() {
+            super.init();
+            this.editors = [];
+            this.editorsReady = [];
+            this.updateSizes = [];
+            this.options.submitOnEnter = false;
+        }
+        get defaultSchema() {
+            return TextAreaComponent.schema();
+        }
+        get inputInfo() {
+            const info = super.inputInfo;
+            info.type = this.component.wysiwyg ? 'div' : 'textarea';
+            if (this.component.rows) {
+                info.attr.rows = this.component.rows;
+            }
+            return info;
+        }
+        validateMultiple() {
+            return !this.isJsonValue;
+        }
+        renderElement(value, index) {
+            const info = this.inputInfo;
+            info.attr = info.attr || {};
+            info.content = value;
+            if (this.options.readOnly || this.disabled) {
+                return this.renderTemplate('well', {
+                    children: '<div ref="input"></div>',
+                    nestedKey: this.key,
+                    value
+                });
+            }
+            if (this.component.editor || this.component.wysiwyg) {
+                return '<div ref="input"></div>';
+            }
+            return this.renderTemplate('input', {
+                input: info,
+                value,
+                index
+            });
+        }
+        get autoExpand() {
+            return this.component.autoExpand;
+        }
+        updateEditorValue(index, newValue) {
+            newValue = this.getConvertedValue(this.removeBlanks(newValue));
+            const dataValue = this.dataValue;
+            if (this.component.multiple && Array.isArray(dataValue)) {
+                const newArray = _.clone(dataValue);
+                newArray[index] = newValue;
+                newValue = newArray;
+            }
+            if (!_.isEqual(newValue, dataValue) && (!_.isEmpty(newValue) || !_.isEmpty(dataValue))) {
+                this.updateValue(newValue, { modified: !this.autoModified });
+            }
+            this.autoModified = false;
+        }
+        attachElement(element, index) {
+            if (this.autoExpand && (this.isPlain || this.options.readOnly || this.options.htmlView)) {
+                if (element.nodeName === 'TEXTAREA') {
+                    this.addAutoExpanding(element, index);
+                }
+            }
+            if (this.options.readOnly) {
+                return element;
+            }
+            if (this.component.wysiwyg && !this.component.editor) {
+                this.component.editor = 'ckeditor';
+            }
+            let settings = _.isEmpty(this.component.wysiwyg) ? this.wysiwygDefault[this.component.editor] || this.wysiwygDefault.default : this.component.wysiwyg;
+            this.editorsReady[index] = new NativePromise(editorReady => {
+                switch (this.component.editor) {
+                case 'ace':
+                    if (!settings) {
+                        settings = {};
+                    }
+                    settings.mode = this.component.as;
+                    this.addAce(element, settings, newValue => this.updateEditorValue(index, newValue)).then(ace => {
+                        this.editors[index] = ace;
+                        let dataValue = this.dataValue;
+                        dataValue = this.component.multiple && Array.isArray(dataValue) ? dataValue[index] : dataValue;
+                        ace.setValue(this.setConvertedValue(dataValue, index));
+                        editorReady(ace);
+                        return ace;
+                    }).catch(err => console.warn(err));
+                    break;
+                case 'quill':
+                    if (settings.hasOwnProperty('toolbarGroups') || settings.hasOwnProperty('toolbar')) {
+                        console.warn('The WYSIWYG settings are configured for CKEditor. For this renderer, you will need to use configurations for the Quill Editor. See https://quilljs.com/docs/configuration for more information.');
+                        settings = this.wysiwygDefault.quill;
+                    }
+                    this.addQuill(element, settings, () => this.updateEditorValue(index, this.editors[index].root.innerHTML)).then(quill => {
+                        this.editors[index] = quill;
+                        if (this.component.isUploadEnabled) {
+                            const _this = this;
+                            quill.getModule('toolbar').addHandler('image', function () {
+                                _this.imageHandler.call(_this, this);
+                            });
+                        }
+                        quill.root.spellcheck = this.component.spellcheck;
+                        if (this.options.readOnly || this.component.disabled) {
+                            quill.disable();
+                        }
+                        let dataValue = this.dataValue;
+                        dataValue = this.component.multiple && Array.isArray(dataValue) ? dataValue[index] : dataValue;
+                        quill.setContents(quill.clipboard.convert(this.setConvertedValue(dataValue, index)));
+                        editorReady(quill);
+                        return quill;
+                    }).catch(err => console.warn(err));
+                    break;
+                case 'ckeditor':
+                    settings = settings || {};
+                    settings.rows = this.component.rows;
+                    this.addCKE(element, settings, newValue => this.updateEditorValue(index, newValue)).then(editor => {
+                        this.editors[index] = editor;
+                        if (this.options.readOnly || this.component.disabled) {
+                            editor.isReadOnly = true;
+                        }
+                        const numRows = parseInt(this.component.rows, 10);
+                        if (_.isFinite(numRows) && _.has(editor, 'ui.view.editable.editableElement')) {
+                            const editorHeight = numRows * 31 + 14;
+                            editor.ui.view.editable.editableElement.style.height = `${ editorHeight }px`;
+                        }
+                        let dataValue = this.dataValue;
+                        dataValue = this.component.multiple && Array.isArray(dataValue) ? dataValue[index] : dataValue;
+                        editor.data.set(this.setConvertedValue(dataValue, index));
+                        editorReady(editor);
+                        return editor;
+                    });
+                    break;
+                case 'tiny':
+                    if (!settings) {
+                        settings = {};
+                    }
+                    settings.mode = this.component.as || 'javascript';
+                    this.addTiny(element, settings, newValue => this.updateEditorValue(newValue)).then(tiny => {
+                        this.editors[index] = tiny;
+                        tiny.setContent(this.setConvertedValue(this.dataValue));
+                        editorReady(tiny);
+                        return tiny;
+                    }).catch(err => console.warn(err));
+                    break;
+                default:
+                    super.attachElement(element, index);
+                    break;
+                }
+            });
+            return element;
+        }
+        attach(element) {
+            const attached = super.attach(element);
+            this.restoreValue();
+            return attached;
+        }
+        imageHandler(quillInstance) {
+            let fileInput = quillInstance.container.querySelector('input.ql-image[type=file]');
+            if (fileInput == null) {
+                fileInput = document.createElement('input');
+                fileInput.setAttribute('type', 'file');
+                fileInput.setAttribute('accept', 'image/*');
+                fileInput.classList.add('ql-image');
+                this.addEventListener(fileInput, 'change', () => {
+                    const files = fileInput.files;
+                    const range = quillInstance.quill.getSelection(true);
+                    if (!files || !files.length) {
+                        console.warn('No files selected');
+                        return;
+                    }
+                    quillInstance.quill.enable(false);
+                    const {uploadStorage, uploadUrl, uploadOptions, uploadDir, fileKey} = this.component;
+                    let requestData;
+                    this.root.formio.uploadFile(uploadStorage, files[0], a.uniqueName(files[0].name), uploadDir || '', null, uploadUrl, uploadOptions, fileKey).then(result => {
+                        requestData = result;
+                        return this.root.formio.downloadFile(result);
+                    }).then(result => {
+                        quillInstance.quill.enable(true);
+                        const Delta = Quill.import('delta');
+                        quillInstance.quill.updateContents(new Delta().retain(range.index).delete(range.length).insert({ image: result.url }, { alt: JSON.stringify(requestData) }), Quill.sources.USER);
+                        fileInput.value = '';
+                    }).catch(error => {
+                        console.warn('Quill image upload failed');
+                        console.warn(error);
+                        quillInstance.quill.enable(true);
+                    });
+                });
+                quillInstance.container.appendChild(fileInput);
+            }
+            fileInput.click();
+        }
+        get isPlain() {
+            return !this.component.wysiwyg && !this.component.editor;
+        }
+        get htmlView() {
+            return this.options.readOnly && (this.component.editor || this.component.wysiwyg);
+        }
+        setValueAt(index, value, flags = {}) {
+            super.setValueAt(index, value, flags);
+            if (this.editorsReady[index]) {
+                const setEditorsValue = flags => editor => {
+                    this.autoModified = true;
+                    if (!flags.skipWysiwyg) {
+                        switch (this.component.editor) {
+                        case 'ace':
+                            editor.setValue(this.setConvertedValue(value, index));
+                            break;
+                        case 'quill':
+                            if (this.component.isUploadEnabled) {
+                                this.setAsyncConvertedValue(value).then(result => {
+                                    editor.setContents(editor.clipboard.convert(result));
+                                });
+                            } else {
+                                editor.setContents(editor.clipboard.convert(this.setConvertedValue(value, index)));
+                            }
+                            break;
+                        case 'ckeditor':
+                            editor.data.set(this.setConvertedValue(value, index));
+                            break;
+                        case 'tiny':
+                            editor.setContent(this.setConvertedValue(value));
+                            break;
+                        }
+                    }
+                };
+                this.editorsReady[index].then(setEditorsValue(_.clone(flags)));
+            }
+        }
+        setValue(value, flags = {}) {
+            if (this.isPlain || this.options.readOnly || this.disabled) {
+                value = this.component.multiple && Array.isArray(value) ? value.map((val, index) => this.setConvertedValue(val, index)) : this.setConvertedValue(value);
+                return super.setValue(value, flags);
+            }
+            flags.skipWysiwyg = _.isEqual(value, this.getValue());
+            return super.setValue(value, flags);
+        }
+        setReadOnlyValue(value, index) {
+            index = index || 0;
+            if (this.options.readOnly || this.disabled) {
+                if (this.refs.input && this.refs.input[index]) {
+                    this.setContent(this.refs.input[index], this.interpolate(value));
+                }
+            }
+        }
+        get isJsonValue() {
+            return this.component.as && this.component.as === 'json';
+        }
+        setConvertedValue(value, index) {
+            if (this.isJsonValue && !_.isNil(value)) {
+                try {
+                    value = JSON.stringify(value, null, 2);
+                } catch (err) {
+                    console.warn(err);
+                }
+            }
+            if (!_.isString(value)) {
+                value = '';
+            }
+            this.setReadOnlyValue(value, index);
+            return value;
+        }
+        setAsyncConvertedValue(value) {
+            if (this.isJsonValue && value) {
+                try {
+                    value = JSON.stringify(value, null, 2);
+                } catch (err) {
+                    console.warn(err);
+                }
+            }
+            if (!_.isString(value)) {
+                value = '';
+            }
+            const htmlDoc = new DOMParser().parseFromString(value, 'text/html');
+            const images = htmlDoc.getElementsByTagName('img');
+            if (images.length) {
+                return this.setImagesUrl(images).then(() => {
+                    value = htmlDoc.getElementsByTagName('body')[0].firstElementChild;
+                    return new XMLSerializer().serializeToString(value);
+                });
+            } else {
+                return NativePromise.resolve(value);
+            }
+        }
+        setImagesUrl(images) {
+            return NativePromise.all(_.map(images, image => {
+                let requestData;
+                try {
+                    requestData = JSON.parse(image.getAttribute('alt'));
+                } catch (error) {
+                    console.warn(error);
+                }
+                return this.root.formio.downloadFile(requestData).then(result => {
+                    image.setAttribute('src', result.url);
+                });
+            }));
+        }
+        addAutoExpanding(textarea, index) {
+            let heightOffset = null;
+            let previousHeight = null;
+            const changeOverflow = value => {
+                const width = textarea.style.width;
+                textarea.style.width = '0px';
+                textarea.offsetWidth;
+                textarea.style.width = width;
+                textarea.style.overflowY = value;
+            };
+            const preventParentScroll = (element, changeSize) => {
+                const nodeScrolls = [];
+                while (element && element.parentNode && element.parentNode instanceof Element) {
+                    if (element.parentNode.scrollTop) {
+                        nodeScrolls.push({
+                            node: element.parentNode,
+                            scrollTop: element.parentNode.scrollTop
+                        });
+                    }
+                    element = element.parentNode;
+                }
+                changeSize();
+                nodeScrolls.forEach(nodeScroll => {
+                    nodeScroll.node.scrollTop = nodeScroll.scrollTop;
+                });
+            };
+            const resize = () => {
+                if (textarea.scrollHeight === 0) {
+                    return;
+                }
+                preventParentScroll(textarea, () => {
+                    textarea.style.height = '';
+                    textarea.style.height = `${ textarea.scrollHeight + heightOffset }px`;
+                });
+            };
+            const update = _.debounce(() => {
+                resize();
+                const styleHeight = Math.round(parseFloat(textarea.style.height));
+                const computed = window.getComputedStyle(textarea, null);
+                let currentHeight = textarea.offsetHeight;
+                if (currentHeight < styleHeight && computed.overflowY === 'hidden') {
+                    changeOverflow('scroll');
+                } else if (computed.overflowY !== 'hidden') {
+                    changeOverflow('hidden');
+                }
+                resize();
+                currentHeight = textarea.offsetHeight;
+                if (previousHeight !== currentHeight) {
+                    previousHeight = currentHeight;
+                    update();
+                }
+            }, 200);
+            const computedStyle = window.getComputedStyle(textarea, null);
+            textarea.style.resize = 'none';
+            heightOffset = parseFloat(computedStyle.borderTopWidth) + parseFloat(computedStyle.borderBottomWidth) || 0;
+            if (window) {
+                this.addEventListener(window, 'resize', update);
+            }
+            this.addEventListener(textarea, 'input', update);
+            this.on('initialized', update);
+            this.updateSizes[index] = update;
+            update();
+        }
+        removeBlanks(value) {
+            if (!value) {
+                return value;
+            }
+            const removeBlanks = function (input) {
+                if (typeof input !== 'string') {
+                    return input;
+                }
+                return input.replace(/<p>&nbsp;<\/p>|<p><br><\/p>|<p><br>&nbsp;<\/p>/g, '').trim();
+            };
+            if (Array.isArray(value)) {
+                value.forEach((input, index) => {
+                    value[index] = removeBlanks(input);
+                });
+            } else {
+                value = removeBlanks(value);
+            }
+            return value;
+        }
+        onChange(flags, fromRoot) {
+            const changed = super.onChange(flags, fromRoot);
+            this.updateSizes.forEach(updateSize => updateSize());
+            return changed;
+        }
+        hasChanged(newValue, oldValue) {
+            return super.hasChanged(this.removeBlanks(newValue), this.removeBlanks(oldValue));
+        }
+        isEmpty(value = this.dataValue) {
+            return super.isEmpty(this.removeBlanks(value));
+        }
+        get defaultValue() {
+            let defaultValue = super.defaultValue;
+            if (this.component.editor === 'quill' && !defaultValue) {
+                defaultValue = '<p><br></p>';
+            }
+            return defaultValue;
+        }
+        getConvertedValue(value) {
+            if (this.isJsonValue && value) {
+                try {
+                    value = JSON.parse(value);
+                } catch (err) {
+                }
+            }
+            return value;
+        }
+        detach() {
+            this.editors.forEach(editor => {
+                if (editor.destroy) {
+                    editor.destroy();
+                }
+            });
+            this.editors = [];
+            this.editorsReady = [];
+            this.updateSizes.forEach(updateSize => this.removeEventListener(window, 'resize', updateSize));
+            this.updateSizes = [];
+        }
+        getValue() {
+            if (this.isPlain) {
+                return this.getConvertedValue(super.getValue());
+            }
+            return this.dataValue;
+        }
+    };
+});
+define('skylark-formio/components/time/Time',[
+    'skylark-moment',
+    '../textfield/TextField'
+], function (moment, TextFieldComponent) {
+    'use strict';
+    const defaultDataFormat = 'HH:mm:ss';
+    return class TimeComponent extends TextFieldComponent {
+        static schema(...extend) {
+            return TextFieldComponent.schema({
+                type: 'time',
+                label: 'Time',
+                key: 'time',
+                inputType: 'time',
+                format: 'HH:mm',
+                dataFormat: defaultDataFormat
+            }, ...extend);
+        }
+        constructor(component, options, data) {
+            super(component, options, data);
+            this.component.inputMask = '99:99';
+            this.component.inputType = this.component.inputType || 'time';
+            this.rawData = this.component.multiple ? [] : this.emptyValue;
+        }
+        static get builderInfo() {
+            return {
+                title: 'Time',
+                icon: 'clock-o',
+                group: 'advanced',
+                documentation: 'http://help.form.io/userguide/#time',
+                weight: 55,
+                schema: TimeComponent.schema()
+            };
+        }
+        get dataFormat() {
+            return this.component.dataFormat || defaultDataFormat;
+        }
+        get defaultSchema() {
+            return TimeComponent.schema();
+        }
+        get defaultValue() {
+            let value = super.defaultValue;
+            if (this.component.multiple && Array.isArray(value)) {
+                value = value.map(item => item ? this.getStringAsValue(item) : item);
+            } else {
+                if (value) {
+                    value = this.getStringAsValue(value);
+                }
+            }
+            return value;
+        }
+        get validationValue() {
+            return this.rawData;
+        }
+        get inputInfo() {
+            const info = super.inputInfo;
+            info.attr.type = this.component.inputType;
+            return info;
+        }
+        get skipMaskValidation() {
+            return true;
+        }
+        isNotCompleteInput(value) {
+            return value.includes('_');
+        }
+        removeValue(index) {
+            this.rawData = Array.isArray(this.rawData) ? [
+                ...this.rawData.slice(0, index),
+                ...this.rawData.slice(index + 1)
+            ] : this.emptyValue;
+            super.removeValue(index);
+        }
+        resetRawData(index) {
+            if (index) {
+                this.setRawValue(this.emptyValue, index);
+            } else {
+                this.rawData = [];
+            }
+        }
+        setRawValue(value, index) {
+            if (Array.isArray(this.rawData)) {
+                this.rawData[index] = value;
+            } else {
+                this.rawData = value;
+            }
+        }
+        getRawValue(index) {
+            if (index && Array.isArray(this.rawData)) {
+                return this.rawData[index] || this.emptyValue;
+            } else {
+                return this.rawData;
+            }
+        }
+        getValueAt(index) {
+            if (!this.refs.input.length || !this.refs.input[index]) {
+                return this.emptyValue;
+            }
+            const {value} = this.refs.input[index];
+            if (!value) {
+                this.resetRawData(index);
+                return this.emptyValue;
+            }
+            this.setRawValue(value, index);
+            return this.getStringAsValue(value);
+        }
+        setValueAt(index, value) {
+            if (value && !this.getRawValue(index)) {
+                this.setRawValue(this.getValueAsString(value), index);
+            }
+            this.refs.input[index].value = this.getRawValue(index);
+        }
+        getStringAsValue(view) {
+            return view ? moment(view, this.component.format).format(this.component.dataFormat) : view;
+        }
+        getValueAsString(value) {
+            return (value ? moment(value, this.component.dataFormat).format(this.component.format) : value) || '';
+        }
+    };
+});
+define('skylark-formio/components/tree/Node',['skylark-lodash'], function (_) {
+    'use strict';
+    return class Node {
+        constructor(parent, {data = {}, children = []} = {}, {checkNode, createComponents, isNew = true, removeComponents} = {}) {
+            this.parent = parent;
+            this.previousData = {};
+            this.persistentData = _.cloneDeep(data);
+            this.new = isNew;
+            this.createComponents = createComponents;
+            this.checkNode = checkNode;
+            this.removeComponents = removeComponents;
+            this.revertAvailable = false;
+            this.editing = false;
+            this.collapsed = false;
+            this.components = [];
+            this.children = [];
+            this.resetData();
+            this.children = children.map(child => new Node(this, child, {
+                checkNode,
+                createComponents,
+                isNew: false,
+                removeComponents
+            }));
+        }
+        get value() {
+            return this.new ? null : {
+                data: _.cloneDeep(this.persistentData),
+                children: this.children.filter(child => !child.new).map(child => child.value)
+            };
+        }
+        get isRoot() {
+            return this.parent === null;
+        }
+        get changing() {
+            return this.new || this.editing;
+        }
+        get hasChangingChildren() {
+            return this.changin || this.children.some(child => child.hasChangingChildren);
+        }
+        get hasData() {
+            return !_.isEmpty(this.persistentData);
+        }
+        get hasChildren() {
+            return Array.isArray(this.children) && this.children.length > 0;
+        }
+        eachChild(iteratee) {
+            iteratee(this);
+            this.children.forEach(child => child.eachChild(iteratee));
+            return this;
+        }
+        getComponents() {
+            return this.children.reduce((components, child) => components.concat(child.getComponents()), this.components);
+        }
+        addChild() {
+            if (this.new) {
+                return null;
+            }
+            const child = new Node(this, {}, {
+                checkNode: this.checkNode,
+                createComponents: this.createComponents,
+                isNew: true,
+                removeComponents: this.removeComponents
+            });
+            this.children = this.children.concat(child);
+            return child;
+        }
+        removeChild(childToRemove) {
+            if (!this.new) {
+                this.children = this.children.filter(child => child !== childToRemove);
+            }
+            return this;
+        }
+        edit() {
+            if (this.new) {
+                return this;
+            }
+            this.editing = true;
+            return this.resetData();
+        }
+        save() {
+            if (this.changing) {
+                if (this.new) {
+                    this.new = false;
+                } else {
+                    this.editing = false;
+                    this.revertAvailable = true;
+                }
+                this.commitData();
+            }
+            return this;
+        }
+        cancel() {
+            if (this.new) {
+                this.remove();
+            } else if (this.editing) {
+                this.editing = false;
+                this.resetData();
+            }
+            return this;
+        }
+        remove() {
+            this.parent.removeChild(this);
+            this.parent = null;
+            this.clearComponents();
+            return this;
+        }
+        revert() {
+            if (!this.revertAvailable) {
+                return this;
+            }
+            this.data = this.previousData;
+            return this.commitData();
+        }
+        commitData() {
+            this.previousData = this.persistentData;
+            this.persistentData = _.cloneDeep(this.data);
+            this.clearComponents();
+            return this;
+        }
+        resetData() {
+            this.data = _.cloneDeep(this.persistentData);
+            this.updateComponentsContext();
+            return this;
+        }
+        updateComponentsContext() {
+            if (this.changing) {
+                this.instantiateComponents();
+            } else {
+                this.clearComponents();
+            }
+            return this;
+        }
+        instantiateComponents() {
+            this.components = this.createComponents(this.data, this);
+            this.checkNode(this);
+        }
+        clearComponents() {
+            this.removeComponents(this.components);
+            this.components = [];
+        }
+    };
+});
+define('skylark-formio/components/tree/Tree',[
+    'skylark-lodash',
+    '../_classes/component/Component',
+    '../Components',
+    '../_classes/nested/NestedComponent',
+    './Node',
+    '../../vendors/getify/npo'
+], function (_, Component, Components, NestedComponent, Node, NativePromise) {
+    'use strict';
+    return class TreeComponent extends NestedComponent {
+        static schema(...extend) {
+            return NestedComponent.schema({
+                label: 'Tree',
+                key: 'tree',
+                type: 'tree',
+                clearOnHide: true,
+                input: true,
+                tree: true,
+                components: []
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Tree',
+                icon: 'indent',
+                group: 'data',
+                weight: 40,
+                schema: TreeComponent.schema()
+            };
+        }
+        constructor(...args) {
+            super(...args);
+            this.type = 'tree';
+        }
+        get emptyValue() {
+            return {};
+        }
+        get viewComponents() {
+            if (!this.viewComponentsInstantiated) {
+                this.viewComponentsInstantiated = true;
+                this._viewComponents = this.createComponents({});
+            }
+            return this._viewComponents;
+        }
+        init() {
+            if (this.builderMode) {
+                return super.init();
+            }
+            this.components = [];
+            this.componentOptions = {
+                ...this.options,
+                parent: this,
+                root: this.root || this
+            };
+            this.setRoot();
+            this.viewComponentsInstantiated = false;
+            this._viewComponents = [];
+        }
+        destroy() {
+            super.destroy();
+            if (!this.builderMode) {
+                this.removeComponents(this._viewComponents);
+            }
+        }
+        createComponents(data, node) {
+            const components = this.componentComponents.map(component => Components.create(component, this.componentOptions, data));
+            if (node) {
+                this.checkNode(this.data, node);
+            }
+            return components;
+        }
+        removeComponents(components) {
+            return components.map(component => component.destroy());
+        }
+        render() {
+            if (this.builderMode) {
+                return super.render();
+            }
+            return super.render(this.renderTree(this.treeRoot));
+        }
+        renderTree(node = {}, odd = true) {
+            const childNodes = node.hasChildren && !node.collapsed ? this.renderChildNodes(node.children, !odd) : [];
+            const content = node.changing ? this.renderEdit(node) : this.renderView(node);
+            return this.renderTemplate('tree', {
+                odd,
+                childNodes,
+                content,
+                node
+            });
+        }
+        renderChildNodes(nodes = [], odd) {
+            return nodes.map(node => this.renderTree(node, odd));
+        }
+        renderEdit(node = {}) {
+            return this.renderTemplate('treeEdit', {
+                children: this.renderComponents(node.components),
+                node
+            });
+        }
+        renderView(node = {}) {
+            return this.renderTemplate('treeView', {
+                values: this.viewComponents.map(component => {
+                    component.data = node.data;
+                    component.checkComponentConditions(node.data);
+                    return component.getView(component.dataValue);
+                }),
+                nodeData: node.data,
+                node
+            });
+        }
+        attach(element) {
+            if (this.builderMode) {
+                return super.attach(element);
+            }
+            this.loadRefs(element, { root: 'single' });
+            return NativePromise.all([
+                super.attach(element),
+                this.attachNode(this.refs.root, this.treeRoot)
+            ]);
+        }
+        attachNode(element, node) {
+            if (!element) {
+                return NativePromise.resolve();
+            }
+            let componentsPromise = NativePromise.resolve();
+            let childrenPromise = NativePromise.resolve();
+            node.refs = _.reduce(element.children, (refs, child) => child.hasAttribute('ref') ? {
+                ...refs,
+                [child.getAttribute('ref')]: child
+            } : refs, {});
+            if (node.refs.content) {
+                this.attachActions(node);
+                componentsPromise = this.attachComponents(node);
+            }
+            if (node.refs.childNodes) {
+                childrenPromise = this.attachChildren(node);
+            }
+            return NativePromise.all([
+                componentsPromise,
+                childrenPromise
+            ]);
+        }
+        attachActions(node) {
+            this.loadRefs.call(node, node.refs.content, {
+                addChild: 'single',
+                cancelNode: 'single',
+                editNode: 'single',
+                removeNode: 'single',
+                revertNode: 'single',
+                saveNode: 'single',
+                toggleNode: 'single'
+            });
+            if (node.refs.addChild) {
+                this.addEventListener(node.refs.addChild, 'click', () => {
+                    this.addChild(node);
+                });
+            }
+            if (node.refs.cancelNode) {
+                this.addEventListener(node.refs.cancelNode, 'click', () => {
+                    this.cancelNode(node);
+                });
+            }
+            if (node.refs.editNode) {
+                this.addEventListener(node.refs.editNode, 'click', () => {
+                    this.editNode(node);
+                });
+            }
+            if (node.refs.removeNode) {
+                this.addEventListener(node.refs.removeNode, 'click', () => {
+                    this.removeNode(node);
+                });
+            }
+            if (node.refs.revertNode) {
+                this.addEventListener(node.refs.revertNode, 'click', () => {
+                    this.revertNode(node);
+                });
+            }
+            if (node.refs.saveNode) {
+                this.addEventListener(node.refs.saveNode, 'click', () => {
+                    this.saveNode(node);
+                });
+            }
+            if (node.refs.toggleNode) {
+                this.addEventListener(node.refs.toggleNode, 'click', () => {
+                    this.toggleNode(node);
+                });
+            }
+        }
+        attachComponents(node, ...args) {
+            if (this.builderMode) {
+                return super.attachComponents.call(this, node, ...args);
+            }
+            this.loadRefs.call(node, node.refs.content, { nodeEdit: 'single' });
+            return node.refs.nodeEdit ? super.attachComponents(node.refs.nodeEdit, node.components) : NativePromise.resolve();
+        }
+        attachChildren(node) {
+            const childElements = node.refs.childNodes.children;
+            return NativePromise.all(_.map(childElements, (childElement, index) => this.attachNode(childElement, node.children[index])));
+        }
+        setValue(value, flags = {}) {
+            const changed = this.updateValue(value, flags);
+            this.setRoot();
+            return changed;
+        }
+        addChild(parent) {
+            if (this.options.readOnly || parent.new) {
+                return;
+            }
+            this.hook('tree.addChild', {
+                parent,
+                component: this
+            }, () => {
+                const child = parent.addChild();
+                this.redraw();
+                return child;
+            });
+        }
+        cancelNode(node) {
+            if (this.options.readOnly) {
+                return;
+            }
+            this.hook('tree.cancelNode', {
+                node,
+                component: this
+            }, () => {
+                if (node.isRoot) {
+                    this.removeRoot();
+                } else {
+                    node.cancel();
+                    this.redraw();
+                }
+                return node;
+            });
+        }
+        editNode(node) {
+            if (this.options.readOnly || node.new) {
+                return;
+            }
+            this.hook('tree.editNode', {
+                node,
+                component: this
+            }, () => {
+                node.edit();
+                this.redraw();
+                return node;
+            });
+        }
+        removeNode(node) {
+            if (this.options.readOnly || node.new) {
+                return;
+            }
+            this.hook('tree.removeNode', {
+                node,
+                component: this
+            }, () => {
+                if (node.isRoot) {
+                    this.removeRoot();
+                } else {
+                    node.remove();
+                    this.updateTree();
+                }
+                return node;
+            });
+        }
+        revertNode(node) {
+            if (this.options.readOnly || !node.revertAvailable) {
+                return;
+            }
+            this.hook('tree.revertNode', {
+                node,
+                component: this
+            }, () => {
+                node.revert();
+                this.updateTree();
+                return node;
+            });
+        }
+        saveNode(node) {
+            if (this.options.readOnly) {
+                return;
+            }
+            this.hook('tree.saveNode', {
+                node,
+                component: this
+            }, () => {
+                node.save();
+                this.updateTree();
+                return node;
+            });
+        }
+        toggleNode(node) {
+            this.hook('tree.toggleNode', {
+                node,
+                component: this
+            }, () => {
+                node.collapsed = !node.collapsed;
+                this.redraw();
+                return node;
+            });
+        }
+        removeRoot() {
+            if (this.options.readOnly) {
+                return;
+            }
+            this.dataValue = this.defaultValue;
+            this.setRoot();
+            this.redraw();
+        }
+        setRoot() {
+            const value = this.dataValue;
+            this.treeRoot = new Node(null, value, {
+                isNew: !value.data,
+                createComponents: this.createComponents.bind(this),
+                checkNode: this.checkNode.bind(this, this.data),
+                removeComponents: this.removeComponents
+            });
+            this.hook('tree.setRoot', {
+                root: this.treeRoot,
+                component: this
+            });
+        }
+        getValue() {
+            return this.dataValue;
+        }
+        updateTree() {
+            this.updateValue(this.treeRoot.value);
+            this.redraw();
+        }
+        checkData(data, flags, row) {
+            return this.checkNode(data, this.treeRoot, flags, row);
+        }
+        checkNode(data, node, flags, row) {
+            return node.children.reduce((result, child) => this.checkNode(data, child, flags, row) && result, super.checkData(data, flags, node.data, node.components));
+        }
+    };
+    TreeComponent.prototype.hasChanged = Component.prototype.hasChanged;
+    TreeComponent.prototype.updateValue = Component.prototype.updateValue;
+});
+define('skylark-formio/components/unknown/Unknown',['../_classes/component/Component'], function (Component) {
+    'use strict';
+    return class UnknownComponent extends Component {
+        static schema() {
+            return {
+                type: 'custom',
+                key: 'custom',
+                protected: false,
+                persistent: true
+            };
+        }
+        static get builderInfo() {
+            return {
+                title: 'Custom',
+                icon: 'cubes',
+                group: 'premium',
+                documentation: 'https://help.form.io/userguide/form-components/#custom',
+                weight: 120,
+                schema: UnknownComponent.schema()
+            };
+        }
+        get defaultSchema() {
+            return UnknownComponent.schema();
+        }
+    };
+});
+define('skylark-formio/components/url/Url',['../textfield/TextField'], function (TextFieldComponent) {
+    'use strict';
+    return class UrlComponent extends TextFieldComponent {
+        static schema(...extend) {
+            return TextFieldComponent.schema({
+                type: 'url',
+                label: 'Url',
+                key: 'url',
+                inputType: 'url'
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Url',
+                group: 'advanced',
+                icon: 'link',
+                documentation: 'http://help.form.io/userguide/#url',
+                weight: 20,
+                schema: UrlComponent.schema()
+            };
+        }
+        constructor(component, options, data) {
+            super(component, options, data);
+            this.validators.push('url');
+        }
+        get defaultSchema() {
+            return UrlComponent.schema();
+        }
+        elementInfo() {
+            const info = super.elementInfo();
+            info.attr.type = this.component.mask ? 'password' : 'url';
+            return info;
+        }
+    };
+});
+define('skylark-formio/components/well/Well',['../_classes/nested/NestedComponent'], function (NestedComponent) {
+    'use strict';
+    return class WellComponent extends NestedComponent {
+        static schema(...extend) {
+            return NestedComponent.schema({
+                type: 'well',
+                key: 'well',
+                input: false,
+                persistent: false,
+                components: []
+            }, ...extend);
+        }
+        static get builderInfo() {
+            return {
+                title: 'Well',
+                icon: 'square-o',
+                group: 'layout',
+                documentation: 'http://help.form.io/userguide/#well',
+                weight: 60,
+                schema: WellComponent.schema()
+            };
+        }
+        get defaultSchema() {
+            return WellComponent.schema();
+        }
+        get className() {
+            return `${ this.component.customClass }`;
+        }
+        get templateName() {
+            return 'well';
+        }
+        constructor(...args) {
+            super(...args);
+            this.noField = true;
+        }
+    };
+});
+define('skylark-formio/components/index',[
+    './address/Address',
+    './button/Button',
+    './checkbox/Checkbox',
+    './columns/Columns',
+    './_classes/component/Component',
+    './container/Container',
+    './content/Content',
+    './currency/Currency',
+    './datagrid/DataGrid',
+    './datamap/DataMap',
+    './datetime/DateTime',
+    './day/Day',
+    './editgrid/EditGrid',
+    './email/Email',
+    './fieldset/Fieldset',
+    './file/File',
+    './form/Form',
+    './hidden/Hidden',
+    './_classes/input/Input',
+    './_classes/multivalue/Multivalue',
+    './_classes/field/Field',
+    './html/HTML',
+    './_classes/nested/NestedComponent',
+    './_classes/nesteddata/NestedDataComponent',
+    './_classes/nestedarray/NestedArrayComponent',
+    './number/Number',
+    './panel/Panel',
+    './password/Password',
+    './phonenumber/PhoneNumber',
+    './radio/Radio',
+    './recaptcha/ReCaptcha',
+    './resource/Resource',
+    './selectboxes/SelectBoxes',
+    './select/Select',
+    './signature/Signature',
+    './survey/Survey',
+    './table/Table',
+    './tabs/Tabs',
+    './tags/Tags',
+    './textarea/TextArea',
+    './textfield/TextField',
+    './time/Time',
+    './tree/Tree',
+    './unknown/Unknown',
+    './url/Url',
+    './well/Well'
+], function (AddressComponent, ButtonComponent, CheckBoxComponent, ColumnsComponent, Component, ContainerComponent, ContentComponent, CurrencyComponent, DataGridComponent, DataMapComponent, DateTimeComponent, DayComponent, EditGridComponent, EmailComponent, FieldsetComponent, FileComponent, FormComponent, HiddenComponent, Input, Multivalue, Field, HTMLComponent, NestedComponent, NestedDataComponent, NestedArrayComponent, NumberComponent, PanelComponent, PasswordComponent, PhoneNumberComponent, RadioComponent, ReCaptchaComponent, ResourceComponent, SelectBoxesComponent, SelectComponent, SignatureComponent, SurveyComponent, TableComponent, TabsComponent, TagsComponent, TextAreaComponent, TextFieldComponent, TimeComponent, TreeComponent, UnknownComponent, UrlComponent, WellComponent) {
+    'use strict';
+    return {
+        address: AddressComponent,
+        base: Component,
+        component: Component,
+        button: ButtonComponent,
+        checkbox: CheckBoxComponent,
+        columns: ColumnsComponent,
+        container: ContainerComponent,
+        content: ContentComponent,
+        currency: CurrencyComponent,
+        datagrid: DataGridComponent,
+        datamap: DataMapComponent,
+        datetime: DateTimeComponent,
+        day: DayComponent,
+        editgrid: EditGridComponent,
+        email: EmailComponent,
+        input: Input,
+        field: Field,
+        multivalue: Multivalue,
+        fieldset: FieldsetComponent,
+        file: FileComponent,
+        form: FormComponent,
+        hidden: HiddenComponent,
+        htmlelement: HTMLComponent,
+        nested: NestedComponent,
+        nesteddata: NestedDataComponent,
+        nestedarray: NestedArrayComponent,
+        number: NumberComponent,
+        panel: PanelComponent,
+        password: PasswordComponent,
+        phoneNumber: PhoneNumberComponent,
+        radio: RadioComponent,
+        recaptcha: ReCaptchaComponent,
+        resource: ResourceComponent,
+        select: SelectComponent,
+        selectboxes: SelectBoxesComponent,
+        signature: SignatureComponent,
+        survey: SurveyComponent,
+        table: TableComponent,
+        tabs: TabsComponent,
+        tags: TagsComponent,
+        textarea: TextAreaComponent,
+        textfield: TextFieldComponent,
+        time: TimeComponent,
+        tree: TreeComponent,
+        unknown: UnknownComponent,
+        url: UrlComponent,
+        well: WellComponent
+    };
 });
 /**!
  * @fileOverview Kickass library to create and place poppers near their reference elements.
@@ -19174,72 +33161,7812 @@ define('skylark-formio/vendors/tooltip-js/tooltip',["skylark-popper"],function(P
   return Tooltip;
 
 });
-define('skylark-formio/utils/builder',[
+define('skylark-formio/components/_classes/component/editForm/utils',[
     'skylark-lodash',
-    './utils'
-], function (_, a) {
+    '../../../../utils/Evaluator'
+], function (_, Evaluator) {
     'use strict';
-    return {
-        uniquify(container, component) {
-            let changed = false;
-            const formKeys = {};
-            a.eachComponent(container, function (comp) {
-                formKeys[comp.key] = true;
-            }, true);
-            a.eachComponent([component], component => {
-                if (!component.key) {
-                    return;
-                }
-                const newKey = a.uniqueKey(formKeys, component.key);
-                if (newKey !== component.key) {
-                    component.key = newKey;
-                    formKeys[newKey] = true;
-                    changed = true;
-                }
-            }, true);
-            return changed;
+    const EditFormUtils = {
+        sortAndFilterComponents(components) {
+            return _.filter(_.sortBy(components, 'weight'), item => !item.ignore);
         },
-        additionalShortcuts: {
-            button: [
-                'Enter',
-                'Esc'
-            ]
-        },
-        getAlphaShortcuts() {
-            return _.range('A'.charCodeAt(), 'Z'.charCodeAt() + 1).map(charCode => String.fromCharCode(charCode));
-        },
-        getAdditionalShortcuts(type) {
-            return this.additionalShortcuts[type] || [];
-        },
-        getBindedShortcuts(components, input) {
-            const result = [];
-            a.eachComponent(components, component => {
-                if (component === input) {
-                    return;
+        unifyComponents(objValue, srcValue) {
+            if (objValue.key && srcValue.key) {
+                if (objValue.skipMerge || srcValue.skipMerge) {
+                    return false;
                 }
-                if (component.shortcut) {
-                    result.push(component.shortcut);
-                }
-                if (component.values) {
-                    component.values.forEach(value => {
-                        if (value.shortcut) {
-                            result.push(value.shortcut);
+                if (objValue.key === srcValue.key) {
+                    _.each(objValue, (value, prop) => {
+                        if (!srcValue.hasOwnProperty(prop)) {
+                            srcValue[prop] = value;
                         }
                     });
+                    _.each(srcValue, (value, prop) => {
+                        if (!objValue.hasOwnProperty(prop)) {
+                            objValue[prop] = value;
+                        }
+                    });
+                    if (objValue.components) {
+                        srcValue.components = EditFormUtils.sortAndFilterComponents(_.unionWith(objValue.components, srcValue.components, EditFormUtils.unifyComponents));
+                    }
+                    return true;
+                } else {
+                    return false;
                 }
-            }, true);
-            return result;
-        },
-        getAvailableShortcuts(form, component) {
-            if (!component) {
-                return [];
             }
-            return [''].concat(_.difference(this.getAlphaShortcuts().concat(this.getAdditionalShortcuts(component.type)), this.getBindedShortcuts(form.components, component))).map(shortcut => ({
-                label: shortcut,
-                value: shortcut
-            }));
+            return _.isEqual(objValue, srcValue);
+        },
+        logicVariablesTable(additional) {
+            additional = additional || '';
+            return {
+                type: 'htmlelement',
+                tag: 'div',
+                content: '<p>The following variables are available in all scripts.</p>' + '<table class="table table-bordered table-condensed table-striped">' + additional + '<tr><th>form</th><td>The complete form JSON object</td></tr>' + '<tr><th>submission</th><td>The complete submission object.</td></tr>' + '<tr><th>data</th><td>The complete submission data object.</td></tr>' + '<tr><th>row</th><td>Contextual "row" data, used within DataGrid, EditGrid, and Container components</td></tr>' + '<tr><th>component</th><td>The current component JSON</td></tr>' + '<tr><th>instance</th><td>The current component instance.</td></tr>' + '<tr><th>value</th><td>The current value of the component.</td></tr>' + '<tr><th>moment</th><td>The moment.js library for date manipulation.</td></tr>' + '<tr><th>_</th><td>An instance of <a href="https://lodash.com/docs/" target="_blank">Lodash</a>.</td></tr>' + '<tr><th>utils</th><td>An instance of the <a href="http://formio.github.io/formio.js/docs/identifiers.html#utils" target="_blank">FormioUtils</a> object.</td></tr>' + '<tr><th>util</th><td>An alias for "utils".</td></tr>' + '</table><br/>'
+            };
+        },
+        javaScriptValue(title, property, propertyJSON, weight, exampleHTML, exampleJSON, additionalParams) {
+            return {
+                type: 'panel',
+                title: title,
+                theme: 'default',
+                collapsible: true,
+                collapsed: true,
+                key: `${ property }Panel`,
+                weight: weight,
+                components: [
+                    this.logicVariablesTable(additionalParams),
+                    {
+                        type: 'panel',
+                        title: 'JavaScript',
+                        collapsible: true,
+                        collapsed: false,
+                        style: { 'margin-bottom': '10px' },
+                        key: `${ property }-js`,
+                        customConditional() {
+                            return !Evaluator.noeval;
+                        },
+                        components: [
+                            {
+                                type: 'textarea',
+                                key: property,
+                                rows: 5,
+                                editor: 'ace',
+                                hideLabel: true,
+                                input: true
+                            },
+                            {
+                                type: 'htmlelement',
+                                tag: 'div',
+                                content: `<p>Enter custom javascript code.</p>${ exampleHTML }`
+                            }
+                        ]
+                    },
+                    {
+                        type: 'panel',
+                        title: 'JSONLogic',
+                        collapsible: true,
+                        collapsed: true,
+                        key: `${ property }-json`,
+                        components: [
+                            {
+                                type: 'htmlelement',
+                                tag: 'div',
+                                content: '<p>Execute custom logic using <a href="http://jsonlogic.com/" target="_blank">JSONLogic</a>.</p>' + '<p>Full <a href="https://lodash.com/docs" target="_blank">Lodash</a> support is provided using an "_" before each operation, such as <code>{"_sum": {var: "data.a"}}</code></p>' + exampleJSON
+                            },
+                            {
+                                type: 'textarea',
+                                key: propertyJSON,
+                                rows: 5,
+                                editor: 'ace',
+                                hideLabel: true,
+                                as: 'json',
+                                input: true
+                            }
+                        ]
+                    }
+                ]
+            };
         }
     };
+    return EditFormUtils;
+});
+define('skylark-formio/components/_classes/component/editForm/Component.edit.conditional',[
+    './utils',
+    '../../../../utils/utils'
+], function (EditFormUtils, a) {
+    'use strict';
+    return [
+        {
+            type: 'panel',
+            title: 'Simple',
+            key: 'simple-conditional',
+            theme: 'default',
+            components: [
+                {
+                    type: 'select',
+                    input: true,
+                    label: 'This component should Display:',
+                    key: 'conditional.show',
+                    dataSrc: 'values',
+                    data: {
+                        values: [
+                            {
+                                label: 'True',
+                                value: 'true'
+                            },
+                            {
+                                label: 'False',
+                                value: 'false'
+                            }
+                        ]
+                    }
+                },
+                {
+                    type: 'select',
+                    input: true,
+                    label: 'When the form component:',
+                    key: 'conditional.when',
+                    dataSrc: 'custom',
+                    valueProperty: 'value',
+                    data: {
+                        custom(context) {
+                            return a.getContextComponents(context);
+                        }
+                    }
+                },
+                {
+                    type: 'textfield',
+                    input: true,
+                    label: 'Has the value:',
+                    key: 'conditional.eq'
+                }
+            ]
+        },
+        EditFormUtils.javaScriptValue('Advanced Conditions', 'customConditional', 'conditional.json', 110, '<p>You must assign the <strong>show</strong> variable a boolean result.</p>' + '<p><strong>Note: Advanced Conditional logic will override the results of the Simple Conditional logic.</strong></p>' + '<h5>Example</h5><pre>show = !!data.showMe;</pre>', '<p><a href="http://formio.github.io/formio.js/app/examples/conditions.html" target="_blank">Click here for an example</a></p>')
+    ];
+});
+define('skylark-formio/components/_classes/component/editForm/Component.edit.data',['./utils'], function (EditFormUtils) {
+    'use strict';
+    return [
+        {
+            weight: 0,
+            type: 'checkbox',
+            label: 'Multiple Values',
+            tooltip: 'Allows multiple values to be entered for this field.',
+            key: 'multiple',
+            input: true
+        },
+        {
+            type: 'textfield',
+            label: 'Default Value',
+            key: 'defaultValue',
+            weight: 5,
+            placeholder: 'Default Value',
+            tooltip: 'The will be the value for this field, before user interaction. Having a default value will override the placeholder text.',
+            input: true
+        },
+        {
+            weight: 30,
+            type: 'radio',
+            label: 'Persistent',
+            tooltip: 'A persistent field will be stored in database when the form is submitted.',
+            key: 'persistent',
+            input: true,
+            inline: true,
+            defaultValue: true,
+            values: [
+                {
+                    label: 'None',
+                    value: false
+                },
+                {
+                    label: 'Server',
+                    value: true
+                },
+                {
+                    label: 'Client',
+                    value: 'client-only'
+                }
+            ]
+        },
+        {
+            weight: 150,
+            type: 'checkbox',
+            label: 'Protected',
+            tooltip: 'A protected field will not be returned when queried via API.',
+            key: 'protected',
+            input: true
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            weight: 200,
+            key: 'dbIndex',
+            label: 'Database Index',
+            tooltip: 'Set this field as an index within the database. Increases performance for submission queries.'
+        },
+        {
+            weight: 400,
+            type: 'checkbox',
+            label: 'Encrypted (Enterprise Only)',
+            tooltip: 'Encrypt this field on the server. This is two way encryption which is not suitable for passwords.',
+            key: 'encrypted',
+            input: true
+        },
+        {
+            type: 'select',
+            input: true,
+            key: 'redrawOn',
+            label: 'Redraw On',
+            weight: 600,
+            tooltip: 'Redraw this component if another component changes. This is useful if interpolating parts of the component like the label.',
+            dataSrc: 'custom',
+            valueProperty: 'value',
+            data: {
+                custom(context) {
+                    var values = [];
+                    values.push({
+                        label: 'Any Change',
+                        value: 'data'
+                    });
+                    context.utils.eachComponent(context.instance.options.editForm.components, function (component, path) {
+                        if (component.key !== context.data.key) {
+                            values.push({
+                                label: component.label || component.key,
+                                value: path
+                            });
+                        }
+                    });
+                    return values;
+                }
+            },
+            conditional: { json: { '!': [{ var: 'data.dataSrc' }] } }
+        },
+        {
+            weight: 700,
+            type: 'checkbox',
+            label: 'Clear Value When Hidden',
+            key: 'clearOnHide',
+            defaultValue: true,
+            tooltip: 'When a field is hidden, clear the value.',
+            input: true
+        },
+        EditFormUtils.javaScriptValue('Custom Default Value', 'customDefaultValue', 'customDefaultValue', 1000, '<p><h4>Example:</h4><pre>value = data.firstName + " " + data.lastName;</pre></p>', '<p><h4>Example:</h4><pre>{"cat": [{"var": "data.firstName"}, " ", {"var": "data.lastName"}]}</pre>'),
+        EditFormUtils.javaScriptValue('Calculated Value', 'calculateValue', 'calculateValue', 1100, '<p><h4>Example:</h4><pre>value = data.a + data.b + data.c;</pre></p>', '<p><h4>Example:</h4><pre>{"+": [{"var": "data.a"}, {"var": "data.b"}, {"var": "data.c"}]}</pre><p><a target="_blank" href="http://formio.github.io/formio.js/app/examples/calculated.html">Click here for an example</a></p>', '<tr><th>token</th><td>The decoded JWT token for the authenticated user.</td></tr>'),
+        {
+            type: 'checkbox',
+            input: true,
+            weight: 1100,
+            key: 'calculateServer',
+            label: 'Calculate Value on server',
+            tooltip: 'Checking this will run the calculation on the server. This is useful if you wish to override the values submitted with the calculations performed on the server.'
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            weight: 1200,
+            key: 'allowCalculateOverride',
+            label: 'Allow Manual Override of Calculated Value',
+            tooltip: 'When checked, this will allow the user to manually override the calculated value.'
+        }
+    ];
+});
+define('skylark-formio/components/_classes/component/editForm/Component.edit.api',[],function () {
+    'use strict';
+    return [
+        {
+            weight: 0,
+            type: 'textfield',
+            input: true,
+            key: 'key',
+            label: 'Property Name',
+            tooltip: 'The name of this field in the API endpoint.',
+            validate: {
+                pattern: '(\\w|\\w[\\w-.]*\\w)',
+                patternMessage: 'The property name must only contain alphanumeric characters, underscores, dots and dashes and should not be ended by dash or dot.'
+            }
+        },
+        {
+            weight: 100,
+            type: 'tags',
+            input: true,
+            label: 'Field Tags',
+            storeas: 'array',
+            tooltip: 'Tag the field for use in custom logic.',
+            key: 'tags'
+        },
+        {
+            weight: 200,
+            type: 'datamap',
+            label: 'Custom Properties',
+            tooltip: 'This allows you to configure any custom properties for this component.',
+            key: 'properties',
+            valueComponent: {
+                type: 'textfield',
+                key: 'value',
+                label: 'Value',
+                placeholder: 'Value',
+                input: true
+            }
+        }
+    ];
+});
+define('skylark-formio/components/_classes/component/editForm/Component.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            weight: 0,
+            type: 'textfield',
+            input: true,
+            key: 'label',
+            label: 'Label',
+            placeholder: 'Field Label',
+            tooltip: 'The label for this field that will appear next to it.',
+            validate: { required: true }
+        },
+        {
+            type: 'select',
+            input: true,
+            key: 'labelPosition',
+            label: 'Label Position',
+            tooltip: 'Position for the label for this field.',
+            weight: 20,
+            defaultValue: 'top',
+            dataSrc: 'values',
+            data: {
+                values: [
+                    {
+                        label: 'Top',
+                        value: 'top'
+                    },
+                    {
+                        label: 'Left (Left-aligned)',
+                        value: 'left-left'
+                    },
+                    {
+                        label: 'Left (Right-aligned)',
+                        value: 'left-right'
+                    },
+                    {
+                        label: 'Right (Left-aligned)',
+                        value: 'right-left'
+                    },
+                    {
+                        label: 'Right (Right-aligned)',
+                        value: 'right-right'
+                    },
+                    {
+                        label: 'Bottom',
+                        value: 'bottom'
+                    }
+                ]
+            }
+        },
+        {
+            type: 'number',
+            input: true,
+            key: 'labelWidth',
+            label: 'Label Width',
+            tooltip: 'The width of label on line in percentages.',
+            clearOnHide: false,
+            weight: 30,
+            placeholder: '30',
+            suffix: '%',
+            validate: {
+                min: 0,
+                max: 100
+            },
+            conditional: {
+                json: {
+                    and: [
+                        {
+                            '!==': [
+                                { var: 'data.labelPosition' },
+                                'top'
+                            ]
+                        },
+                        {
+                            '!==': [
+                                { var: 'data.labelPosition' },
+                                'bottom'
+                            ]
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            type: 'number',
+            input: true,
+            key: 'labelMargin',
+            label: 'Label Margin',
+            tooltip: 'The width of label margin on line in percentages.',
+            clearOnHide: false,
+            weight: 30,
+            placeholder: '3',
+            suffix: '%',
+            validate: {
+                min: 0,
+                max: 100
+            },
+            conditional: {
+                json: {
+                    and: [
+                        {
+                            '!==': [
+                                { var: 'data.labelPosition' },
+                                'top'
+                            ]
+                        },
+                        {
+                            '!==': [
+                                { var: 'data.labelPosition' },
+                                'bottom'
+                            ]
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            weight: 100,
+            type: 'textfield',
+            input: true,
+            key: 'placeholder',
+            label: 'Placeholder',
+            placeholder: 'Placeholder',
+            tooltip: 'The placeholder text that will appear when this field is empty.'
+        },
+        {
+            weight: 200,
+            type: 'textarea',
+            input: true,
+            key: 'description',
+            label: 'Description',
+            placeholder: 'Description for this field.',
+            tooltip: 'The description is text that will appear below the input field.',
+            editor: 'ace',
+            as: 'html',
+            wysiwyg: { minLines: 3 }
+        },
+        {
+            weight: 300,
+            type: 'textarea',
+            input: true,
+            key: 'tooltip',
+            label: 'Tooltip',
+            placeholder: 'To add a tooltip to this field, enter text here.',
+            tooltip: 'Adds a tooltip to the side of this field.',
+            editor: 'ace',
+            as: 'html',
+            wysiwyg: { minLines: 3 }
+        },
+        {
+            weight: 500,
+            type: 'textfield',
+            input: true,
+            key: 'customClass',
+            label: 'Custom CSS Class',
+            placeholder: 'Custom CSS Class',
+            tooltip: 'Custom CSS class to add to this component.'
+        },
+        {
+            weight: 600,
+            type: 'textfield',
+            input: true,
+            key: 'tabindex',
+            label: 'Tab Index',
+            placeholder: '0',
+            tooltip: "Sets the tabindex attribute of this component to override the tab order of the form. See the <a href='https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/tabindex'>MDN documentation</a> on tabindex for more information."
+        },
+        {
+            weight: 1100,
+            type: 'checkbox',
+            label: 'Hidden',
+            tooltip: 'A hidden field is still a part of the form, but is hidden from view.',
+            key: 'hidden',
+            input: true
+        },
+        {
+            weight: 1200,
+            type: 'checkbox',
+            label: 'Hide Label',
+            tooltip: 'Hide the label of this component. This allows you to show the label in the form builder, but not when it is rendered.',
+            key: 'hideLabel',
+            input: true
+        },
+        {
+            weight: 1350,
+            type: 'checkbox',
+            label: 'Initial Focus',
+            tooltip: 'Make this field the initially focused element on this form.',
+            key: 'autofocus',
+            input: true
+        },
+        {
+            weight: 1370,
+            type: 'checkbox',
+            label: 'Show Label in DataGrid',
+            tooltip: 'Show the label when in a Datagrid.',
+            key: 'dataGridLabel',
+            input: true,
+            customConditional(context) {
+                return context.instance.options.editComponent.inDataGrid;
+            }
+        },
+        {
+            weight: 1400,
+            type: 'checkbox',
+            label: 'Disabled',
+            tooltip: 'Disable the form input.',
+            key: 'disabled',
+            input: true
+        },
+        {
+            weight: 1500,
+            type: 'checkbox',
+            label: 'Table View',
+            tooltip: 'Shows this value within the table view of the submissions.',
+            key: 'tableView',
+            input: true
+        },
+        {
+            weight: 1600,
+            type: 'checkbox',
+            label: 'Modal Edit',
+            tooltip: 'Opens up a modal to edit the value of this component.',
+            key: 'modalEdit',
+            input: true
+        }
+    ];
+});
+define('skylark-formio/components/_classes/component/editForm/Component.edit.logic',['../../../../utils/utils'], function (a) {
+    'use strict';
+    return [{
+            weight: 0,
+            input: true,
+            label: 'Advanced Logic',
+            key: 'logic',
+            templates: {
+                header: '<div class="row"> \n  <div class="col-sm-6">\n    <strong>{{ value.length }} Advanced Logic Configured</strong>\n  </div>\n</div>',
+                row: '<div class="row"> \n  <div class="col-sm-6">\n    <div>{{ row.name }} </div>\n  </div>\n  <div class="col-sm-2"> \n    <div class="btn-group pull-right"> \n      <div class="btn btn-default editRow">Edit</div> \n      <div class="btn btn-danger removeRow">Delete</div> \n    </div> \n  </div> \n</div>',
+                footer: ''
+            },
+            type: 'editgrid',
+            addAnother: 'Add Logic',
+            saveRow: 'Save Logic',
+            components: [
+                {
+                    weight: 0,
+                    input: true,
+                    inputType: 'text',
+                    label: 'Logic Name',
+                    key: 'name',
+                    validate: { required: true },
+                    type: 'textfield'
+                },
+                {
+                    weight: 10,
+                    key: 'triggerPanel',
+                    input: false,
+                    title: 'Trigger',
+                    tableView: false,
+                    components: [{
+                            weight: 0,
+                            input: true,
+                            tableView: false,
+                            components: [
+                                {
+                                    weight: 0,
+                                    input: true,
+                                    label: 'Type',
+                                    key: 'type',
+                                    tableView: false,
+                                    data: {
+                                        values: [
+                                            {
+                                                value: 'simple',
+                                                label: 'Simple'
+                                            },
+                                            {
+                                                value: 'javascript',
+                                                label: 'Javascript'
+                                            },
+                                            {
+                                                value: 'json',
+                                                label: 'JSON Logic'
+                                            },
+                                            {
+                                                value: 'event',
+                                                label: 'Event'
+                                            }
+                                        ]
+                                    },
+                                    dataSrc: 'values',
+                                    template: '<span>{{ item.label }}</span>',
+                                    type: 'select'
+                                },
+                                {
+                                    weight: 10,
+                                    label: '',
+                                    key: 'simple',
+                                    type: 'container',
+                                    tableView: false,
+                                    customConditional({row}) {
+                                        return row.type === 'simple';
+                                    },
+                                    components: [
+                                        {
+                                            input: true,
+                                            key: 'show',
+                                            label: 'Show',
+                                            type: 'hidden',
+                                            tableView: false,
+                                            calculateValue() {
+                                                return true;
+                                            }
+                                        },
+                                        {
+                                            type: 'select',
+                                            input: true,
+                                            label: 'When the form component:',
+                                            key: 'when',
+                                            dataSrc: 'custom',
+                                            valueProperty: 'value',
+                                            tableView: false,
+                                            data: {
+                                                custom(context) {
+                                                    return a.getContextComponents(context);
+                                                }
+                                            }
+                                        },
+                                        {
+                                            type: 'textfield',
+                                            input: true,
+                                            label: 'Has the value:',
+                                            key: 'eq',
+                                            tableView: false
+                                        }
+                                    ]
+                                },
+                                {
+                                    weight: 10,
+                                    type: 'textarea',
+                                    key: 'javascript',
+                                    rows: 5,
+                                    editor: 'ace',
+                                    input: true,
+                                    tableView: false,
+                                    placeholder: `result = (data['mykey'] > 1);`,
+                                    description: '"row", "data", and "component" variables are available. Return "result".',
+                                    customConditional({row}) {
+                                        return row.type === 'javascript';
+                                    }
+                                },
+                                {
+                                    weight: 10,
+                                    type: 'textarea',
+                                    key: 'json',
+                                    rows: 5,
+                                    editor: 'ace',
+                                    label: 'JSON Logic',
+                                    as: 'json',
+                                    input: true,
+                                    tableView: false,
+                                    placeholder: `{ ... }`,
+                                    description: '"row", "data", "component" and "_" variables are available. Return the result to be passed to the action if truthy.',
+                                    customConditional({row}) {
+                                        return row.type === 'json';
+                                    }
+                                },
+                                {
+                                    weight: 10,
+                                    type: 'textfield',
+                                    key: 'event',
+                                    label: 'Event Name',
+                                    placeholder: 'event',
+                                    description: 'The event that will trigger this logic. You can trigger events externally or via a button.',
+                                    tableView: false,
+                                    customConditional({row}) {
+                                        return row.type === 'event';
+                                    }
+                                }
+                            ],
+                            key: 'trigger',
+                            type: 'container'
+                        }],
+                    type: 'panel'
+                },
+                {
+                    weight: 20,
+                    input: true,
+                    label: 'Actions',
+                    key: 'actions',
+                    tableView: false,
+                    templates: {
+                        header: '<div class="row"> \n  <div class="col-sm-6"><strong>{{ value.length }} actions</strong></div>\n</div>',
+                        row: '<div class="row"> \n  <div class="col-sm-6">\n    <div>{{ row.name }} </div>\n  </div>\n  <div class="col-sm-2"> \n    <div class="btn-group pull-right"> \n      <div class="btn btn-default editRow">Edit</div> \n      <div class="btn btn-danger removeRow">Delete</div> \n    </div> \n  </div> \n</div>',
+                        footer: ''
+                    },
+                    type: 'editgrid',
+                    addAnother: 'Add Action',
+                    saveRow: 'Save Action',
+                    components: [{
+                            weight: 0,
+                            title: 'Action',
+                            input: false,
+                            key: 'actionPanel',
+                            type: 'panel',
+                            components: [
+                                {
+                                    weight: 0,
+                                    input: true,
+                                    inputType: 'text',
+                                    label: 'Action Name',
+                                    key: 'name',
+                                    validate: { required: true },
+                                    type: 'textfield'
+                                },
+                                {
+                                    weight: 10,
+                                    input: true,
+                                    label: 'Type',
+                                    key: 'type',
+                                    data: {
+                                        values: [
+                                            {
+                                                value: 'property',
+                                                label: 'Property'
+                                            },
+                                            {
+                                                value: 'value',
+                                                label: 'Value'
+                                            },
+                                            {
+                                                label: 'Merge Component Schema',
+                                                value: 'mergeComponentSchema'
+                                            }
+                                        ]
+                                    },
+                                    dataSrc: 'values',
+                                    template: '<span>{{ item.label }}</span>',
+                                    type: 'select'
+                                },
+                                {
+                                    weight: 20,
+                                    type: 'select',
+                                    template: '<span>{{ item.label }}</span>',
+                                    dataSrc: 'json',
+                                    tableView: false,
+                                    data: {
+                                        json: [
+                                            {
+                                                label: 'Hidden',
+                                                value: 'hidden',
+                                                type: 'boolean'
+                                            },
+                                            {
+                                                label: 'Required',
+                                                value: 'validate.required',
+                                                type: 'boolean'
+                                            },
+                                            {
+                                                label: 'Disabled',
+                                                value: 'disabled',
+                                                type: 'boolean'
+                                            },
+                                            {
+                                                label: 'Label',
+                                                value: 'label',
+                                                type: 'string'
+                                            },
+                                            {
+                                                label: 'Title',
+                                                value: 'title',
+                                                type: 'string'
+                                            },
+                                            {
+                                                label: 'Prefix',
+                                                value: 'prefix',
+                                                type: 'string'
+                                            },
+                                            {
+                                                label: 'Suffix',
+                                                value: 'suffix',
+                                                type: 'string'
+                                            },
+                                            {
+                                                label: 'Tooltip',
+                                                value: 'tooltip',
+                                                type: 'string'
+                                            },
+                                            {
+                                                label: 'Description',
+                                                value: 'description',
+                                                type: 'string'
+                                            },
+                                            {
+                                                label: 'Placeholder',
+                                                value: 'placeholder',
+                                                type: 'string'
+                                            },
+                                            {
+                                                label: 'Input Mask',
+                                                value: 'inputMask',
+                                                type: 'string'
+                                            },
+                                            {
+                                                label: 'CSS Class',
+                                                value: 'className',
+                                                type: 'string'
+                                            },
+                                            {
+                                                label: 'Container Custom Class',
+                                                value: 'customClass',
+                                                type: 'string'
+                                            }
+                                        ]
+                                    },
+                                    key: 'property',
+                                    label: 'Component Property',
+                                    input: true,
+                                    customConditional({row}) {
+                                        return row.type === 'property';
+                                    }
+                                },
+                                {
+                                    weight: 30,
+                                    input: true,
+                                    label: 'Set State',
+                                    key: 'state',
+                                    tableView: false,
+                                    data: {
+                                        values: [
+                                            {
+                                                label: 'True',
+                                                value: 'true'
+                                            },
+                                            {
+                                                label: 'False',
+                                                value: 'false'
+                                            }
+                                        ]
+                                    },
+                                    dataSrc: 'values',
+                                    template: '<span>{{ item.label }}</span>',
+                                    type: 'select',
+                                    customConditional({row}) {
+                                        return row.type === 'property' && row.hasOwnProperty('property') && row.property.type === 'boolean';
+                                    }
+                                },
+                                {
+                                    weight: 30,
+                                    type: 'textfield',
+                                    key: 'text',
+                                    label: 'Text',
+                                    inputType: 'text',
+                                    input: true,
+                                    tableView: false,
+                                    description: 'Can use templating with {{ data.myfield }}. "data", "row", "component" and "result" variables are available.',
+                                    customConditional({row}) {
+                                        return row.type === 'property' && row.hasOwnProperty('property') && row.property.type === 'string' && !row.property.component;
+                                    }
+                                },
+                                {
+                                    weight: 20,
+                                    input: true,
+                                    label: 'Value (Javascript)',
+                                    key: 'value',
+                                    editor: 'ace',
+                                    rows: 5,
+                                    placeholder: `value = data.myfield;`,
+                                    type: 'textarea',
+                                    tableView: false,
+                                    description: '"row", "data", "component", and "result" variables are available. Return the value.',
+                                    customConditional({row}) {
+                                        return row.type === 'value';
+                                    }
+                                },
+                                {
+                                    weight: 20,
+                                    input: true,
+                                    label: 'Schema Defenition',
+                                    key: 'schemaDefinition',
+                                    editor: 'ace',
+                                    rows: 5,
+                                    placeholder: `schema = { label: 'Updated' };`,
+                                    type: 'textarea',
+                                    tableView: false,
+                                    description: '"row", "data", "component", and "result" variables are available. Return the schema.',
+                                    customConditional({row}) {
+                                        return row.type === 'mergeComponentSchema';
+                                    }
+                                }
+                            ]
+                        }]
+                }
+            ]
+        }];
+});
+define('skylark-formio/components/_classes/component/editForm/Component.edit.validation',[
+    './utils',
+    '../../../../utils/Evaluator'
+], function (EditFormUtils, Evaluator) {
+    'use strict';
+    return [
+        {
+            weight: 10,
+            type: 'checkbox',
+            label: 'Required',
+            tooltip: 'A required field must be filled in before the form can be submitted.',
+            key: 'validate.required',
+            input: true
+        },
+        {
+            weight: 100,
+            type: 'checkbox',
+            label: 'Unique',
+            tooltip: 'Makes sure the data submitted for this field is unique, and has not been submitted before.',
+            key: 'unique',
+            input: true
+        },
+        {
+            weight: 0,
+            type: 'select',
+            key: 'validateOn',
+            defaultValue: 'change',
+            input: true,
+            label: 'Validate On',
+            tooltip: 'Determines when this component should trigger front-end validation.',
+            dataSrc: 'values',
+            data: {
+                values: [
+                    {
+                        label: 'Change',
+                        value: 'change'
+                    },
+                    {
+                        label: 'Blur',
+                        value: 'blur'
+                    }
+                ]
+            }
+        },
+        {
+            weight: 190,
+            type: 'textfield',
+            input: true,
+            key: 'errorLabel',
+            label: 'Error Label',
+            placeholder: 'Error Label',
+            tooltip: 'The label for this field when an error occurs.'
+        },
+        {
+            weight: 200,
+            key: 'validate.customMessage',
+            label: 'Custom Error Message',
+            placeholder: 'Custom Error Message',
+            type: 'textfield',
+            tooltip: 'Error message displayed if any error occurred.',
+            input: true
+        },
+        {
+            type: 'panel',
+            title: 'Custom Validation',
+            collapsible: true,
+            collapsed: true,
+            style: { 'margin-bottom': '10px' },
+            key: 'custom-validation-js',
+            weight: 300,
+            customConditional() {
+                return !Evaluator.noeval;
+            },
+            components: [
+                EditFormUtils.logicVariablesTable('<tr><th>input</th><td>The value that was input into this component</td></tr>'),
+                {
+                    type: 'textarea',
+                    key: 'validate.custom',
+                    rows: 5,
+                    editor: 'ace',
+                    hideLabel: true,
+                    input: true
+                },
+                {
+                    type: 'htmlelement',
+                    tag: 'div',
+                    content: `
+          <small>
+            <p>Enter custom validation code.</p>
+            <p>You must assign the <strong>valid</strong> variable as either <strong>true</strong> or an error message if validation fails.</p>
+            <h5>Example:</h5>
+            <pre>valid = (input === 'Joe') ? true : 'Your name must be "Joe"';</pre>
+          </small>`
+                },
+                {
+                    type: 'well',
+                    components: [{
+                            weight: 100,
+                            type: 'checkbox',
+                            label: 'Secret Validation',
+                            tooltip: 'Check this if you wish to perform the validation ONLY on the server side. This keeps your validation logic private and secret.',
+                            description: 'Check this if you wish to perform the validation ONLY on the server side. This keeps your validation logic private and secret.',
+                            key: 'validate.customPrivate',
+                            input: true
+                        }]
+                }
+            ]
+        },
+        {
+            type: 'panel',
+            title: 'JSONLogic Validation',
+            collapsible: true,
+            collapsed: true,
+            key: 'json-validation-json',
+            weight: 400,
+            components: [
+                {
+                    type: 'htmlelement',
+                    tag: 'div',
+                    content: '<p>Execute custom logic using <a href="http://jsonlogic.com/" target="_blank">JSONLogic</a>.</p>' + '<h5>Example:</h5>' + '<pre>' + JSON.stringify({
+                        'if': [
+                            {
+                                '===': [
+                                    { 'var': 'input' },
+                                    'Bob'
+                                ]
+                            },
+                            true,
+                            "Your name must be 'Bob'!"
+                        ]
+                    }, null, 2) + '</pre>'
+                },
+                {
+                    type: 'textarea',
+                    key: 'validate.json',
+                    hideLabel: true,
+                    rows: 5,
+                    editor: 'ace',
+                    as: 'json',
+                    input: true
+                }
+            ]
+        }
+    ];
+});
+define('skylark-formio/components/_classes/component/editForm/Component.edit.layout',[],function () {
+    'use strict';
+    return [
+        {
+            label: 'HTML Attributes',
+            type: 'datamap',
+            input: true,
+            key: 'attributes',
+            keyLabel: 'Attribute Name',
+            valueComponent: {
+                type: 'textfield',
+                key: 'value',
+                label: 'Attribute Value',
+                input: true
+            },
+            tooltip: "Provide a map of HTML attributes for component's input element (attributes provided by other component settings or other attributes generated by form.io take precedence over attributes in this grid)",
+            addAnother: 'Add Attribute'
+        },
+        {
+            type: 'panel',
+            legend: 'PDF Overlay',
+            title: 'PDF Overlay',
+            key: 'overlay',
+            weight: 2000,
+            collapsible: true,
+            collapsed: true,
+            components: [
+                {
+                    type: 'textfield',
+                    input: true,
+                    key: 'overlay.style',
+                    label: 'Style',
+                    placeholder: '',
+                    tooltip: 'Custom styles that should be applied to this component when rendered in PDF.'
+                },
+                {
+                    type: 'textfield',
+                    input: true,
+                    key: 'overlay.page',
+                    label: 'Page',
+                    placeholder: '',
+                    tooltip: 'The PDF page to place this component.'
+                },
+                {
+                    type: 'textfield',
+                    input: true,
+                    key: 'overlay.left',
+                    label: 'Left',
+                    placeholder: '',
+                    tooltip: 'The left margin within a page to place this component.'
+                },
+                {
+                    type: 'textfield',
+                    input: true,
+                    key: 'overlay.top',
+                    label: 'Top',
+                    placeholder: '',
+                    tooltip: 'The top margin within a page to place this component.'
+                },
+                {
+                    type: 'textfield',
+                    input: true,
+                    key: 'overlay.width',
+                    label: 'Width',
+                    placeholder: '',
+                    tooltip: 'The width of the component (in pixels).'
+                },
+                {
+                    type: 'textfield',
+                    input: true,
+                    key: 'overlay.height',
+                    label: 'Height',
+                    placeholder: '',
+                    tooltip: 'The height of the component (in pixels).'
+                }
+            ]
+        }
+    ];
+});
+define('skylark-formio/components/_classes/component/Component.form',[
+    'skylark-lodash',
+    './editForm/Component.edit.conditional',
+    './editForm/Component.edit.data',
+    './editForm/Component.edit.api',
+    './editForm/Component.edit.display',
+    './editForm/Component.edit.logic',
+    './editForm/Component.edit.validation',
+    './editForm/Component.edit.layout',
+    './editForm/utils'
+], function (_, ComponentEditConditional, ComponentEditData, ComponentEditAPI, ComponentEditDisplay, ComponentEditLogic, ComponentEditValidation, ComponentEditLayout, EditFormUtils) {
+    'use strict';
+    return function (...extend) {
+        const components = _.cloneDeep([{
+                type: 'tabs',
+                key: 'tabs',
+                components: [
+                    {
+                        label: 'Display',
+                        key: 'display',
+                        weight: 0,
+                        components: ComponentEditDisplay
+                    },
+                    {
+                        label: 'Data',
+                        key: 'data',
+                        weight: 10,
+                        components: ComponentEditData
+                    },
+                    {
+                        label: 'Validation',
+                        key: 'validation',
+                        weight: 20,
+                        components: ComponentEditValidation
+                    },
+                    {
+                        label: 'API',
+                        key: 'api',
+                        weight: 30,
+                        components: ComponentEditAPI
+                    },
+                    {
+                        label: 'Conditional',
+                        key: 'conditional',
+                        weight: 40,
+                        components: ComponentEditConditional
+                    },
+                    {
+                        label: 'Logic',
+                        key: 'logic',
+                        weight: 50,
+                        components: ComponentEditLogic
+                    },
+                    {
+                        label: 'Layout',
+                        key: 'layout',
+                        weight: 60,
+                        components: ComponentEditLayout
+                    }
+                ]
+            }]).concat(extend.map(items => ({
+            type: 'tabs',
+            key: 'tabs',
+            components: _.cloneDeep(items)
+        })));
+        return {
+            components: _.unionWith(components, EditFormUtils.unifyComponents).concat({
+                type: 'hidden',
+                key: 'type'
+            })
+        };
+    };
+});
+define('skylark-formio/components/address/editForm/Address.edit.data',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'multiple',
+            ignore: true
+        },
+        {
+            type: 'address',
+            label: 'Default Value',
+            key: 'defaultValue',
+            weight: 5,
+            placeholder: 'Default Value',
+            tooltip: 'The will be the value for this field, before user interaction. Having a default value will override the placeholder text.',
+            input: true,
+            customDefaultValue: ({instance}) => instance.manualModeEnabled ? {
+                mode: 'autocomplete',
+                address: {}
+            } : {}
+        }
+    ];
+});
+define('skylark-formio/components/address/editForm/Address.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'labelPosition',
+            ignore: true
+        },
+        {
+            weight: 20,
+            type: 'checkbox',
+            input: true,
+            key: 'enableManualMode',
+            label: 'Enable Manual Mode',
+            tooltip: 'Should Manual Mode be enabled for that component or not.'
+        },
+        {
+            weight: 30,
+            type: 'textfield',
+            input: true,
+            key: 'switchToManualModeLabel',
+            label: 'Switch To Matual Mode Label',
+            placeholder: 'Switch To Matual Mode Label',
+            tooltip: 'The label for the checkbox used to switch to manual mode.',
+            validate: { required: true },
+            customConditional: ({data}) => Boolean(data.enableManualMode)
+        },
+        {
+            weight: 40,
+            type: 'checkbox',
+            input: true,
+            key: 'disableClearIcon',
+            label: 'Disable Clear Icon',
+            tooltip: "Clear Icon allows easily clear component's value."
+        }
+    ];
+});
+define('skylark-formio/components/address/editForm/Address.edit.provider',[
+    'skylark-lodash',
+    '../../../Formio'
+], function (_, Formio) {
+    'use strict';
+    return [
+        {
+            type: 'select',
+            input: true,
+            key: 'provider',
+            label: 'Provider',
+            placeholder: 'Select your address search provider',
+            weight: 0,
+            tooltip: 'Which address search service should be used.',
+            valueProperty: 'value',
+            dataSrc: 'custom',
+            data: {
+                custom() {
+                    return _.values(Formio.Providers.getProviders('address')).sort().map(provider => ({
+                        label: provider.displayName,
+                        value: provider.name
+                    }));
+                }
+            },
+            validate: { required: true }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: "providerOptions.params['subscription-key']",
+            label: 'Subscription Key',
+            placeholder: 'Enter Subscription Key',
+            weight: 10,
+            tooltip: 'Use your Azure Maps subscription key here.',
+            validate: { required: true },
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.provider' },
+                        'azure'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'providerOptions.url',
+            label: 'Url',
+            placeholder: 'Enter Url',
+            weight: 10,
+            tooltip: 'Url to the service which should be used to search addresses for autocomplete.',
+            validate: { required: true },
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.provider' },
+                        'custom'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'providerOptions.queryProperty',
+            label: 'Query Property',
+            defaultValue: 'query',
+            placeholder: 'Enter Query Property',
+            weight: 20,
+            tooltip: 'Which query param should be used to pass as a search string. Default is `query`.',
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.provider' },
+                        'custom'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'providerOptions.responseProperty',
+            label: 'Response Property',
+            placeholder: 'Enter Response Property',
+            weight: 30,
+            tooltip: 'The property within the response data, where iterable addresses reside. For example: results.',
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.provider' },
+                        'custom'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'providerOptions.displayValueProperty',
+            label: 'Display Value Property',
+            placeholder: 'Display Value Property',
+            weight: 40,
+            tooltip: 'The property of each address in the response to use as the display value.',
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.provider' },
+                        'custom'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textarea',
+            input: true,
+            key: 'providerOptions.params',
+            label: 'Params',
+            placeholder: '{ ... }',
+            weight: 50,
+            rows: 5,
+            editor: 'ace',
+            as: 'json',
+            tooltip: 'Additional query params can be specified here in a way of JSON object.',
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.provider' },
+                        'custom'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'providerOptions.params.key',
+            label: 'API Key',
+            placeholder: 'Enter API Key',
+            weight: 10,
+            tooltip: 'Use your Google API key here.',
+            validate: { required: true },
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.provider' },
+                        'google'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'providerOptions.params.region',
+            label: 'Region',
+            placeholder: 'Enter Region',
+            weight: 20,
+            tooltip: 'Specify Region for Google Maps APIs.',
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.provider' },
+                        'google'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textarea',
+            input: true,
+            key: 'manualModeViewString',
+            label: 'Manual Mode View String',
+            placeholder: 'Enter Manual Mode View String',
+            description: '"address" variable references component value, "data" - submission data and "component" - address component schema.',
+            weight: 60,
+            rows: 5,
+            editor: 'ace',
+            tooltip: 'Specify template which should be when quering view string for the component value entered in manual mode. This string is used in table view, CSV export and email rendering. When left blank combined value of all components joined with comma will be used.'
+        }
+    ];
+});
+define('skylark-formio/components/address/Address.form',[
+    '../_classes/component/Component.form',
+    './editForm/Address.edit.data',
+    './editForm/Address.edit.display',
+    './editForm/Address.edit.provider'
+], function (baseEditForm, AddressEditData, AddressEditDisplay, AddressEditProvider) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([
+            {
+                key: 'data',
+                components: AddressEditData
+            },
+            {
+                key: 'display',
+                components: AddressEditDisplay
+            },
+            {
+                label: 'Provider',
+                key: 'provider',
+                weight: 15,
+                components: AddressEditProvider
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/button/editForm/Button.edit.display',[
+    '../../../utils/builder',
+    'skylark-lodash'
+], function (BuilderUtils, _) {
+    'use strict';
+    return [
+        {
+            key: 'labelPosition',
+            ignore: true
+        },
+        {
+            key: 'placeholder',
+            ignore: true
+        },
+        {
+            key: 'hideLabel',
+            ignore: true
+        },
+        {
+            type: 'select',
+            key: 'action',
+            label: 'Action',
+            input: true,
+            dataSrc: 'values',
+            weight: 110,
+            tooltip: 'This is the action to be performed by this button.',
+            data: {
+                values: [
+                    {
+                        label: 'Submit',
+                        value: 'submit'
+                    },
+                    {
+                        label: 'Save in state',
+                        value: 'saveState'
+                    },
+                    {
+                        label: 'Event',
+                        value: 'event'
+                    },
+                    {
+                        label: 'Custom',
+                        value: 'custom'
+                    },
+                    {
+                        label: 'Reset',
+                        value: 'reset'
+                    },
+                    {
+                        label: 'OAuth',
+                        value: 'oauth'
+                    },
+                    {
+                        label: 'POST to URL',
+                        value: 'url'
+                    }
+                ]
+            }
+        },
+        {
+            type: 'textfield',
+            label: 'Save in state',
+            key: 'state',
+            weight: 112,
+            tooltip: 'The state you wish to save the submission under when this button is pressed. Example "draft" would save the submission in Draft Mode.',
+            placeholder: 'submitted',
+            input: true,
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.action' },
+                        'saveState'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            inputType: 'checkbox',
+            key: 'showValidations',
+            label: 'Show Validations',
+            weight: 115,
+            tooltip: 'When the button is pressed, show any validation errors on the form.',
+            conditional: {
+                json: {
+                    '!==': [
+                        { var: 'data.action' },
+                        'submit'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            label: 'Button Event',
+            key: 'event',
+            input: true,
+            weight: 120,
+            tooltip: 'The event to fire when the button is clicked.',
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.action' },
+                        'event'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            inputType: 'url',
+            key: 'url',
+            input: true,
+            weight: 120,
+            label: 'Button URL',
+            tooltip: 'The URL where the submission will be sent.',
+            placeholder: 'https://example.form.io',
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.action' },
+                        'url'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'datagrid',
+            key: 'headers',
+            input: true,
+            weight: 130,
+            label: 'Headers',
+            addAnother: 'Add Header',
+            tooltip: 'Headers Properties and Values for your request',
+            components: [
+                {
+                    key: 'header',
+                    label: 'Header',
+                    input: true,
+                    type: 'textfield'
+                },
+                {
+                    key: 'value',
+                    label: 'Value',
+                    input: true,
+                    type: 'textfield'
+                }
+            ],
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.action' },
+                        'url'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textarea',
+            key: 'custom',
+            label: 'Button Custom Logic',
+            tooltip: 'The custom logic to evaluate when the button is clicked.',
+            rows: 5,
+            editor: 'ace',
+            input: true,
+            weight: 120,
+            placeholder: "data['mykey'] = data['anotherKey'];",
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.action' },
+                        'custom'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'select',
+            key: 'theme',
+            label: 'Theme',
+            input: true,
+            tooltip: 'The color theme of this button.',
+            dataSrc: 'values',
+            weight: 140,
+            data: {
+                values: [
+                    {
+                        label: 'Primary',
+                        value: 'primary'
+                    },
+                    {
+                        label: 'Secondary',
+                        value: 'secondary'
+                    },
+                    {
+                        label: 'Info',
+                        value: 'info'
+                    },
+                    {
+                        label: 'Success',
+                        value: 'success'
+                    },
+                    {
+                        label: 'Danger',
+                        value: 'danger'
+                    },
+                    {
+                        label: 'Warning',
+                        value: 'warning'
+                    }
+                ]
+            }
+        },
+        {
+            type: 'select',
+            key: 'size',
+            label: 'Size',
+            input: true,
+            tooltip: 'The size of this button.',
+            dataSrc: 'values',
+            weight: 150,
+            data: {
+                values: [
+                    {
+                        label: 'Extra Small',
+                        value: 'xs'
+                    },
+                    {
+                        label: 'Small',
+                        value: 'sm'
+                    },
+                    {
+                        label: 'Medium',
+                        value: 'md'
+                    },
+                    {
+                        label: 'Large',
+                        value: 'lg'
+                    }
+                ]
+            }
+        },
+        {
+            type: 'textfield',
+            key: 'leftIcon',
+            label: 'Left Icon',
+            input: true,
+            placeholder: 'Enter icon classes',
+            tooltip: "This is the full icon class string to show the icon. Example: 'fa fa-plus'",
+            weight: 160
+        },
+        {
+            type: 'textfield',
+            key: 'rightIcon',
+            label: 'Right Icon',
+            input: true,
+            placeholder: 'Enter icon classes',
+            tooltip: "This is the full icon class string to show the icon. Example: 'fa fa-plus'",
+            weight: 170
+        },
+        {
+            type: 'select',
+            input: true,
+            weight: 180,
+            label: 'Shortcut',
+            key: 'shortcut',
+            tooltip: 'Shortcut for this component.',
+            dataSrc: 'custom',
+            valueProperty: 'value',
+            customDefaultValue: () => '',
+            template: '{{ item.label }}',
+            data: {
+                custom(context) {
+                    return BuilderUtils.getAvailableShortcuts(_.get(context, 'instance.options.editForm', {}), _.get(context, 'instance.options.editComponent', {}));
+                }
+            }
+        },
+        {
+            type: 'checkbox',
+            key: 'block',
+            label: 'Block Button',
+            input: true,
+            weight: 155,
+            tooltip: 'This control should span the full width of the bounding container.'
+        },
+        {
+            type: 'checkbox',
+            key: 'disableOnInvalid',
+            label: 'Disable on Form Invalid',
+            tooltip: 'This will disable this field if the form is invalid.',
+            input: true,
+            weight: 620
+        }
+    ];
+});
+define('skylark-formio/components/button/Button.form',[
+    '../_classes/component/Component.form',
+    './editForm/Button.edit.display'
+], function (baseEditForm, ButtonEditDisplay) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([
+            {
+                key: 'display',
+                components: ButtonEditDisplay
+            },
+            {
+                key: 'data',
+                ignore: true
+            },
+            {
+                key: 'validation',
+                ignore: true
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/checkbox/editForm/Checkbox.edit.data',[],function () {
+    'use strict';
+    return [{
+            key: 'multiple',
+            ignore: true
+        }];
+});
+define('skylark-formio/components/checkbox/editForm/Checkbox.edit.display',[
+    '../../../utils/builder',
+    'skylark-lodash'
+], function (BuilderUtils, _) {
+    'use strict';
+    return [
+        {
+            key: 'labelPosition',
+            ignore: true
+        },
+        {
+            key: 'placeholder',
+            ignore: true
+        },
+        {
+            type: 'select',
+            input: true,
+            weight: 350,
+            label: 'Shortcut',
+            key: 'shortcut',
+            tooltip: 'Shortcut for this component.',
+            dataSrc: 'custom',
+            valueProperty: 'value',
+            customDefaultValue: () => '',
+            template: '{{ item.label }}',
+            data: {
+                custom(context) {
+                    return BuilderUtils.getAvailableShortcuts(_.get(context, 'instance.options.editForm', {}), _.get(context, 'instance.options.editComponent', {}));
+                }
+            }
+        },
+        {
+            type: 'select',
+            input: true,
+            key: 'inputType',
+            label: 'Input Type',
+            tooltip: 'This is the input type used for this checkbox.',
+            dataSrc: 'values',
+            weight: 410,
+            data: {
+                values: [
+                    {
+                        label: 'Checkbox',
+                        value: 'checkbox'
+                    },
+                    {
+                        label: 'Radio',
+                        value: 'radio'
+                    }
+                ]
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'name',
+            label: 'Radio Key',
+            tooltip: 'The key used to trigger the radio button toggle.',
+            weight: 420,
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.inputType' },
+                        'radio'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            label: 'Radio Value',
+            key: 'value',
+            tooltip: 'The value used with this radio button.',
+            weight: 430,
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.inputType' },
+                        'radio'
+                    ]
+                }
+            }
+        }
+    ];
+});
+define('skylark-formio/components/checkbox/editForm/Checkbox.edit.validation',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'validateOn',
+            ignore: true
+        },
+        {
+            key: 'unique',
+            ignore: true
+        }
+    ];
+});
+define('skylark-formio/components/checkbox/Checkbox.form',[
+    '../_classes/component/Component.form',
+    './editForm/Checkbox.edit.data',
+    './editForm/Checkbox.edit.display',
+    './editForm/Checkbox.edit.validation'
+], function (baseEditForm, CheckboxEditData, CheckboxEditDisplay, CheckboxEditValidation) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([
+            {
+                key: 'data',
+                components: CheckboxEditData
+            },
+            {
+                key: 'display',
+                components: CheckboxEditDisplay
+            },
+            {
+                key: 'validation',
+                components: CheckboxEditValidation
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/_classes/nested/NestedComponent.form',['../component/Component.form'], function (baseEditForm) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([
+            {
+                key: 'data',
+                ignore: true
+            },
+            {
+                key: 'validation',
+                ignore: true
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/columns/editForm/Columns.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'labelPosition',
+            ignore: true
+        },
+        {
+            key: 'placeholder',
+            ignore: true
+        },
+        {
+            key: 'description',
+            ignore: true
+        },
+        {
+            key: 'tooltip',
+            ignore: true
+        },
+        {
+            key: 'autofocus',
+            ignore: true
+        },
+        {
+            key: 'tabindex',
+            ignore: true
+        },
+        {
+            key: 'disabled',
+            ignore: true
+        },
+        {
+            weight: 150,
+            type: 'datagrid',
+            input: true,
+            key: 'columns',
+            label: 'Column Properties',
+            addAnother: 'Add Column',
+            tooltip: 'The width, offset, push, and pull settings for each column.',
+            reorder: true,
+            components: [
+                {
+                    type: 'hidden',
+                    key: 'components',
+                    defaultValue: []
+                },
+                {
+                    type: 'select',
+                    key: 'size',
+                    defaultValue: 'md',
+                    label: 'Size',
+                    data: {
+                        values: [
+                            {
+                                label: 'xs',
+                                value: 'xs'
+                            },
+                            {
+                                label: 'sm',
+                                value: 'sm'
+                            },
+                            {
+                                label: 'md',
+                                value: 'md'
+                            },
+                            {
+                                label: 'lg',
+                                value: 'lg'
+                            },
+                            {
+                                label: 'xl',
+                                value: 'xl'
+                            }
+                        ]
+                    }
+                },
+                {
+                    type: 'number',
+                    key: 'width',
+                    defaultValue: 6,
+                    label: 'Width'
+                },
+                {
+                    type: 'number',
+                    key: 'offset',
+                    defaultValue: 0,
+                    label: 'Offset'
+                },
+                {
+                    type: 'number',
+                    key: 'push',
+                    defaultValue: 0,
+                    label: 'Push'
+                },
+                {
+                    type: 'number',
+                    key: 'pull',
+                    defaultValue: 0,
+                    label: 'Pull'
+                }
+            ]
+        },
+        {
+            weight: 160,
+            type: 'checkbox',
+            label: 'Auto adjust columns',
+            tooltip: 'Will automatically adjust columns based on if nested components are hidden.',
+            key: 'autoAdjust',
+            input: true
+        },
+        {
+            weight: 161,
+            type: 'checkbox',
+            label: 'Hide Column when Children Hidden',
+            key: 'hideOnChildrenHidden',
+            tooltip: 'Check this if you would like to hide any column when the children within that column are also hidden',
+            input: true
+        }
+    ];
+});
+define('skylark-formio/components/columns/Columns.form',[
+    '../_classes/nested/NestedComponent.form',
+    './editForm/Columns.edit.display'
+], function (nestedComponentForm, ColumnsEditDisplay) {
+    'use strict';
+    return function (...extend) {
+        return nestedComponentForm([{
+                key: 'display',
+                components: ColumnsEditDisplay
+            }], ...extend);
+    };
+});
+define('skylark-formio/components/container/editForm/Container.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'placeholder',
+            ignore: true
+        },
+        {
+            key: 'description',
+            ignore: true
+        },
+        {
+            key: 'autofocus',
+            ignore: true
+        },
+        {
+            key: 'tabindex',
+            ignore: true
+        }
+    ];
+});
+define('skylark-formio/components/container/editForm/Container.edit.data',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'multiple',
+            ignore: true
+        },
+        {
+            key: 'allowCalculateOverride',
+            ignore: true
+        },
+        {
+            key: 'defaultValue',
+            ignore: true
+        }
+    ];
+});
+define('skylark-formio/components/container/Container.form',[
+    '../_classes/component/Component.form',
+    './editForm/Container.edit.display',
+    './editForm/Container.edit.data'
+], function (baseEditForm, ContainerEditDisplay, ContainerEditData) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([
+            {
+                key: 'display',
+                components: ContainerEditDisplay
+            },
+            {
+                key: 'data',
+                components: ContainerEditData
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/content/editForm/Content.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'labelPosition',
+            ignore: true
+        },
+        {
+            key: 'placeholder',
+            ignore: true
+        },
+        {
+            key: 'description',
+            ignore: true
+        },
+        {
+            key: 'tooltip',
+            ignore: true
+        },
+        {
+            key: 'hideLabel',
+            ignore: true
+        },
+        {
+            key: 'autofocus',
+            ignore: true
+        },
+        {
+            key: 'disabled',
+            ignore: true
+        },
+        {
+            key: 'tabindex',
+            ignore: true
+        },
+        {
+            weight: 700,
+            type: 'checkbox',
+            label: 'Refresh On Change',
+            tooltip: 'Rerender the field whenever a value on the form changes.',
+            key: 'refreshOnChange',
+            input: true
+        }
+    ];
+});
+define('skylark-formio/components/content/editForm/Content.edit.logic',[],function () {
+    'use strict';
+    return [{
+            key: 'logic',
+            components: [{
+                    key: 'actions',
+                    components: [{
+                            key: 'actionPanel',
+                            components: [
+                                {
+                                    data: {
+                                        json: [
+                                            {
+                                                label: 'Hidden',
+                                                value: 'hidden',
+                                                type: 'boolean'
+                                            },
+                                            {
+                                                label: 'Required',
+                                                value: 'validate.required',
+                                                type: 'boolean'
+                                            },
+                                            {
+                                                label: 'Disabled',
+                                                value: 'disabled',
+                                                type: 'boolean'
+                                            },
+                                            {
+                                                label: 'Label',
+                                                value: 'label',
+                                                type: 'string'
+                                            },
+                                            {
+                                                label: 'Title',
+                                                value: 'title',
+                                                type: 'string'
+                                            },
+                                            {
+                                                label: 'Tooltip',
+                                                value: 'tooltip',
+                                                type: 'string'
+                                            },
+                                            {
+                                                label: 'Description',
+                                                value: 'description',
+                                                type: 'string'
+                                            },
+                                            {
+                                                label: 'Placeholder',
+                                                value: 'placeholder',
+                                                type: 'string'
+                                            },
+                                            {
+                                                label: 'CSS Class',
+                                                value: 'className',
+                                                type: 'string'
+                                            },
+                                            {
+                                                label: 'Container Custom Class',
+                                                value: 'customClass',
+                                                type: 'string'
+                                            },
+                                            {
+                                                label: 'Content',
+                                                value: 'html',
+                                                type: 'string',
+                                                component: 'content'
+                                            }
+                                        ]
+                                    },
+                                    key: 'property'
+                                },
+                                {
+                                    type: 'textarea',
+                                    editor: 'ace',
+                                    rows: 10,
+                                    as: 'html',
+                                    label: 'Content',
+                                    tooltip: 'The content of this HTML element.',
+                                    defaultValue: '<div class="well">Content</div>',
+                                    key: 'content',
+                                    weight: 30,
+                                    input: true,
+                                    customConditional(context) {
+                                        return context.row.type === 'property' && context.row.hasOwnProperty('property') && context.row.property.type === 'string' && context.row.property.component === 'content';
+                                    }
+                                }
+                            ]
+                        }]
+                }]
+        }];
+});
+define('skylark-formio/components/content/Content.form',[
+    '../_classes/component/Component.form',
+    './editForm/Content.edit.display',
+    './editForm/Content.edit.logic'
+], function (baseEditForm, ContentEditDisplay, ContentEditLogic) {
+    'use strict';
+    return function (...extend) {
+        const editForm = baseEditForm([
+            {
+                key: 'display',
+                components: ContentEditDisplay
+            },
+            {
+                key: 'data',
+                ignore: true
+            },
+            {
+                key: 'validation',
+                ignore: true
+            },
+            {
+                key: 'logic',
+                components: ContentEditLogic
+            }
+        ], ...extend);
+        editForm.components = [{
+                weight: 0,
+                type: 'textarea',
+                editor: 'ckeditor',
+                label: 'Content',
+                hideLabel: true,
+                input: true,
+                key: 'html',
+                as: 'html',
+                rows: 3,
+                tooltip: 'The HTML template for the result data items.'
+            }].concat(editForm.components);
+        return editForm;
+    };
+});
+define('skylark-formio/components/textfield/editForm/TextField.edit.data',[],function () {
+    'use strict';
+    return [
+        {
+            type: 'select',
+            label: 'Input Format',
+            key: 'inputFormat',
+            weight: 105,
+            placeholder: 'Input Format',
+            tooltip: 'Force the output of this field to be sanitized in a specific format.',
+            template: '<span>{{ item.label }}</span>',
+            data: {
+                values: [
+                    {
+                        value: 'plain',
+                        label: 'Plain'
+                    },
+                    {
+                        value: 'html',
+                        label: 'HTML'
+                    },
+                    {
+                        value: 'raw',
+                        label: 'Raw (Insecure)'
+                    }
+                ]
+            },
+            defaultValue: 'plain',
+            input: true
+        },
+        {
+            weight: 200,
+            type: 'radio',
+            label: 'Text Case',
+            key: 'case',
+            tooltip: 'When data is entered, you can change the case of the value.',
+            input: true,
+            values: [
+                {
+                    value: 'mixed',
+                    label: 'Mixed (Allow upper and lower case)'
+                },
+                {
+                    value: 'uppercase',
+                    label: 'Uppercase'
+                },
+                {
+                    value: 'lowercase',
+                    label: 'Lowercase'
+                }
+            ]
+        }
+    ];
+});
+define('skylark-formio/components/textfield/editForm/TextField.edit.display',[
+    '../../../widgets/index',
+    'skylark-lodash'
+], function (Widgets, _) {
+    'use strict';
+    return [
+        {
+            weight: 400,
+            type: 'select',
+            input: true,
+            key: 'widget.type',
+            label: 'Widget',
+            placeholder: 'Select a widget',
+            tooltip: 'The widget is the display UI used to input the value of the field.',
+            defaultValue: 'input',
+            onChange: context => {
+                context.data.widget = _.pick(context.data.widget, 'type');
+            },
+            dataSrc: 'values',
+            data: {
+                values: [
+                    {
+                        label: 'Input Field',
+                        value: 'input'
+                    },
+                    {
+                        label: 'Calendar Picker',
+                        value: 'calendar'
+                    }
+                ]
+            },
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.type' },
+                        'textfield'
+                    ]
+                }
+            }
+        },
+        {
+            weight: 405,
+            type: 'textarea',
+            key: 'widget',
+            label: 'Widget Settings',
+            refreshOn: 'wiget.type',
+            clearOnHide: false,
+            calculateValue: context => {
+                const {calculatedValue} = context.instance;
+                const {type} = context.data.widget;
+                if (_.isEmpty(_.omit(context.data.widget, 'type')) || _.isEmpty(_.omit(calculatedValue, 'type'))) {
+                    if (calculatedValue && !calculatedValue.type) {
+                        return context.data.widget;
+                    }
+                    const existWidget = context.instance._currentForm.options.editComponent.widget;
+                    if (existWidget && !_.isEmpty(_.omit(existWidget, 'type')) && type === existWidget.type) {
+                        return _.omit(existWidget, 'language');
+                    } else if (type) {
+                        return _.omit(Widgets[type].defaultSettings, 'language');
+                    }
+                }
+                return context.data.widget;
+            },
+            input: true,
+            rows: 5,
+            editor: 'ace',
+            as: 'json',
+            conditional: {
+                json: {
+                    '!==': [
+                        { var: 'data.widget.type' },
+                        'input'
+                    ]
+                }
+            }
+        },
+        {
+            weight: 410,
+            type: 'textfield',
+            input: true,
+            key: 'inputMask',
+            label: 'Input Mask',
+            tooltip: "An input mask helps the user with input by ensuring a predefined format.<br><br>9: numeric<br>a: alphabetical<br>*: alphanumeric<br><br>Example telephone mask: (999) 999-9999<br><br>See the <a target='_blank' href='https://github.com/RobinHerbots/jquery.inputmask'>jquery.inputmask documentation</a> for more information.</a>",
+            customConditional(context) {
+                return !context.data.allowMultipleMasks;
+            }
+        },
+        {
+            weight: 413,
+            type: 'checkbox',
+            input: true,
+            key: 'allowMultipleMasks',
+            label: 'Allow Multiple Masks'
+        },
+        {
+            weight: 1350,
+            type: 'checkbox',
+            input: true,
+            key: 'spellcheck',
+            defaultValue: true,
+            label: 'Allow Spellcheck'
+        },
+        {
+            weight: 417,
+            type: 'datagrid',
+            input: true,
+            key: 'inputMasks',
+            label: 'Input Masks',
+            customConditional(context) {
+                return context.data.allowMultipleMasks === true;
+            },
+            reorder: true,
+            components: [
+                {
+                    type: 'textfield',
+                    key: 'label',
+                    label: 'Label',
+                    input: true
+                },
+                {
+                    type: 'textfield',
+                    key: 'mask',
+                    label: 'Mask',
+                    input: true
+                }
+            ]
+        },
+        {
+            weight: 320,
+            type: 'textfield',
+            input: true,
+            key: 'prefix',
+            label: 'Prefix'
+        },
+        {
+            weight: 330,
+            type: 'textfield',
+            input: true,
+            key: 'suffix',
+            label: 'Suffix'
+        },
+        {
+            weight: 1300,
+            type: 'checkbox',
+            label: 'Hide Input',
+            tooltip: 'Hide the input in the browser. This does not encrypt on the server. Do not use for passwords.',
+            key: 'mask',
+            input: true
+        },
+        {
+            weight: 1200,
+            type: 'checkbox',
+            label: 'Show Word Counter',
+            tooltip: 'Show a live count of the number of words.',
+            key: 'showWordCount',
+            input: true
+        },
+        {
+            weight: 1201,
+            type: 'checkbox',
+            label: 'Show Character Counter',
+            tooltip: 'Show a live count of the number of characters.',
+            key: 'showCharCount',
+            input: true
+        }
+    ];
+});
+define('skylark-formio/components/textfield/editForm/TextField.edit.validation',[],function () {
+    'use strict';
+    return [
+        {
+            weight: 110,
+            key: 'validate.minLength',
+            label: 'Minimum Length',
+            placeholder: 'Minimum Length',
+            type: 'number',
+            tooltip: 'The minimum length requirement this field must meet.',
+            input: true
+        },
+        {
+            weight: 120,
+            key: 'validate.maxLength',
+            label: 'Maximum Length',
+            placeholder: 'Maximum Length',
+            type: 'number',
+            tooltip: 'The maximum length requirement this field must meet.',
+            input: true
+        },
+        {
+            weight: 125,
+            key: 'validate.minWords',
+            label: 'Minimum Word Length',
+            placeholder: 'Minimum Word Length',
+            type: 'number',
+            tooltip: 'The minimum amount of words that can be added to this field.',
+            input: true
+        },
+        {
+            weight: 126,
+            key: 'validate.maxWords',
+            label: 'Maximum Word Length',
+            placeholder: 'Maximum Word Length',
+            type: 'number',
+            tooltip: 'The maximum amount of words that can be added to this field.',
+            input: true
+        },
+        {
+            weight: 130,
+            key: 'validate.pattern',
+            label: 'Regular Expression Pattern',
+            placeholder: 'Regular Expression Pattern',
+            type: 'textfield',
+            tooltip: 'The regular expression pattern test that the field value must pass before the form can be submitted.',
+            input: true
+        }
+    ];
+});
+define('skylark-formio/components/textfield/TextField.form',[
+    '../_classes/component/Component.form',
+    './editForm/TextField.edit.data',
+    './editForm/TextField.edit.display',
+    './editForm/TextField.edit.validation'
+], function (baseEditForm, TextFieldEditData, TextFieldEditDisplay, TextFieldEditValidation) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([
+            {
+                key: 'display',
+                components: TextFieldEditDisplay
+            },
+            {
+                key: 'data',
+                components: TextFieldEditData
+            },
+            {
+                key: 'validation',
+                components: TextFieldEditValidation
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/currency/editForm/Currency.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'inputMask',
+            ignore: true
+        },
+        {
+            key: 'allowMultipleMasks',
+            ignore: true
+        },
+        {
+            key: 'showWordCount',
+            ignore: true
+        },
+        {
+            key: 'showCharCount',
+            ignore: true
+        },
+        {
+            type: 'textfield',
+            input: true,
+            weight: 310,
+            key: 'prefix',
+            label: 'prefix',
+            tooltip: 'Specify the prefix symbol after the component (e.g.: USD, EUR)'
+        },
+        {
+            type: 'textfield',
+            input: true,
+            weight: 320,
+            key: 'suffix',
+            label: 'suffix',
+            tooltip: 'Specify the suffix symbol after the component (e.g.: USD, EUR).'
+        }
+    ];
+});
+define('skylark-formio/components/currency/editForm/Currency.edit.data',[],function(){
+
+return [
+  {
+    type: 'select',
+    input: true,
+    weight: 50,
+    key: 'currency',
+    label: 'Currency',
+    tooltip: 'The currency to use in currency formatting. Possible values are (ISO-4217) currency codes.',
+    defaultValue: 'USD',
+    dataSrc: 'values',
+    data: {
+      values: [
+        { label: 'US Dollar (USD)', value: 'USD' },
+        { label: 'Euro (EUR)', value: 'EUR' },
+        { label: 'Pound Sterling (GBP)', value: 'GBP' },
+        { label: 'Australian Dollar (AUD)', value: 'AUD' },
+        { label: 'Afghani (AFN)', value: 'AFN' },
+        { label: 'Lek (ALL)', value: 'ALL' },
+        { label: 'Algerian Dinar (DZD)', value: 'DZD' },
+        { label: 'Kwanza (AOA)', value: 'AOA' },
+        { label: 'East Caribbean Dollar (XCD)', value: 'XCD' },
+        { label: 'Argentine Peso (ARS)', value: 'ARS' },
+        { label: 'Armenian Dram (AMD)', value: 'AMD' },
+        { label: 'Aruban Florin (AWG)', value: 'AWG' },
+        { label: 'Azerbaijan Manat (AZN)', value: 'AZN' },
+        { label: 'Bahamian Dollar (BSD)', value: 'BSD' },
+        { label: 'Bahraini Dinar (BHD)', value: 'BHD' },
+        { label: 'Taka (BDT)', value: 'BDT' },
+        { label: 'Barbados Dollar (BBD)', value: 'BBD' },
+        { label: 'Belarusian Ruble (BYN)', value: 'BYN' },
+        { label: 'Belize Dollar (BZD)', value: 'BZD' },
+        { label: 'CFA Franc BCEAO (XOF)', value: 'XOF' },
+        { label: 'Bermudian Dollar (BMD)', value: 'BMD' },
+        { label: 'Indian Rupee (INR)', value: 'INR' },
+        { label: 'Ngultrum (BTN)', value: 'BTN' },
+        { label: 'Boliviano (BOB)', value: 'BOB' },
+        { label: 'Mvdol (BOV)', value: 'BOV' },
+        { label: 'Convertible Mark (BAM)', value: 'BAM' },
+        { label: 'Pula (BWP)', value: 'BWP' },
+        { label: 'Norwegian Krone (NOK)', value: 'NOK' },
+        { label: 'Brazilian Real (BRL)', value: 'BRL' },
+        { label: 'Brunei Dollar (BND)', value: 'BND' },
+        { label: 'Bulgarian Lev (BGN)', value: 'BGN' },
+        { label: 'Burundi Franc (BIF)', value: 'BIF' },
+        { label: 'Cabo Verde Escudo (CVE)', value: 'CVE' },
+        { label: 'Riel (KHR)', value: 'KHR' },
+        { label: 'CFA Franc BEAC (XAF)', value: 'XAF' },
+        { label: 'Canadian Dollar (CAD)', value: 'CAD' },
+        { label: 'Cayman Islands Dollar (KYD)', value: 'KYD' },
+        { label: 'Chilean Peso (CLP)', value: 'CLP' },
+        { label: 'Unidad de Fomento (CLF)', value: 'CLF' },
+        { label: 'Yuan Renminbi (CNY)', value: 'CNY' },
+        { label: 'Colombian Peso (COP)', value: 'COP' },
+        { label: 'Unidad de Valor Real (COU)', value: 'COU' },
+        { label: 'Comorian Franc (KMF)', value: 'KMF' },
+        { label: 'Congolese Franc (CDF)', value: 'CDF' },
+        { label: 'New Zealand Dollar (NZD)', value: 'NZD' },
+        { label: 'Costa Rican Colon (CRC)', value: 'CRC' },
+        { label: 'Kuna (HRK)', value: 'HRK' },
+        { label: 'Cuban Peso (CUP)', value: 'CUP' },
+        { label: 'Peso Convertible (CUC)', value: 'CUC' },
+        { label: 'Netherlands Antillean Guilder (ANG)', value: 'ANG' },
+        { label: 'Czech Koruna (CZK)', value: 'CZK' },
+        { label: 'Danish Krone (DKK)', value: 'DKK' },
+        { label: 'Djibouti Franc (DJF)', value: 'DJF' },
+        { label: 'Dominican Peso (DOP)', value: 'DOP' },
+        { label: 'Egyptian Pound (EGP)', value: 'EGP' },
+        { label: 'El Salvador Colon (SVC)', value: 'SVC' },
+        { label: 'Nakfa (ERN)', value: 'ERN' },
+        { label: 'Ethiopian Birr (ETB)', value: 'ETB' },
+        { label: 'Falkland Islands Pound (FKP)', value: 'FKP' },
+        { label: 'Fiji Dollar (FJD)', value: 'FJD' },
+        { label: 'CFP Franc (XPF)', value: 'XPF' },
+        { label: 'Dalasi (GMD)', value: 'GMD' },
+        { label: 'Lari (GEL)', value: 'GEL' },
+        { label: 'Ghana Cedi (GHS)', value: 'GHS' },
+        { label: 'Gibraltar Pound (GIP)', value: 'GIP' },
+        { label: 'Quetzal (GTQ)', value: 'GTQ' },
+        { label: 'Guinean Franc (GNF)', value: 'GNF' },
+        { label: 'Guyana Dollar (GYD)', value: 'GYD' },
+        { label: 'Gourde (HTG)', value: 'HTG' },
+        { label: 'Lempira (HNL)', value: 'HNL' },
+        { label: 'Hong Kong Dollar (HKD)', value: 'HKD' },
+        { label: 'Forint (HUF)', value: 'HUF' },
+        { label: 'Iceland Krona (ISK)', value: 'ISK' },
+        { label: 'Indian Rupee (INR)', value: 'INR' },
+        { label: 'Rupiah (IDR)', value: 'IDR' },
+        { label: 'SDR (Special Drawing Right) (XDR)', value: 'XDR' },
+        { label: 'Iranian Rial (IRR)', value: 'IRR' },
+        { label: 'Iraqi Dinar (IQD)', value: 'IQD' },
+        { label: 'New Israeli Sheqel (ILS)', value: 'ILS' },
+        { label: 'Jamaican Dollar (JMD)', value: 'JMD' },
+        { label: 'Yen (JPY)', value: 'JPY' },
+        { label: 'Jordanian Dinar (JOD)', value: 'JOD' },
+        { label: 'Tenge (KZT)', value: 'KZT' },
+        { label: 'Kenyan Shilling (KES)', value: 'KES' },
+        { label: 'North Korean Won (KPW)', value: 'KPW' },
+        { label: 'Won (KRW)', value: 'KRW' },
+        { label: 'Kuwaiti Dinar (KWD)', value: 'KWD' },
+        { label: 'Som (KGS)', value: 'KGS' },
+        { label: 'Lao Kip (LAK)', value: 'LAK' },
+        { label: 'Lebanese Pound (LBP)', value: 'LBP' },
+        { label: 'Loti (LSL)', value: 'LSL' },
+        { label: 'Rand (ZAR)', value: 'ZAR' },
+        { label: 'Liberian Dollar (LRD)', value: 'LRD' },
+        { label: 'Libyan Dinar (LYD)', value: 'LYD' },
+        { label: 'Swiss Franc (CHF)', value: 'CHF' },
+        { label: 'Pataca (MOP)', value: 'MOP' },
+        { label: 'Denar (MKD)', value: 'MKD' },
+        { label: 'Malagasy Ariary (MGA)', value: 'MGA' },
+        { label: 'Malawi Kwacha (MWK)', value: 'MWK' },
+        { label: 'Malaysian Ringgit (MYR)', value: 'MYR' },
+        { label: 'Rufiyaa (MVR)', value: 'MVR' },
+        { label: 'Ouguiya (MRU)', value: 'MRU' },
+        { label: 'Mauritius Rupee (MUR)', value: 'MUR' },
+        { label: 'ADB Unit of Account (XUA)', value: 'XUA' },
+        { label: 'Mexican Peso (MXN)', value: 'MXN' },
+        { label: 'Mexican Unidad de Inversion (UDI) (MXV)', value: 'MXV' },
+        { label: 'Moldovan Leu (MDL)', value: 'MDL' },
+        { label: 'Tugrik (MNT)', value: 'MNT' },
+        { label: 'Moroccan Dirham (MAD)', value: 'MAD' },
+        { label: 'Mozambique Metical (MZN)', value: 'MZN' },
+        { label: 'Kyat (MMK)', value: 'MMK' },
+        { label: 'Namibia Dollar (NAD)', value: 'NAD' },
+        { label: 'Nepalese Rupee (NPR)', value: 'NPR' },
+        { label: 'Cordoba Oro (NIO)', value: 'NIO' },
+        { label: 'Naira (NGN)', value: 'NGN' },
+        { label: 'Rial Omani (OMR)', value: 'OMR' },
+        { label: 'Pakistan Rupee (PKR)', value: 'PKR' },
+        { label: 'Balboa (PAB)', value: 'PAB' },
+        { label: 'Kina (PGK)', value: 'PGK' },
+        { label: 'Guarani (PYG)', value: 'PYG' },
+        { label: 'Sol (PEN)', value: 'PEN' },
+        { label: 'Philippine Peso (PHP)', value: 'PHP' },
+        { label: 'Zloty (PLN)', value: 'PLN' },
+        { label: 'Qatari Rial (QAR)', value: 'QAR' },
+        { label: 'Romanian Leu (RON)', value: 'RON' },
+        { label: 'Russian Ruble (RUB)', value: 'RUB' },
+        { label: 'Rwanda Franc (RWF)', value: 'RWF' },
+        { label: 'Saint Helena Pound (SHP)', value: 'SHP' },
+        { label: 'Tala (WST)', value: 'WST' },
+        { label: 'Dobra (STN)', value: 'STN' },
+        { label: 'Saudi Riyal (SAR)', value: 'SAR' },
+        { label: 'Serbian Dinar (RSD)', value: 'RSD' },
+        { label: 'Seychelles Rupee (SCR)', value: 'SCR' },
+        { label: 'Leone (SLL)', value: 'SLL' },
+        { label: 'Singapore Dollar (SGD)', value: 'SGD' },
+        { label: 'Sucre (XSU)', value: 'XSU' },
+        { label: 'Solomon Islands Dollar (SBD)', value: 'SBD' },
+        { label: 'Somali Shilling (SOS)', value: 'SOS' },
+        { label: 'South Sudanese Pound (SSP)', value: 'SSP' },
+        { label: 'Sri Lanka Rupee (LKR)', value: 'LKR' },
+        { label: 'Sudanese Pound (SDG)', value: 'SDG' },
+        { label: 'Surinam Dollar (SRD)', value: 'SRD' },
+        { label: 'Lilangeni (SZL)', value: 'SZL' },
+        { label: 'Swedish Krona (SEK)', value: 'SEK' },
+        { label: 'WIR Euro (CHE)', value: 'CHE' },
+        { label: 'WIR Franc (CHW)', value: 'CHW' },
+        { label: 'Syrian Pound (SYP)', value: 'SYP' },
+        { label: 'New Taiwan Dollar (TWD)', value: 'TWD' },
+        { label: 'Somoni (TJS)', value: 'TJS' },
+        { label: 'Tanzanian Shilling (TZS)', value: 'TZS' },
+        { label: 'Baht (THB)', value: 'THB' },
+        { label: 'Pa’anga (TOP)', value: 'TOP' },
+        { label: 'Trinidad and Tobago Dollar (TTD)', value: 'TTD' },
+        { label: 'Tunisian Dinar (TND)', value: 'TND' },
+        { label: 'Turkish Lira (TRY)', value: 'TRY' },
+        { label: 'Turkmenistan New Manat (TMT)', value: 'TMT' },
+        { label: 'Uganda Shilling (UGX)', value: 'UGX' },
+        { label: 'Hryvnia (UAH)', value: 'UAH' },
+        { label: 'UAE Dirham (AED)', value: 'AED' },
+        { label: 'US Dollar (Next day) (USN)', value: 'USN' },
+        { label: 'Peso Uruguayo (UYU)', value: 'UYU' },
+        { label: 'Uruguay Peso en Unidades Indexadas (UYI)', value: 'UYI' },
+        { label: 'Unidad Previsional (UYW)', value: 'UYW' },
+        { label: 'Uzbekistan Sum (UZS)', value: 'UZS' },
+        { label: 'Vatu (VUV)', value: 'VUV' },
+        { label: 'Bolívar Soberano (VES)', value: 'VES' },
+        { label: 'Dong (VND)', value: 'VND' },
+        { label: 'Yemeni Rial (YER)', value: 'YER' },
+        { label: 'Zambian Kwacha (ZMW)', value: 'ZMW' },
+        { label: 'Zimbabwe Dollar (ZWL),', value:  'ZWL' }
+      ]
+    }
+  }
+];
+
+});
+define('skylark-formio/components/currency/Currency.form',[
+    '../textfield/TextField.form',
+    './editForm/Currency.edit.display',
+    './editForm/Currency.edit.data'
+], function (baseEditForm, CurrencyEditDisplay, CurrencyEditData) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([
+            {
+                key: 'display',
+                components: CurrencyEditDisplay
+            },
+            {
+                key: 'data',
+                components: CurrencyEditData
+            },
+            {
+                key: 'validation',
+                components: [
+                    {
+                        key: 'validate.minLength',
+                        ignore: true
+                    },
+                    {
+                        key: 'validate.maxLength',
+                        ignore: true
+                    },
+                    {
+                        key: 'validate.minWords',
+                        ignore: true
+                    },
+                    {
+                        key: 'validate.maxWords',
+                        ignore: true
+                    },
+                    {
+                        key: 'validate.pattern',
+                        ignore: true
+                    }
+                ]
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/datagrid/editForm/DataGrid.edit.data',[],function () {
+    'use strict';
+    return [{
+            key: 'multiple',
+            ignore: true
+        }];
+});
+define('skylark-formio/components/datagrid/editForm/DataGrid.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'placeholder',
+            ignore: true
+        },
+        {
+            type: 'checkbox',
+            label: 'Disable Adding / Removing Rows',
+            key: 'disableAddingRemovingRows',
+            tooltip: 'Check if you want to hide Add Another button and Remove Row button',
+            weight: 405,
+            input: true,
+            clearOnHide: false,
+            customConditional(context) {
+                return !context.data.enableRowGroups;
+            },
+            calculateValue(context) {
+                return context.data.enableRowGroups ? true : context.data.disableAddingRemovingRows;
+            }
+        },
+        {
+            weight: 406,
+            type: 'textarea',
+            input: true,
+            key: 'conditionalAddButton',
+            label: 'Conditional Add Button',
+            placeholder: 'show = ...',
+            tooltip: 'Specify condition when Add Button should be displayed.',
+            editor: 'ace',
+            as: 'js',
+            wysiwyg: { minLines: 3 }
+        },
+        {
+            type: 'checkbox',
+            label: 'Allow Reorder',
+            key: 'reorder',
+            weight: 407,
+            input: true
+        },
+        {
+            type: 'textfield',
+            label: 'Add Another Text',
+            key: 'addAnother',
+            tooltip: 'Set the text of the Add Another button.',
+            placeholder: 'Add Another',
+            weight: 410,
+            input: true,
+            customConditional(context) {
+                return !context.data.disableAddingRemovingRows;
+            }
+        },
+        {
+            type: 'select',
+            label: 'Add Another Position',
+            key: 'addAnotherPosition',
+            dataSrc: 'values',
+            tooltip: 'Position for Add Another button with respect to Data Grid Array.',
+            defaultValue: 'bottom',
+            input: true,
+            data: {
+                values: [
+                    {
+                        label: 'Top',
+                        value: 'top'
+                    },
+                    {
+                        label: 'Bottom',
+                        value: 'bottom'
+                    },
+                    {
+                        label: 'Both',
+                        value: 'both'
+                    }
+                ]
+            },
+            weight: 411,
+            customConditional(context) {
+                return !context.data.disableAddingRemovingRows;
+            }
+        },
+        {
+            type: 'checkbox',
+            label: 'Default Open Rows',
+            key: 'defaultOpen',
+            tooltip: 'Check this if you would like for the rows of the edit grid to be defaulted to opened if values exist.',
+            weight: 420,
+            input: true
+        },
+        {
+            type: 'checkbox',
+            label: 'Equal column width',
+            key: 'layoutFixed',
+            weight: 430,
+            input: true
+        },
+        {
+            key: 'enableRowGroups',
+            type: 'checkbox',
+            label: 'Enable Row Groups',
+            weight: 440,
+            input: true
+        },
+        {
+            label: 'Groups',
+            disableAddingRemovingRows: false,
+            defaultOpen: false,
+            addAnother: '',
+            addAnotherPosition: 'bottom',
+            mask: false,
+            tableView: true,
+            alwaysEnabled: false,
+            type: 'datagrid',
+            input: true,
+            key: 'rowGroups',
+            reorder: true,
+            components: [
+                {
+                    label: 'Label',
+                    allowMultipleMasks: false,
+                    showWordCount: false,
+                    showCharCount: false,
+                    tableView: true,
+                    alwaysEnabled: false,
+                    type: 'textfield',
+                    input: true,
+                    key: 'label',
+                    widget: { type: '' },
+                    row: '0-0'
+                },
+                {
+                    label: 'Number of Rows',
+                    mask: false,
+                    tableView: true,
+                    alwaysEnabled: false,
+                    type: 'number',
+                    input: true,
+                    key: 'numberOfRows',
+                    row: '0-1'
+                }
+            ],
+            weight: 441,
+            conditional: { json: { var: 'data.enableRowGroups' } }
+        },
+        {
+            label: 'Hide Group on Header Click',
+            type: 'checkbox',
+            input: true,
+            key: 'groupToggle',
+            weight: 442,
+            conditional: { json: { var: 'data.enableRowGroups' } }
+        }
+    ];
+});
+define('skylark-formio/components/datagrid/editForm/DataGrid.edit.validation',[],function () {
+    'use strict';
+    return [
+        {
+            weight: 110,
+            key: 'validate.minLength',
+            label: 'Minimum Length',
+            placeholder: 'Minimum Length',
+            type: 'number',
+            tooltip: 'The minimum length requirement this field must meet.',
+            input: true
+        },
+        {
+            weight: 120,
+            key: 'validate.maxLength',
+            label: 'Maximum Length',
+            placeholder: 'Maximum Length',
+            type: 'number',
+            tooltip: 'The maximum length requirement this field must meet.',
+            input: true
+        }
+    ];
+});
+define('skylark-formio/components/datagrid/DataGrid.form',[
+    '../_classes/component/Component.form',
+    './editForm/DataGrid.edit.data',
+    './editForm/DataGrid.edit.display',
+    './editForm/DataGrid.edit.validation'
+], function (baseEditForm, DataGridEditData, DataGridEditDisplay, DataGridEditValidation) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([
+            {
+                key: 'display',
+                components: DataGridEditDisplay
+            },
+            {
+                key: 'data',
+                components: DataGridEditData
+            },
+            {
+                key: 'validation',
+                components: DataGridEditValidation
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/datamap/editForm/DataMap.edit.data',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'multiple',
+            ignore: true
+        },
+        {
+            key: 'defaultValue',
+            ignore: true
+        }
+    ];
+});
+define('skylark-formio/components/datamap/editForm/DataMap.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'placeholder',
+            ignore: true
+        },
+        {
+            key: 'tabindex',
+            ignore: true
+        },
+        {
+            type: 'textfield',
+            label: 'Label for Key column',
+            key: 'keyLabel',
+            tooltip: "Provide a label text for Key column (otherwise 'Key' will be used)",
+            weight: 404,
+            input: true
+        },
+        {
+            type: 'checkbox',
+            label: 'Disable Adding / Removing Rows',
+            key: 'disableAddingRemovingRows',
+            tooltip: 'Check if you want to hide Add Another button and Remove Row button',
+            weight: 405,
+            input: true
+        },
+        {
+            type: 'checkbox',
+            label: 'Show key column before value',
+            key: 'keyBeforeValue',
+            tooltip: 'Check if you would like to show the Key before the Value column.',
+            weight: 406,
+            input: true
+        },
+        {
+            type: 'textfield',
+            label: 'Add Another Text',
+            key: 'addAnother',
+            tooltip: 'Set the text of the Add Another button.',
+            placeholder: 'Add Another',
+            weight: 410,
+            input: true,
+            customConditional(context) {
+                return !context.data.disableAddingRemovingRows;
+            }
+        }
+    ];
+});
+define('skylark-formio/components/datamap/DataMap.form',[
+    '../_classes/component/Component.form',
+    './editForm/DataMap.edit.data',
+    './editForm/DataMap.edit.display'
+], function (componentEditForm, DataMapEditData, DataMapEditDisplay) {
+    'use strict';
+    return function (...extend) {
+        return componentEditForm([
+            {
+                key: 'display',
+                components: DataMapEditDisplay
+            },
+            {
+                key: 'data',
+                components: DataMapEditData
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/datetime/editForm/DateTime.edit.data',[],function () {
+    'use strict';
+    return [
+        {
+            type: 'textfield',
+            input: true,
+            key: 'defaultDate',
+            label: 'Default Date',
+            placeholder: 'moment()',
+            tooltip: "You can use Moment.js functions to set the default value to a specific date. For example: \n \n moment().subtract(10, 'days')",
+            weight: 6
+        },
+        {
+            type: 'textarea',
+            as: 'json',
+            editor: 'ace',
+            weight: 28,
+            input: true,
+            key: 'customOptions',
+            label: 'Flatpikr options',
+            tooltip: 'A raw JSON object to use as options for the Date / Time component (Flatpickr).',
+            defaultValue: {}
+        }
+    ];
+});
+define('skylark-formio/components/datetime/editForm/DateTime.edit.date',[
+    '../../../utils/Evaluator',
+    '../../_classes/component/editForm/utils'
+], function (Evaluator, EditFormUtils) {
+    'use strict';
+    return [
+        {
+            type: 'checkbox',
+            input: true,
+            key: 'enableDate',
+            label: 'Enable Date Input',
+            weight: 0,
+            tooltip: 'Enables date input for this field.'
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            key: 'enableMinDateInput',
+            label: 'Use Input to add moment.js for minDate',
+            persistent: false,
+            weight: 0,
+            tooltip: 'Enables to use input for moment functions instead of calendar.'
+        },
+        {
+            type: 'datetime',
+            input: true,
+            key: 'datePicker.minDate',
+            label: 'Use calendar to set minDate',
+            weight: 10,
+            tooltip: 'Enables to use calendar to set date.',
+            customConditional({data, component}) {
+                if (component.datePicker && component.datePicker.minDate && component.datePicker.minDate.indexOf('moment') !== -1) {
+                    return false;
+                }
+                return !data.enableMinDateInput;
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            enableTime: false,
+            key: 'datePicker.minDate',
+            label: 'Minimum Date',
+            tooltip: "The minimum date that can be picked. You can also use Moment.js functions. For example: \n \n moment().subtract(10, 'days')",
+            customConditional({data, component}) {
+                if (component.datePicker && component.datePicker.minDate && component.datePicker.minDate.indexOf('moment') !== -1) {
+                    return true;
+                }
+                return data.enableMinDateInput;
+            },
+            weight: 10
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            key: 'enableMaxDateInput',
+            label: 'Use Input to add moment.js for maxDate',
+            persistent: false,
+            weight: 20,
+            tooltip: 'Enables to use input for moment functions instead of calendar.'
+        },
+        {
+            type: 'textfield',
+            input: true,
+            enableTime: false,
+            key: 'datePicker.maxDate',
+            label: 'Maximum Date',
+            tooltip: "The maximum date that can be picked. You can also use Moment.js functions. For example: \n \n moment().add(10, 'days')",
+            weight: 20,
+            customConditional({data, component}) {
+                if (component.datePicker && component.datePicker.maxDate && component.datePicker.maxDate.indexOf('moment') !== -1) {
+                    return true;
+                }
+                return data.enableMaxDateInput;
+            }
+        },
+        {
+            type: 'datetime',
+            input: true,
+            key: 'datePicker.maxDate',
+            label: 'Use calendar to set maxDate',
+            weight: 20,
+            tooltip: 'Enables to use calendar to set date.',
+            customConditional({data, component}) {
+                if (component.datePicker && component.datePicker.maxDate && component.datePicker.maxDate.indexOf('moment') !== -1) {
+                    return false;
+                }
+                return !data.enableMaxDateInput;
+            }
+        },
+        {
+            type: 'tags',
+            input: true,
+            key: 'datePicker.disable',
+            label: 'Disable specific dates or dates by range',
+            placeholder: '(yyyy-MM-dd) or (yyyy-MM-dd - yyyy-MM-dd)',
+            tooltip: 'Add dates that you want to blacklist. For example: \n \n 2025-02-21',
+            weight: 21
+        },
+        {
+            type: 'panel',
+            title: 'Custom Disabled Dates',
+            collapsible: true,
+            collapsed: true,
+            style: { 'margin-bottom': '10px' },
+            key: 'panel-disable-function',
+            customConditional() {
+                return !Evaluator.noeval;
+            },
+            components: [
+                EditFormUtils.logicVariablesTable('<tr><th>date</th><td>The date object.</td></tr>'),
+                {
+                    type: 'textarea',
+                    input: true,
+                    editor: 'ace',
+                    key: 'datePicker.disableFunction',
+                    label: 'Disabling dates by a function',
+                    description: 'For more information check out the <a href="https://flatpickr.js.org/examples/#disabling-dates" target="_blank">Docs</a>',
+                    weight: 22
+                },
+                {
+                    type: 'htmlelement',
+                    tag: 'div',
+                    content: '<h4>Example</h4>' + `<pre>// Disable all weekends<br>date.getDay() === 0 || date.getDay() === 6</pre>
+          `
+                }
+            ]
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            key: 'datePicker.disableWeekends',
+            label: 'Disable weekends',
+            tooltip: 'Check to disable weekends',
+            weight: 23
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            key: 'datePicker.disableWeekdays',
+            label: 'Disable weekdays',
+            tooltip: 'Check to disable weekdays',
+            weight: 23
+        }
+    ];
+});
+define('skylark-formio/components/datetime/editForm/DateTime.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            type: 'select',
+            input: true,
+            key: 'displayInTimezone',
+            label: 'Display in Timezone',
+            tooltip: 'This will display the captured date time in the select timezone.',
+            weight: 30,
+            defaultValue: 'viewer',
+            dataSrc: 'values',
+            data: {
+                values: [
+                    {
+                        label: 'of Viewer',
+                        value: 'viewer'
+                    },
+                    {
+                        label: 'of Submission',
+                        value: 'submission'
+                    },
+                    {
+                        label: 'of Location',
+                        value: 'location'
+                    },
+                    {
+                        label: 'UTC',
+                        value: 'utc'
+                    }
+                ]
+            }
+        },
+        {
+            type: 'select',
+            input: true,
+            key: 'timezone',
+            label: 'Select Timezone',
+            tooltip: 'Select the timezone you wish to display this Date',
+            weight: 31,
+            lazyLoad: true,
+            defaultValue: '',
+            valueProperty: 'name',
+            dataSrc: 'url',
+            data: { url: 'https://cdn.form.io/timezones.json' },
+            template: '<span>{{ item.label }}</span>',
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.displayInTimezone' },
+                        'location'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            key: 'useLocaleSettings',
+            label: 'Use Locale Settings',
+            tooltip: 'Use locale settings to display date and time.',
+            weight: 51
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            key: 'allowInput',
+            label: 'Allow Manual Input',
+            tooltip: 'Check this if you would like to allow the user to manually enter in the date.',
+            weight: 51
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'format',
+            label: 'Format',
+            placeholder: 'Format',
+            description: 'Use formats provided by <a href="https://github.com/angular-ui/bootstrap/tree/master/src/dateparser/docs#uibdateparsers-format-codes" target="_blank">DateParser Codes</a>',
+            tooltip: 'The date format for displaying the datetime value.',
+            weight: 52
+        }
+    ];
+});
+define('skylark-formio/components/datetime/editForm/DateTime.edit.time',[],function () {
+    'use strict';
+    return [
+        {
+            type: 'checkbox',
+            input: true,
+            key: 'enableTime',
+            label: 'Enable Time Input',
+            tooltip: 'Enables time input for this field.',
+            weight: 0
+        },
+        {
+            type: 'number',
+            input: true,
+            key: 'timePicker.hourStep',
+            label: 'Hour Step Size',
+            tooltip: 'The number of hours to increment/decrement in the time picker.',
+            weight: 10
+        },
+        {
+            type: 'number',
+            input: true,
+            key: 'timePicker.minuteStep',
+            label: 'Minute Step Size',
+            tooltip: 'The number of minutes to increment/decrement in the time picker.',
+            weight: 20
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            key: 'timePicker.showMeridian',
+            label: '12 Hour Time (AM/PM)',
+            tooltip: 'Display time in 12 hour time with AM/PM.',
+            weight: 30
+        }
+    ];
+});
+define('skylark-formio/components/datetime/DateTime.form',[
+    '../_classes/component/Component.form',
+    './editForm/DateTime.edit.data',
+    './editForm/DateTime.edit.date',
+    './editForm/DateTime.edit.display',
+    './editForm/DateTime.edit.time'
+], function (baseEditForm, DateTimeEditData, DateTimeEditDate, DateTimeEditDisplay, DateTimeEditTime) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([
+            {
+                key: 'display',
+                components: DateTimeEditDisplay
+            },
+            {
+                label: 'Date',
+                key: 'date',
+                weight: 1,
+                components: DateTimeEditDate
+            },
+            {
+                label: 'Time',
+                key: 'time',
+                weight: 2,
+                components: DateTimeEditTime
+            },
+            {
+                key: 'data',
+                components: DateTimeEditData
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/day/editForm/Day.edit.data',[],function () {
+    'use strict';
+    return [{
+            key: 'multiple',
+            ignore: true
+        }];
+});
+define('skylark-formio/components/day/editForm/Day.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'labelPosition',
+            ignore: true
+        },
+        {
+            weight: 15,
+            type: 'checkbox',
+            label: 'Hide Input Labels',
+            tooltip: 'Hide the labels of component inputs. This allows you to show the labels in the form builder, but not when it is rendered.',
+            key: 'hideInputLabels',
+            input: true
+        },
+        {
+            type: 'select',
+            input: true,
+            key: 'inputsLabelPosition',
+            label: 'Inputs Label Position',
+            tooltip: 'Position for the labels for inputs for this field.',
+            weight: 40,
+            defaultValue: 'top',
+            dataSrc: 'values',
+            data: {
+                values: [
+                    {
+                        label: 'Top',
+                        value: 'top'
+                    },
+                    {
+                        label: 'Left',
+                        value: 'left'
+                    },
+                    {
+                        label: 'Right',
+                        value: 'right'
+                    },
+                    {
+                        label: 'Bottom',
+                        value: 'bottom'
+                    }
+                ]
+            }
+        },
+        {
+            key: 'placeholder',
+            ignore: true
+        },
+        {
+            weight: 213,
+            type: 'checkbox',
+            label: 'Use Locale Settings',
+            tooltip: 'Use locale settings to display day.',
+            key: 'useLocaleSettings',
+            input: true
+        }
+    ];
+});
+define('skylark-formio/components/day/editForm/Day.edit.validation',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'validate.required',
+            ignore: true
+        },
+        {
+            key: 'validate.unique',
+            ignore: true
+        },
+        {
+            weight: 0,
+            type: 'checkbox',
+            label: 'Require Day',
+            tooltip: 'A required field must be filled in before the form can be submitted.',
+            key: 'fields.day.required',
+            input: true
+        },
+        {
+            weight: 10,
+            type: 'checkbox',
+            label: 'Require Month',
+            tooltip: 'A required field must be filled in before the form can be submitted.',
+            key: 'fields.month.required',
+            input: true
+        },
+        {
+            weight: 20,
+            type: 'checkbox',
+            label: 'Require Year',
+            tooltip: 'A required field must be filled in before the form can be submitted.',
+            key: 'fields.year.required',
+            input: true
+        },
+        {
+            weight: 40,
+            type: 'textfield',
+            label: 'Minimum Day',
+            placeholder: 'yyyy-MM-dd',
+            tooltip: "A minimum date that can be set. You can also use Moment.js functions. For example: \n \n moment().subtract(10, 'days')",
+            key: 'minDate',
+            input: true
+        },
+        {
+            weight: 30,
+            type: 'textfield',
+            label: 'Maximum Day',
+            placeholder: 'yyyy-MM-dd',
+            tooltip: "A maximum day that can be set. You can also use Moment.js functions. For example: \n \n moment().add(10, 'days')",
+            key: 'maxDate',
+            input: true
+        }
+    ];
+});
+define('skylark-formio/components/day/editForm/Day.edit.day',[],function () {
+    'use strict';
+    return [
+        {
+            wieght: 200,
+            type: 'select',
+            datasrc: 'values',
+            key: 'fields.day.type',
+            title: 'Type',
+            data: {
+                values: [
+                    {
+                        label: 'Number',
+                        value: 'number'
+                    },
+                    {
+                        label: 'Select',
+                        value: 'select'
+                    }
+                ]
+            }
+        },
+        {
+            weight: 210,
+            type: 'textfield',
+            input: true,
+            key: 'fields.day.placeholder',
+            label: 'Placeholder',
+            placeholder: 'Day Placeholder',
+            tooltip: 'The placeholder text that will appear when Day field is empty.'
+        },
+        {
+            weight: 215,
+            type: 'checkbox',
+            label: 'Hidden',
+            tooltip: 'Hide the Day part of the component.',
+            key: 'fields.day.hide',
+            input: true
+        },
+        {
+            weight: 214,
+            type: 'checkbox',
+            label: 'Day First',
+            tooltip: 'Display the Day field before the Month field.',
+            key: 'dayFirst',
+            input: true
+        }
+    ];
+});
+define('skylark-formio/components/day/editForm/Day.edit.month',[],function () {
+    'use strict';
+    return [
+        {
+            wieght: 200,
+            type: 'select',
+            datasrc: 'values',
+            key: 'fields.month.type',
+            title: 'Type',
+            data: {
+                values: [
+                    {
+                        label: 'Number',
+                        value: 'number'
+                    },
+                    {
+                        label: 'Select',
+                        value: 'select'
+                    }
+                ]
+            }
+        },
+        {
+            weight: 210,
+            type: 'textfield',
+            input: true,
+            key: 'fields.month.placeholder',
+            label: 'Placeholder',
+            placeholder: 'Month Placeholder',
+            tooltip: 'The placeholder text that will appear when Month field is empty.'
+        },
+        {
+            weight: 215,
+            type: 'checkbox',
+            label: 'Hidden',
+            tooltip: 'Hide the Month part of the component.',
+            key: 'fields.month.hide',
+            input: true
+        }
+    ];
+});
+define('skylark-formio/components/day/editForm/Day.edit.year',[],function () {
+    'use strict';
+    return [
+        {
+            wieght: 200,
+            type: 'select',
+            datasrc: 'values',
+            key: 'fields.year.type',
+            title: 'Type',
+            data: {
+                values: [
+                    {
+                        label: 'Number',
+                        value: 'number'
+                    },
+                    {
+                        label: 'Select',
+                        value: 'select'
+                    }
+                ]
+            }
+        },
+        {
+            weight: 203,
+            type: 'number',
+            input: true,
+            key: 'fields.year.minYear',
+            label: 'Minimum Year',
+            placeholder: '1900',
+            tooltip: 'The minimum year that can be entered.'
+        },
+        {
+            weight: 204,
+            type: 'number',
+            input: true,
+            key: 'fields.year.maxYear',
+            label: 'Maximum Year',
+            placeholder: '2030',
+            tooltip: 'The maximum year that can be entered.'
+        },
+        {
+            weight: 210,
+            type: 'textfield',
+            input: true,
+            key: 'fields.year.placeholder',
+            label: 'Placeholder',
+            placeholder: 'Year Placeholder',
+            tooltip: 'The placeholder text that will appear when Year field is empty.'
+        },
+        {
+            weight: 215,
+            type: 'checkbox',
+            label: 'Hidden',
+            tooltip: 'Hide the Year part of the component.',
+            key: 'fields.year.hide',
+            input: true
+        }
+    ];
+});
+define('skylark-formio/components/day/Day.form',[
+    '../_classes/component/Component.form',
+    './editForm/Day.edit.data',
+    './editForm/Day.edit.display',
+    './editForm/Day.edit.validation',
+    './editForm/Day.edit.day',
+    './editForm/Day.edit.month',
+    './editForm/Day.edit.year'
+], function (baseEditForm, DayEditData, DayEditDisplay, DayEditValidation, DayEditDay, DayEditMonth, DayEditYear) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([
+            {
+                key: 'display',
+                components: DayEditDisplay
+            },
+            {
+                key: 'data',
+                components: DayEditData
+            },
+            {
+                key: 'validation',
+                components: DayEditValidation
+            },
+            {
+                key: 'day',
+                label: 'Day',
+                weight: 3,
+                components: DayEditDay
+            },
+            {
+                key: 'month',
+                label: 'Month',
+                weight: 3,
+                components: DayEditMonth
+            },
+            {
+                key: 'year',
+                label: 'Year',
+                weight: 3,
+                components: DayEditYear
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/editgrid/editForm/EditGrid.edit.data',[],function () {
+    'use strict';
+    return [
+        {
+            type: 'checkbox',
+            input: true,
+            weight: 105,
+            key: 'inlineEdit',
+            label: 'Inline Editing',
+            tooltip: 'Check this if you would like your changes within "edit" mode to be committed directly to the submission object as that row is being changed'
+        },
+        {
+            key: 'defaultValue',
+            ignore: true
+        },
+        {
+            key: 'multiple',
+            ignore: true
+        }
+    ];
+});
+define('skylark-formio/components/editgrid/editForm/EditGrid.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'placeholder',
+            ignore: true
+        },
+        {
+            type: 'checkbox',
+            label: 'Open First Row when Empty',
+            key: 'openWhenEmpty',
+            tooltip: 'Check this if you would like to open up the first row when the EditGrid is empty',
+            weight: 1000,
+            input: true,
+            conditional: {
+                json: {
+                    '!==': [
+                        { var: 'data.modal' },
+                        true
+                    ]
+                }
+            }
+        },
+        {
+            type: 'checkbox',
+            label: 'Disable Adding / Removing Rows',
+            key: 'disableAddingRemovingRows',
+            tooltip: 'Check if you want to hide Add Another button and Remove Row button',
+            weight: 1001,
+            input: true,
+            clearOnHide: false,
+            calculateValue: 'value = data.disableAddingRemovingRows;'
+        },
+        {
+            weight: 1010,
+            type: 'textarea',
+            input: true,
+            key: 'conditionalAddButton',
+            label: 'Conditional Add Button',
+            placeholder: 'show = ...',
+            tooltip: 'Specify condition when Add Button should be displayed.',
+            editor: 'ace',
+            as: 'js',
+            wysiwyg: { minLines: 3 }
+        }
+    ];
+});
+define('skylark-formio/components/editgrid/editForm/EditGrid.edit.templates',['../../../utils/Evaluator'], function (Evaluator) {
+    'use strict';
+    return [
+        {
+            type: 'textarea',
+            label: 'Header Template',
+            key: 'templates.header',
+            rows: 5,
+            editor: 'ace',
+            as: 'handlebars',
+            input: true,
+            placeholder: '/*** Lodash Template Code ***/',
+            description: 'Two available variables. "value" is the array of row data and "components" is the array of components in the grid.',
+            tooltip: 'This is the <a href="https://lodash.com/docs/4.17.5#template">Lodash Template</a> used to render the header of the Edit grid.',
+            customConditional() {
+                return !Evaluator.noeval;
+            }
+        },
+        {
+            type: 'textarea',
+            label: 'Row Template',
+            key: 'templates.row',
+            rows: 5,
+            editor: 'ace',
+            as: 'handlebars',
+            input: true,
+            placeholder: '/*** Lodash Template Code ***/',
+            description: 'Two available variables. "row" is an object of one row\'s data and "components" is the array of components in the grid. To add click events, add the classes "editRow" and "removeRow" to elements.',
+            tooltip: 'This is the <a href="https://lodash.com/docs/4.17.5#template">Lodash Template</a> used to render each row of the Edit grid.',
+            customConditional() {
+                return !Evaluator.noeval;
+            }
+        },
+        {
+            type: 'textarea',
+            label: 'Footer Template',
+            key: 'templates.footer',
+            rows: 5,
+            editor: 'ace',
+            as: 'handlebars',
+            input: true,
+            placeholder: '/*** Lodash Template Code ***/',
+            description: 'Two available variables. "value" is the array of row data and "components" is the array of components in the grid.',
+            tooltip: 'This is the <a href="https://lodash.com/docs/4.17.5#template">Lodash Template</a> used to render the footer of the Edit grid.',
+            customConditional() {
+                return !Evaluator.noeval;
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'rowClass',
+            label: 'Row CSS Class',
+            placeholder: 'Row CSS Class',
+            tooltip: 'CSS class to add to the edit row wrapper.'
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'addAnother',
+            label: 'Add Another Text',
+            placeholder: 'Add Another',
+            tooltip: 'Set the text of the Add Another button.'
+        },
+        {
+            weight: 70,
+            type: 'checkbox',
+            label: 'Display as Modal',
+            tooltip: 'Display a modal to add or edit entries in the table',
+            key: 'modal',
+            input: true
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'saveRow',
+            label: 'Save Row Text',
+            placeholder: 'Save',
+            tooltip: 'Set the text of the Save Row button.'
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'removeRow',
+            label: 'Remove Row Text',
+            placeholder: 'Remove',
+            tooltip: 'Set the text of the remove Row button.'
+        }
+    ];
+});
+define('skylark-formio/components/editgrid/editForm/EditGrid.edit.validation',[],function () {
+    'use strict';
+    return [
+        {
+            weight: 110,
+            key: 'validate.minLength',
+            label: 'Minimum Length',
+            placeholder: 'Minimum Length',
+            type: 'number',
+            tooltip: 'The minimum length requirement this field must meet.',
+            input: true
+        },
+        {
+            weight: 120,
+            key: 'validate.maxLength',
+            label: 'Maximum Length',
+            placeholder: 'Maximum Length',
+            type: 'number',
+            tooltip: 'The maximum length requirement this field must meet.',
+            input: true
+        }
+    ];
+});
+define('skylark-formio/components/editgrid/EditGrid.form',[
+    '../_classes/component/Component.form',
+    './editForm/EditGrid.edit.data',
+    './editForm/EditGrid.edit.display',
+    './editForm/EditGrid.edit.templates',
+    './editForm/EditGrid.edit.validation'
+], function (baseEditForm, EditGridEditData, EditGridEditDisplay, EditGridEditTemplates, EditGridEditValidation) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([
+            {
+                label: 'Templates',
+                key: 'templates',
+                weight: 5,
+                components: EditGridEditTemplates
+            },
+            {
+                key: 'display',
+                components: EditGridEditDisplay
+            },
+            {
+                key: 'data',
+                components: EditGridEditData
+            },
+            {
+                key: 'validation',
+                components: EditGridEditValidation
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/email/editForm/Email.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'inputMask',
+            ignore: true
+        },
+        {
+            key: 'allowMultipleMasks',
+            ignore: true
+        },
+        {
+            key: 'showWordCount',
+            ignore: true
+        },
+        {
+            key: 'showCharCount',
+            ignore: true
+        }
+    ];
+});
+define('skylark-formio/components/email/editForm/Email.edit.validation',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'validate.minWords',
+            ignore: true
+        },
+        {
+            key: 'validate.maxWords',
+            ignore: true
+        },
+        {
+            type: 'panel',
+            label: 'Kickbox',
+            title: 'Kickbox',
+            weight: 102,
+            key: 'kickbox',
+            components: [{
+                    type: 'checkbox',
+                    label: 'Enable',
+                    tooltip: 'Enable Kickbox validation for this email field.',
+                    description: 'Validate this email using the Kickbox email validation service.',
+                    key: 'kickbox.enabled'
+                }]
+        }
+    ];
+});
+define('skylark-formio/components/email/Email.form',[
+    '../textfield/TextField.form',
+    './editForm/Email.edit.display',
+    './editForm/Email.edit.validation'
+], function (baseEditForm, EmailEditFormDisplay, EmailEditFormValidation) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([
+            {
+                key: 'display',
+                components: EmailEditFormDisplay
+            },
+            {
+                key: 'validation',
+                components: EmailEditFormValidation
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/fieldset/editForm/Fieldset.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'labelPosition',
+            ignore: true
+        },
+        {
+            key: 'placeholder',
+            ignore: true
+        },
+        {
+            key: 'description',
+            ignore: true
+        },
+        {
+            key: 'hideLabel',
+            ignore: true
+        },
+        {
+            key: 'autofocus',
+            ignore: true
+        },
+        {
+            key: 'label',
+            hidden: true,
+            calculateValue(context) {
+                return context.data.legend;
+            }
+        },
+        {
+            weight: 1,
+            type: 'textfield',
+            input: true,
+            key: 'legend',
+            label: 'Legend',
+            placeholder: 'Legend',
+            tooltip: 'The legend for this Fieldset.'
+        }
+    ];
+});
+define('skylark-formio/components/fieldset/Fieldset.form',[
+    '../_classes/nested/NestedComponent.form',
+    './editForm/Fieldset.edit.display'
+], function (nestedComponentForm, FieldSetEditDisplay) {
+    'use strict';
+    return function (...extend) {
+        return nestedComponentForm([{
+                key: 'display',
+                components: FieldSetEditDisplay
+            }], ...extend);
+    };
+});
+define('skylark-formio/components/file/editForm/File.edit.data',[],function () {
+    'use strict';
+    return [{
+            key: 'defaultValue',
+            ignore: true
+        }];
+});
+define('skylark-formio/components/file/editForm/File.edit.display',[],function () {
+    'use strict';
+    return [{
+            key: 'placeholder',
+            ignore: true
+        }];
+});
+define('skylark-formio/components/file/editForm/File.edit.file',[
+    '../../../Formio',
+    'skylark-lodash'
+], function (Formio, _) {
+    'use strict';
+    return [
+        {
+            type: 'select',
+            input: true,
+            key: 'storage',
+            label: 'Storage',
+            placeholder: 'Select your file storage provider',
+            weight: 0,
+            tooltip: 'Which storage to save the files in.',
+            valueProperty: 'value',
+            dataSrc: 'custom',
+            data: {
+                custom() {
+                    return _.map(Formio.Providers.getProviders('storage'), (storage, key) => ({
+                        label: storage.title,
+                        value: key
+                    }));
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'url',
+            label: 'Url',
+            weight: 10,
+            placeholder: 'Enter the url to post the files to.',
+            tooltip: "See <a href='https://github.com/danialfarid/ng-file-upload#server-side' target='_blank'>https://github.com/danialfarid/ng-file-upload#server-side</a> for how to set up the server.",
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.storage' },
+                        'url'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'options.indexeddb',
+            label: 'Database',
+            weight: 10,
+            placeholder: 'Enter the indexeddb database name',
+            conditional: {
+                json: {
+                    in: [
+                        { var: 'data.storage' },
+                        ['indexeddb']
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            label: 'Table',
+            key: 'options.indexeddbTable',
+            weight: 10,
+            placeholder: 'Enter the name for indexeddb table',
+            conditional: {
+                json: {
+                    in: [
+                        { var: 'data.storage' },
+                        ['indexeddb']
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textarea',
+            key: 'options',
+            label: 'Custom request options',
+            tooltip: 'Pass your custom xhr options(optional)',
+            rows: 5,
+            editor: 'ace',
+            input: true,
+            weight: 15,
+            placeholder: `{
+  "withCredentials": true
+}`,
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.storage' },
+                        'url'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'fileKey',
+            label: 'File\xA0form-data\xA0key',
+            weight: 17,
+            placeholder: 'Enter\xA0the\xA0key\xA0name\xA0of\xA0a\xA0file\xA0for\xA0form\xA0data.',
+            tooltip: 'Key\xA0name\xA0that\xA0you\xA0would\xA0like\xA0to\xA0modify\xA0for\xA0the\xA0file\xA0while\xA0calling\xA0API\xA0request.',
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.storage' },
+                        'url'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'dir',
+            label: 'Directory',
+            placeholder: '(optional) Enter a directory for the files',
+            tooltip: 'This will place all the files uploaded in this field in the directory',
+            weight: 20
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'fileNameTemplate',
+            label: 'File Name Template',
+            placeholder: '(optional) {{{name}}-{{guid}}}}}',
+            tooltip: 'Specify template for name of uploaded file(s). Regular template variables are available (`data`, `component`, `user`, `value`, `moment` etc.), also `fileName`, `guid` variables are available. `guid` part must be present, if not found in template, will be added at the end.',
+            weight: 25
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            key: 'image',
+            label: 'Display as image(s)',
+            tooltip: 'Instead of a list of linked files, images will be rendered in the view.',
+            weight: 30
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            key: 'privateDownload',
+            label: 'Private Download',
+            tooltip: 'When this is checked, the file download will send a POST request to the download URL with the x-jwt-token header. This will allow your endpoint to create a Private download system.',
+            weight: 31,
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.storage' },
+                        'url'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'imageSize',
+            label: 'Image Size',
+            placeholder: '100',
+            tooltip: 'The image size for previewing images.',
+            weight: 40,
+            conditional: {
+                json: {
+                    '==': [
+                        { var: 'data.image' },
+                        true
+                    ]
+                }
+            }
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            key: 'webcam',
+            label: 'Enable web camera',
+            tooltip: 'This will allow using an attached camera to directly take a picture instead of uploading an existing file.',
+            weight: 32
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'webcamSize',
+            label: 'Webcam Width',
+            placeholder: '320',
+            tooltip: 'The webcam size for taking pictures.',
+            weight: 38,
+            conditional: {
+                json: {
+                    '==': [
+                        { var: 'data.webcam' },
+                        true
+                    ]
+                }
+            }
+        },
+        {
+            type: 'datagrid',
+            input: true,
+            label: 'File Types',
+            key: 'fileTypes',
+            tooltip: 'Specify file types to classify the uploads. This is useful if you allow multiple types of uploads but want to allow the user to specify which type of file each is.',
+            weight: 11,
+            components: [
+                {
+                    label: 'Label',
+                    key: 'label',
+                    input: true,
+                    type: 'textfield'
+                },
+                {
+                    label: 'Value',
+                    key: 'value',
+                    input: true,
+                    type: 'textfield'
+                }
+            ]
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'filePattern',
+            label: 'File Pattern',
+            placeholder: '.pdf,.jpg',
+            tooltip: "See <a href='https://github.com/danialfarid/ng-file-upload#full-reference' target='_blank'>https://github.com/danialfarid/ng-file-upload#full-reference</a> for how to specify file patterns.",
+            weight: 50
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'fileMinSize',
+            label: 'File Minimum Size',
+            placeholder: '1MB',
+            tooltip: "See <a href='https://github.com/danialfarid/ng-file-upload#full-reference' target='_blank'>https://github.com/danialfarid/ng-file-upload#full-reference</a> for how to specify file sizes.",
+            weight: 60
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'fileMaxSize',
+            label: 'File Maximum Size',
+            placeholder: '10MB',
+            tooltip: "See <a href='https://github.com/danialfarid/ng-file-upload#full-reference' target='_blank'>https://github.com/danialfarid/ng-file-upload#full-reference</a> for how to specify file sizes.",
+            weight: 70
+        }
+    ];
+});
+define('skylark-formio/components/file/editForm/File.edit.validation',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'unique',
+            ignore: true
+        },
+        {
+            key: 'validateOn',
+            ignore: true
+        }
+    ];
+});
+define('skylark-formio/components/file/File.form',[
+    '../_classes/component/Component.form',
+    './editForm/File.edit.data',
+    './editForm/File.edit.display',
+    './editForm/File.edit.file',
+    './editForm/File.edit.validation'
+], function (baseEditForm, FileEditData, FileEditDisplay, FileEditFile, FileEditValidation) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([
+            {
+                key: 'display',
+                components: FileEditDisplay
+            },
+            {
+                key: 'data',
+                components: FileEditData
+            },
+            {
+                label: 'File',
+                key: 'file',
+                weight: 5,
+                components: FileEditFile
+            },
+            {
+                key: 'validation',
+                components: FileEditValidation
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/form/editForm/Form.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'hideLabel',
+            ignore: true
+        },
+        {
+            key: 'labelPosition',
+            ignore: true
+        },
+        {
+            key: 'placeholder',
+            ignore: true
+        },
+        {
+            key: 'description',
+            ignore: true
+        },
+        {
+            key: 'tooltip',
+            ignore: true
+        },
+        {
+            key: 'tabIndex',
+            ignore: true
+        },
+        {
+            key: 'autofocus',
+            ignore: true
+        }
+    ];
+});
+define('skylark-formio/components/form/editForm/Form.edit.form',[],function () {
+    'use strict';
+    return [
+        {
+            type: 'select',
+            input: true,
+            dataSrc: 'url',
+            data: { url: '/form?limit=4294967295&select=_id,title' },
+            searchField: 'title__regex',
+            template: '<span>{{ item.title }}</span>',
+            valueProperty: '_id',
+            authenticate: true,
+            label: 'Form',
+            key: 'form',
+            weight: 10,
+            lazyLoad: false,
+            tooltip: 'The form to load within this form component.',
+            validate: { required: true }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            label: 'Form Revision',
+            placeholder: 'Current',
+            tooltip: 'You can lock the nested form to a specific revision by entering the revision number here.',
+            key: 'revision',
+            weight: 11
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            weight: 20,
+            key: 'reference',
+            label: 'Save as reference',
+            tooltip: 'Using this option will save this field as a reference and link its value to the value of the origin record.'
+        }
+    ];
+});
+define('skylark-formio/components/form/editForm/Form.edit.data',['../../_classes/component/editForm/utils'], function (EditFormUtils) {
+    'use strict';
+    return [
+        EditFormUtils.javaScriptValue('Custom Default Value', 'customDefaultValue', 'customDefaultValue', 120, '<p><h4>Example:</h4><pre>value = data.firstName + " " + data.lastName;</pre></p>', '<p><h4>Example:</h4><pre>{"cat": [{"var": "data.firstName"}, " ", {"var": "data.lastName"}]}</pre>'),
+        EditFormUtils.javaScriptValue('Calculated Value', 'calculateValue', 'calculateValue', 130, '<p><h4>Example:</h4><pre>value = data.a + data.b + data.c;</pre></p>', '<p><h4>Example:</h4><pre>{"+": [{"var": "data.a"}, {"var": "data.b"}, {"var": "data.c"}]}</pre><p><a target="_blank" href="http://formio.github.io/formio.js/app/examples/calculated.html">Click here for an example</a></p>')
+    ];
+});
+define('skylark-formio/components/form/Form.form',[
+    '../_classes/nested/NestedComponent.form',
+    './editForm/Form.edit.display',
+    './editForm/Form.edit.form',
+    './editForm/Form.edit.data'
+], function (nestedComponentForm, FormEditDisplay, FormEditForm, FormEditData) {
+    'use strict';
+    return function (...extend) {
+        return nestedComponentForm([
+            {
+                key: 'display',
+                components: FormEditDisplay
+            },
+            {
+                label: 'Form',
+                key: 'form',
+                weight: 10,
+                components: FormEditForm
+            },
+            {
+                label: 'Data',
+                key: 'data',
+                weight: 10,
+                components: FormEditData
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/hidden/editForm/Hidden.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'labelPosition',
+            ignore: true
+        },
+        {
+            key: 'placeholder',
+            ignore: true
+        },
+        {
+            key: 'description',
+            ignore: true
+        },
+        {
+            key: 'tooltip',
+            ignore: true
+        },
+        {
+            key: 'hideLabel',
+            ignore: true
+        },
+        {
+            key: 'autofocus',
+            ignore: true
+        },
+        {
+            key: 'tabindex',
+            ignore: true
+        },
+        {
+            key: 'hidden',
+            ignore: true
+        },
+        {
+            key: 'tableView',
+            ignore: true
+        },
+        {
+            key: 'disabled',
+            ignore: true
+        }
+    ];
+});
+define('skylark-formio/components/hidden/editForm/Hidden.edit.data',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'multiple',
+            ignore: true
+        },
+        {
+            key: 'clearOnHide',
+            ignore: true
+        },
+        {
+            key: 'allowCalculateOverride',
+            ignore: true
+        }
+    ];
+});
+define('skylark-formio/components/hidden/Hidden.form',[
+    '../_classes/component/Component.form',
+    './editForm/Hidden.edit.display',
+    './editForm/Hidden.edit.data'
+], function (baseEditForm, HiddenEditDisplay, HiddenEditData) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([
+            {
+                key: 'display',
+                components: HiddenEditDisplay
+            },
+            {
+                key: 'data',
+                components: HiddenEditData
+            },
+            {
+                key: 'validation',
+                ignore: true
+            },
+            {
+                key: 'conditional',
+                ignore: true
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/html/editForm/HTML.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'labelPosition',
+            ignore: true
+        },
+        {
+            key: 'placeholder',
+            ignore: true
+        },
+        {
+            key: 'description',
+            ignore: true
+        },
+        {
+            key: 'tooltip',
+            ignore: true
+        },
+        {
+            key: 'hideLabel',
+            ignore: true
+        },
+        {
+            key: 'autofocus',
+            ignore: true
+        },
+        {
+            key: 'disabled',
+            ignore: true
+        },
+        {
+            key: 'tabindex',
+            ignore: true
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'tag',
+            weight: 50,
+            label: 'HTML Tag',
+            placeholder: 'HTML Element Tag',
+            tooltip: 'The tag of this HTML element.'
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'className',
+            weight: 60,
+            label: 'CSS Class',
+            placeholder: 'CSS Class',
+            tooltip: 'The CSS class for this HTML element.'
+        },
+        {
+            type: 'datagrid',
+            input: true,
+            label: 'Attributes',
+            key: 'attrs',
+            tooltip: 'The attributes for this HTML element. Only safe attributes are allowed, such as src, href, and title.',
+            weight: 70,
+            components: [
+                {
+                    label: 'Attribute',
+                    key: 'attr',
+                    input: true,
+                    type: 'textfield'
+                },
+                {
+                    label: 'Value',
+                    key: 'value',
+                    input: true,
+                    type: 'textfield'
+                }
+            ]
+        },
+        {
+            type: 'textarea',
+            input: true,
+            editor: 'ace',
+            rows: 10,
+            as: 'html',
+            label: 'Content',
+            tooltip: 'The content of this HTML element.',
+            defaultValue: '<div class="well">Content</div>',
+            key: 'content',
+            weight: 80
+        },
+        {
+            weight: 85,
+            type: 'checkbox',
+            label: 'Refresh On Change',
+            tooltip: 'Rerender the field whenever a value on the form changes.',
+            key: 'refreshOnChange',
+            input: true
+        }
+    ];
+});
+define('skylark-formio/components/html/editForm/HTML.edit.logic',[],function () {
+    'use strict';
+    return [{
+            key: 'logic',
+            components: [{
+                    key: 'actions',
+                    components: [{
+                            key: 'actionPanel',
+                            components: [
+                                {
+                                    data: {
+                                        json: [
+                                            {
+                                                label: 'Hidden',
+                                                value: 'hidden',
+                                                type: 'boolean'
+                                            },
+                                            {
+                                                label: 'Required',
+                                                value: 'validate.required',
+                                                type: 'boolean'
+                                            },
+                                            {
+                                                label: 'Disabled',
+                                                value: 'disabled',
+                                                type: 'boolean'
+                                            },
+                                            {
+                                                label: 'Label',
+                                                value: 'label',
+                                                type: 'string'
+                                            },
+                                            {
+                                                label: 'Title',
+                                                value: 'title',
+                                                type: 'string'
+                                            },
+                                            {
+                                                label: 'Tooltip',
+                                                value: 'tooltip',
+                                                type: 'string'
+                                            },
+                                            {
+                                                label: 'Description',
+                                                value: 'description',
+                                                type: 'string'
+                                            },
+                                            {
+                                                label: 'Placeholder',
+                                                value: 'placeholder',
+                                                type: 'string'
+                                            },
+                                            {
+                                                label: 'CSS Class',
+                                                value: 'className',
+                                                type: 'string'
+                                            },
+                                            {
+                                                label: 'Container Custom Class',
+                                                value: 'customClass',
+                                                type: 'string'
+                                            },
+                                            {
+                                                label: 'Content',
+                                                value: 'content',
+                                                type: 'string',
+                                                component: 'content'
+                                            }
+                                        ]
+                                    },
+                                    key: 'property'
+                                },
+                                {
+                                    type: 'textarea',
+                                    editor: 'ace',
+                                    rows: 10,
+                                    as: 'html',
+                                    label: 'Content',
+                                    tooltip: 'The content of this HTML element.',
+                                    defaultValue: '<div class="well">Content</div>',
+                                    key: 'content',
+                                    weight: 30,
+                                    input: true,
+                                    customConditional(context) {
+                                        return context.row.type === 'property' && context.row.hasOwnProperty('property') && context.row.property.type === 'string' && context.row.property.component === 'content';
+                                    }
+                                }
+                            ]
+                        }]
+                }]
+        }];
+});
+define('skylark-formio/components/html/HTML.form',[
+    '../_classes/component/Component.form',
+    './editForm/HTML.edit.display',
+    './editForm/HTML.edit.logic'
+], function (baseEditForm, HTMLEditDisplay, HTMLEditLogic) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([
+            {
+                key: 'display',
+                components: HTMLEditDisplay
+            },
+            {
+                key: 'data',
+                ignore: true
+            },
+            {
+                key: 'validation',
+                ignore: true
+            },
+            {
+                key: 'logic',
+                components: HTMLEditLogic
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/number/editForm/Number.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'inputMask',
+            ignore: true
+        },
+        {
+            key: 'allowMultipleMasks',
+            ignore: true
+        },
+        {
+            key: 'showWordCount',
+            ignore: true
+        },
+        {
+            key: 'showCharCount',
+            ignore: true
+        }
+    ];
+});
+define('skylark-formio/components/number/editForm/Number.edit.data',[],function () {
+    'use strict';
+    return [
+        {
+            type: 'checkbox',
+            input: true,
+            weight: 70,
+            key: 'delimiter',
+            label: 'Use Thousands Separator',
+            tooltip: 'Separate thousands by local delimiter.'
+        },
+        {
+            type: 'number',
+            input: true,
+            weight: 80,
+            key: 'decimalLimit',
+            label: 'Decimal Places',
+            tooltip: 'The maximum number of decimal places.'
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            weight: 90,
+            key: 'requireDecimal',
+            label: 'Require Decimal',
+            tooltip: 'Always show decimals, even if trailing zeros.'
+        },
+        {
+            key: 'case',
+            ignore: true
+        }
+    ];
+});
+define('skylark-formio/components/number/editForm/Number.edit.validation',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'unique',
+            ignore: true
+        },
+        {
+            key: 'validate.minLength',
+            ignore: true
+        },
+        {
+            key: 'validate.maxLength',
+            ignore: true
+        },
+        {
+            key: 'validate.minWords',
+            ignore: true
+        },
+        {
+            key: 'validate.maxWords',
+            ignore: true
+        },
+        {
+            key: 'validate.pattern',
+            ignore: true
+        },
+        {
+            type: 'number',
+            label: 'Minimum Value',
+            key: 'validate.min',
+            input: true,
+            placeholder: 'Minimum Value',
+            tooltip: 'The minimum value this field must have before the form can be submitted.',
+            weight: 150
+        },
+        {
+            type: 'number',
+            label: 'Maximum Value',
+            key: 'validate.max',
+            input: true,
+            placeholder: 'Maximum Value',
+            tooltip: 'The maximum value this field can have before the form can be submitted.',
+            weight: 160
+        }
+    ];
+});
+define('skylark-formio/components/number/Number.form',[
+    '../textfield/TextField.form',
+    './editForm/Number.edit.display',
+    './editForm/Number.edit.data',
+    './editForm/Number.edit.validation'
+], function (textEditForm, NumberEditDisplay, NumberEditData, NumberEditValidation) {
+    'use strict';
+    return function (...extend) {
+        return textEditForm([
+            {
+                key: 'display',
+                components: NumberEditDisplay
+            },
+            {
+                key: 'data',
+                components: NumberEditData
+            },
+            {
+                key: 'validation',
+                components: NumberEditValidation
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/panel/editForm/Panel.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'labelPosition',
+            ignore: true
+        },
+        {
+            key: 'placeholder',
+            ignore: true
+        },
+        {
+            key: 'description',
+            ignore: true
+        },
+        {
+            key: 'hideLabel',
+            ignore: true
+        },
+        {
+            key: 'autofocus',
+            ignore: true
+        },
+        {
+            key: 'label',
+            hidden: true,
+            calculateValue(context) {
+                return context.data.title;
+            }
+        },
+        {
+            key: 'tabindex',
+            hidden: true
+        },
+        {
+            weight: 1,
+            type: 'textfield',
+            input: true,
+            placeholder: 'Panel Title',
+            label: 'Title',
+            key: 'title',
+            tooltip: 'The title text that appears in the header of this panel.'
+        },
+        {
+            weight: 20,
+            type: 'textarea',
+            input: true,
+            key: 'tooltip',
+            label: 'Tooltip',
+            placeholder: 'To add a tooltip to this field, enter text here.',
+            tooltip: 'Adds a tooltip to the side of this field.'
+        },
+        {
+            weight: 30,
+            type: 'select',
+            input: true,
+            label: 'Theme',
+            key: 'theme',
+            dataSrc: 'values',
+            data: {
+                values: [
+                    {
+                        label: 'Default',
+                        value: 'default'
+                    },
+                    {
+                        label: 'Primary',
+                        value: 'primary'
+                    },
+                    {
+                        label: 'Info',
+                        value: 'info'
+                    },
+                    {
+                        label: 'Success',
+                        value: 'success'
+                    },
+                    {
+                        label: 'Danger',
+                        value: 'danger'
+                    },
+                    {
+                        label: 'Warning',
+                        value: 'warning'
+                    }
+                ]
+            }
+        },
+        {
+            weight: 40,
+            type: 'fieldset',
+            input: false,
+            components: [
+                {
+                    type: 'select',
+                    input: true,
+                    label: 'Breadcrumb Type',
+                    key: 'breadcrumb',
+                    dataSrc: 'values',
+                    data: {
+                        values: [
+                            {
+                                label: 'Default',
+                                value: 'default'
+                            },
+                            {
+                                label: 'Condensed',
+                                value: 'condensed'
+                            },
+                            {
+                                label: 'Hidden',
+                                value: 'none'
+                            }
+                        ]
+                    }
+                },
+                {
+                    input: true,
+                    type: 'checkbox',
+                    label: 'Allow click on Breadcrumb',
+                    key: 'breadcrumbClickable',
+                    defaultValue: true,
+                    conditional: {
+                        json: {
+                            '!==': [
+                                { var: 'data.breadcrumb' },
+                                'none'
+                            ]
+                        }
+                    }
+                },
+                {
+                    weight: 50,
+                    label: 'Panel Navigation Buttons',
+                    optionsLabelPosition: 'right',
+                    values: [
+                        {
+                            label: 'Previous',
+                            value: 'previous'
+                        },
+                        {
+                            label: 'Cancel',
+                            value: 'cancel'
+                        },
+                        {
+                            label: 'Next',
+                            value: 'next'
+                        }
+                    ],
+                    inline: true,
+                    type: 'selectboxes',
+                    key: 'buttonSettings',
+                    input: true,
+                    inputType: 'checkbox',
+                    defaultValue: {
+                        previous: true,
+                        cancel: true,
+                        next: true
+                    }
+                }
+            ],
+            customConditional(context) {
+                return context.instance.options.editForm.display === 'wizard';
+            }
+        },
+        {
+            weight: 650,
+            type: 'checkbox',
+            label: 'Collapsible',
+            tooltip: 'If checked, this will turn this Panel into a collapsible panel.',
+            key: 'collapsible',
+            input: true
+        },
+        {
+            weight: 651,
+            type: 'checkbox',
+            label: 'Initially Collapsed',
+            tooltip: 'Determines the initial collapsed state of this Panel.',
+            key: 'collapsed',
+            input: true,
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.collapsible' },
+                        true
+                    ]
+                }
+            }
+        }
+    ];
+});
+define('skylark-formio/components/panel/editForm/Panel.edit.conditional',['../../_classes/component/editForm/utils'], function (EditFormUtils) {
+    'use strict';
+    const title = 'Advanced Next Page';
+    const jsonProp = 'nextPage';
+    const jsProp = 'nextPage';
+    const jsDocHTML = `
+  <p>You must assign the <strong>next</strong> variable with the API key of the next page.</p>
+  <p>The global variable <strong>data</strong> is provided, and allows you to access the data of any form component, by using its API key.</p>
+  <p>Also <strong>moment</strong> library is available, and allows you to manipulate dates in a convenient way.</p>
+  <h5>Example</h5><pre>next = data.addComment ? 'page3' : 'page4';</pre>
+`;
+    const jsonDocHTML = `
+  <p>Submission data is available as JsonLogic variables, with the same api key as your components.</p>
+`;
+    const settingComponent = EditFormUtils.javaScriptValue(title, jsProp, jsonProp, 110, jsDocHTML, jsonDocHTML);
+    return [{
+            ...settingComponent,
+            customConditional(context) {
+                return context.instance.options.editForm.display === 'wizard';
+            }
+        }];
+});
+define('skylark-formio/components/panel/Panel.form',[
+    '../_classes/nested/NestedComponent.form',
+    './editForm/Panel.edit.display',
+    './editForm/Panel.edit.conditional'
+], function (nestedComponentForm, PanelEditDisplay, PanelEditConditional) {
+    'use strict';
+    return function (...extend) {
+        return nestedComponentForm([
+            {
+                key: 'display',
+                components: PanelEditDisplay
+            },
+            {
+                key: 'conditional',
+                components: PanelEditConditional
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/password/editForm/Password.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'inputMask',
+            ignore: true
+        },
+        {
+            key: 'allowMultipleMasks',
+            ignore: true
+        }
+    ];
+});
+define('skylark-formio/components/password/editForm/Password.edit.data',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'inputFormat',
+            ignore: true
+        },
+        {
+            key: 'persistent',
+            ignore: true
+        },
+        {
+            key: 'protected',
+            ignore: true
+        },
+        {
+            key: 'dbIndex',
+            ignore: true
+        },
+        {
+            key: 'encrypted',
+            ignore: true
+        },
+        {
+            key: 'multiple',
+            ignore: true
+        },
+        {
+            key: 'defaultValue',
+            ignore: true
+        },
+        {
+            key: 'customDefaultValuePanel',
+            ignore: true
+        },
+        {
+            key: 'calculateValuePanel',
+            ignore: true
+        },
+        {
+            key: 'passwordInfo',
+            weight: 0,
+            type: 'htmlelement',
+            tag: 'div',
+            className: 'alert alert-info',
+            content: 'Password fields are automatically encrypted using 1-way salted bcrypt hashes. These hashes are also protected and not returned in the API.'
+        }
+    ];
+});
+define('skylark-formio/components/password/editForm/Password.edit.validation',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'unique',
+            ignore: true
+        },
+        {
+            key: 'validate.minWords',
+            ignore: true
+        },
+        {
+            key: 'validate.maxWords',
+            ignore: true
+        }
+    ];
+});
+define('skylark-formio/components/password/Password.form',[
+    '../textfield/TextField.form',
+    './editForm/Password.edit.display',
+    './editForm/Password.edit.data',
+    './editForm/Password.edit.validation'
+], function (textEditForm, PasswordEditDisplay, PasswordEditData, PasswordEditValidation) {
+    'use strict';
+    return function (...extend) {
+        return textEditForm([
+            {
+                key: 'data',
+                components: PasswordEditData
+            },
+            {
+                key: 'display',
+                components: PasswordEditDisplay
+            },
+            {
+                key: 'validation',
+                components: PasswordEditValidation
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/phonenumber/editForm/PhoneNumber.edit.validation',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'validate.minLength',
+            ignore: true
+        },
+        {
+            key: 'validate.maxLength',
+            ignore: true
+        },
+        {
+            key: 'validate.pattern',
+            ignore: true
+        },
+        {
+            key: 'validate.minWords',
+            ignore: true
+        },
+        {
+            key: 'validate.maxWords',
+            ignore: true
+        }
+    ];
+});
+define('skylark-formio/components/phonenumber/PhoneNumber.form',[
+    '../textfield/TextField.form',
+    './editForm/PhoneNumber.edit.validation'
+], function (textEditForm, PhoneNumberEditValidation) {
+    'use strict';
+    return function (...extend) {
+        return textEditForm([
+            {
+                key: 'display',
+                components: [
+                    {
+                        key: 'showWordCount',
+                        ignore: true
+                    },
+                    {
+                        key: 'showCharCount',
+                        ignore: true
+                    }
+                ]
+            },
+            {
+                key: 'validation',
+                components: PhoneNumberEditValidation
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/radio/editForm/Radio.edit.data',[
+    '../../../utils/builder',
+    'skylark-lodash'
+], function (BuilderUtils, _) {
+    'use strict';
+    return [
+        {
+            key: 'multiple',
+            ignore: true
+        },
+        {
+            type: 'datagrid',
+            input: true,
+            label: 'Values',
+            key: 'values',
+            tooltip: 'The radio button values that can be picked for this field. Values are text submitted with the form data. Labels are text that appears next to the radio buttons on the form.',
+            weight: 10,
+            reorder: true,
+            defaultValue: [{
+                    label: '',
+                    value: ''
+                }],
+            components: [
+                {
+                    label: 'Label',
+                    key: 'label',
+                    input: true,
+                    type: 'textfield'
+                },
+                {
+                    label: 'Value',
+                    key: 'value',
+                    input: true,
+                    type: 'textfield',
+                    allowCalculateOverride: true,
+                    calculateValue: { _camelCase: [{ var: 'row.label' }] },
+                    validate: { required: true }
+                },
+                {
+                    type: 'select',
+                    input: true,
+                    weight: 180,
+                    label: 'Shortcut',
+                    key: 'shortcut',
+                    tooltip: 'The shortcut key for this option.',
+                    dataSrc: 'custom',
+                    valueProperty: 'value',
+                    customDefaultValue: () => '',
+                    template: '{{ item.label }}',
+                    data: {
+                        custom(context) {
+                            return BuilderUtils.getAvailableShortcuts(_.get(context, 'instance.options.editForm', {}), _.get(context, 'instance.options.editComponent', {}));
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            type: 'select',
+            input: true,
+            label: 'Storage Type',
+            key: 'dataType',
+            clearOnHide: true,
+            tooltip: 'The type to store the data. If you select something other than autotype, it will force it to that type.',
+            weight: 12,
+            template: '<span>{{ item.label }}</span>',
+            dataSrc: 'values',
+            data: {
+                values: [
+                    {
+                        label: 'Autotype',
+                        value: 'auto'
+                    },
+                    {
+                        label: 'String',
+                        value: 'string'
+                    },
+                    {
+                        label: 'Number',
+                        value: 'number'
+                    },
+                    {
+                        label: 'Boolean',
+                        value: 'boolean'
+                    },
+                    {
+                        label: 'Object',
+                        value: 'object'
+                    }
+                ]
+            }
+        }
+    ];
+});
+define('skylark-formio/components/radio/editForm/Radio.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'placeholder',
+            ignore: true
+        },
+        {
+            type: 'select',
+            input: true,
+            label: 'Options Label Position',
+            key: 'optionsLabelPosition',
+            tooltip: 'Position for the label for options for this field.',
+            dataSrc: 'values',
+            weight: 32,
+            defaultValue: 'right',
+            data: {
+                values: [
+                    {
+                        label: 'Top',
+                        value: 'top'
+                    },
+                    {
+                        label: 'Left',
+                        value: 'left'
+                    },
+                    {
+                        label: 'Right',
+                        value: 'right'
+                    },
+                    {
+                        label: 'Bottom',
+                        value: 'bottom'
+                    }
+                ]
+            }
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            key: 'inline',
+            label: 'Inline Layout',
+            tooltip: 'Displays the checkboxes/radios horizontally.',
+            weight: 650
+        }
+    ];
+});
+define('skylark-formio/components/radio/editForm/Radio.edit.validation',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'validateOn',
+            ignore: true
+        },
+        {
+            key: 'unique',
+            ignore: true
+        }
+    ];
+});
+define('skylark-formio/components/radio/Radio.form',[
+    '../_classes/component/Component.form',
+    './editForm/Radio.edit.data',
+    './editForm/Radio.edit.display',
+    './editForm/Radio.edit.validation'
+], function (baseEditForm, RadioEditData, RadioEditDisplay, RadioEditValidation) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([
+            {
+                key: 'display',
+                components: RadioEditDisplay
+            },
+            {
+                key: 'data',
+                components: RadioEditData
+            },
+            {
+                key: 'validation',
+                components: RadioEditValidation
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/recaptcha/editForm/ReCaptcha.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'eventType',
+            label: 'Type of event',
+            tooltip: 'Specify type of event that this reCAPTCHA would react to',
+            type: 'radio',
+            values: [
+                {
+                    label: 'Form Load',
+                    value: 'formLoad'
+                },
+                {
+                    label: 'Button Click',
+                    value: 'buttonClick'
+                }
+            ],
+            weight: 650
+        },
+        {
+            key: 'buttonKey',
+            label: 'Button Key',
+            tooltip: 'Specify key of button on this form that this reCAPTCHA should react to',
+            type: 'textfield',
+            customConditional(context) {
+                return context.data.eventType === 'buttonClick';
+            },
+            weight: 660
+        },
+        {
+            key: 'label',
+            ignore: true
+        },
+        {
+            key: 'hideLabel',
+            ignore: true
+        },
+        {
+            key: 'labelPosition',
+            ignore: true
+        },
+        {
+            key: 'placeholder',
+            ignore: true
+        },
+        {
+            key: 'description',
+            ignore: true
+        },
+        {
+            key: 'tooltip',
+            ignore: true
+        },
+        {
+            key: 'errorLabel',
+            ignore: true
+        },
+        {
+            key: 'customClass',
+            ignore: true
+        },
+        {
+            key: 'tabindex',
+            ignore: true
+        },
+        {
+            key: 'multiple',
+            ignore: true
+        },
+        {
+            key: 'clearOnHide',
+            ignore: true
+        },
+        {
+            key: 'hidden',
+            ignore: true
+        },
+        {
+            key: 'mask',
+            ignore: true
+        },
+        {
+            key: 'dataGridLabel',
+            ignore: true
+        },
+        {
+            key: 'disabled',
+            ignore: true
+        },
+        {
+            key: 'autofocus',
+            ignore: true
+        },
+        {
+            key: 'tableView',
+            ignore: true
+        }
+    ];
+});
+define('skylark-formio/components/recaptcha/ReCaptcha.form',[
+    '../_classes/component/Component.form',
+    './editForm/ReCaptcha.edit.display'
+], function (baseEditForm, ReCaptchaEditDisplay) {
+    'use strict';
+    return function () {
+        return baseEditForm([
+            {
+                key: 'display',
+                components: ReCaptchaEditDisplay
+            },
+            {
+                key: 'data',
+                ignore: true
+            },
+            {
+                key: 'validation',
+                ignore: true
+            },
+            {
+                key: 'conditional',
+                ignore: true
+            },
+            {
+                key: 'logic',
+                ignore: true
+            }
+        ]);
+    };
+});
+define('skylark-formio/components/resource/editForm/Resource.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'resourceInfo',
+            weight: -10,
+            type: 'htmlelement',
+            tag: 'div',
+            className: 'alert alert-danger',
+            content: 'The Resource component is deprecated. Use the Select component with data source of "Resource" instead.'
+        },
+        {
+            type: 'select',
+            input: true,
+            dataSrc: 'url',
+            data: { url: '/form?type=resource&limit=4294967295&select=_id,title' },
+            template: '<span>{{ item.title }}</span>',
+            valueProperty: '_id',
+            label: 'Resource',
+            key: 'resource',
+            weight: 50,
+            tooltip: 'The resource to be used with this field.'
+        },
+        {
+            type: 'tags',
+            input: true,
+            key: 'selectFields',
+            label: 'Select Fields',
+            tooltip: 'The properties on the resource to return as part of the options. If left blank, all properties will be returned.',
+            placeholder: 'Enter the fields to select.',
+            weight: 51
+        },
+        {
+            type: 'tags',
+            input: true,
+            key: 'searchFields',
+            label: 'Search Fields',
+            tooltip: "A list of search filters based on the fields of the resource. See the <a target='_blank' href='https://github.com/travist/resourcejs#filtering-the-results'>Resource.js documentation</a> for the format of these filters.",
+            placeholder: 'The fields to query on the server',
+            weight: 52
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'filter',
+            label: 'Filter Query',
+            weight: 53,
+            description: 'The filter query for results.',
+            tooltip: 'Use this to provide additional filtering using query parameters.'
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'sort',
+            label: 'Sort Query',
+            weight: 53,
+            description: 'The sort query for results',
+            tooltip: 'Use this to provide additional sorting using query parameters'
+        },
+        {
+            type: 'textarea',
+            input: true,
+            key: 'template',
+            label: 'Item Template',
+            editor: 'ace',
+            as: 'html',
+            rows: 3,
+            weight: 53,
+            tooltip: 'The HTML template for the result data items.'
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            weight: 54,
+            key: 'addResource',
+            label: 'Add Resource',
+            tooltip: 'Allows to create a new resource while entering a submission.',
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.dataSrc' },
+                        'resource'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            label: 'Add Resource Label',
+            key: 'addResourceLabel',
+            tooltip: 'Set the text of the Add Resource button.',
+            placeholder: 'Add Resource',
+            weight: 55,
+            input: true,
+            conditional: {
+                json: {
+                    and: [
+                        {
+                            '===': [
+                                { var: 'data.dataSrc' },
+                                'resource'
+                            ]
+                        },
+                        { '!!': { var: 'data.addResource' } }
+                    ]
+                }
+            }
+        }
+    ];
+});
+define('skylark-formio/components/resource/Resource.form',[
+    '../_classes/component/Component.form',
+    './editForm/Resource.edit.display'
+], function (baseEditForm, ResourceEditDisplay) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([{
+                key: 'display',
+                components: ResourceEditDisplay
+            }], ...extend);
+    };
+});
+define('skylark-formio/components/selectboxes/editForm/SelectBoxes.edit.validation',[],function () {
+    'use strict';
+    return [
+        {
+            type: 'number',
+            input: true,
+            key: 'validate.minSelectedCount',
+            label: 'Minimum checked number',
+            tooltip: 'Minimum checkboxes required before form can be submitted.',
+            weight: 250
+        },
+        {
+            type: 'number',
+            input: true,
+            key: 'validate.maxSelectedCount',
+            label: 'Maximum checked number',
+            tooltip: 'Maximum checkboxes possible before form can be submitted.',
+            weight: 250
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'minSelectedCountMessage',
+            label: 'Minimum checked error message',
+            tooltip: 'Error message displayed if minimum number of items not checked.',
+            weight: 250
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'maxSelectedCountMessage',
+            label: 'Maximum checked error message',
+            tooltip: 'Error message displayed if maximum number of items checked.',
+            weight: 250
+        }
+    ];
+});
+define('skylark-formio/components/selectboxes/SelectBoxes.form',[
+    '../radio/Radio.form',
+    './editForm/SelectBoxes.edit.validation'
+], function (radioEditForm, SelectBoxesEditValidation) {
+    'use strict';
+    return function (...extend) {
+        return radioEditForm([
+            {
+                key: 'data',
+                components: [{
+                        key: 'dataType',
+                        ignore: true
+                    }]
+            },
+            {
+                key: 'validation',
+                components: SelectBoxesEditValidation
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/select/editForm/Select.edit.data',['../../../utils/utils'], function (a) {
+    'use strict';
+    return [
+        {
+            type: 'select',
+            input: true,
+            weight: 0,
+            tooltip: 'The source to use for the select data. Values lets you provide your own values and labels. JSON lets you provide raw JSON data. URL lets you provide a URL to retrieve the JSON data from.',
+            key: 'dataSrc',
+            defaultValue: 'values',
+            label: 'Data Source Type',
+            dataSrc: 'values',
+            data: {
+                values: [
+                    {
+                        label: 'Values',
+                        value: 'values'
+                    },
+                    {
+                        label: 'URL',
+                        value: 'url'
+                    },
+                    {
+                        label: 'Resource',
+                        value: 'resource'
+                    },
+                    {
+                        label: 'Custom',
+                        value: 'custom'
+                    },
+                    {
+                        label: 'Raw JSON',
+                        value: 'json'
+                    },
+                    {
+                        label: 'IndexedDB',
+                        value: 'indexeddb'
+                    }
+                ]
+            }
+        },
+        {
+            type: 'textfield',
+            weight: 10,
+            input: true,
+            key: 'indexeddb.database',
+            label: 'Database name',
+            tooltip: 'The name of the indexeddb database.',
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.dataSrc' },
+                        'indexeddb'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'indexeddb.table',
+            label: 'Table name',
+            weight: 16,
+            tooltip: 'The name of table in the indexeddb database.',
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.dataSrc' },
+                        'indexeddb'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textarea',
+            as: 'json',
+            editor: 'ace',
+            weight: 18,
+            input: true,
+            key: 'indexeddb.filter',
+            label: 'Row Filter',
+            tooltip: 'Filter table items that match the object.',
+            defaultValue: {},
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.dataSrc' },
+                        'indexeddb'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textarea',
+            as: 'json',
+            editor: 'ace',
+            weight: 10,
+            input: true,
+            key: 'data.json',
+            label: 'Data Source Raw JSON',
+            tooltip: 'A raw JSON array to use as a data source.',
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.dataSrc' },
+                        'json'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'data.url',
+            weight: 10,
+            label: 'Data Source URL',
+            placeholder: 'Data Source URL',
+            tooltip: 'A URL that returns a JSON array to use as the data source.',
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.dataSrc' },
+                        'url'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            label: 'Lazy Load Data',
+            key: 'lazyLoad',
+            tooltip: "When set, this will not fire off the request to the URL until this control is within focus. This can improve performance if you have many Select dropdowns on your form where the API's will only fire when the control is activated.",
+            weight: 11,
+            conditional: {
+                json: {
+                    in: [
+                        { var: 'data.dataSrc' },
+                        [
+                            'resource',
+                            'url'
+                        ]
+                    ]
+                }
+            }
+        },
+        {
+            type: 'datagrid',
+            input: true,
+            label: 'Request Headers',
+            key: 'data.headers',
+            tooltip: 'Set any headers that should be sent along with the request to the url. This is useful for authentication.',
+            weight: 11,
+            components: [
+                {
+                    label: 'Key',
+                    key: 'key',
+                    input: true,
+                    type: 'textfield'
+                },
+                {
+                    label: 'Value',
+                    key: 'value',
+                    input: true,
+                    type: 'textfield'
+                }
+            ],
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.dataSrc' },
+                        'url'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'datagrid',
+            input: true,
+            label: 'Data Source Values',
+            key: 'data.values',
+            tooltip: 'Values to use as the data source. Labels are shown in the select field. Values are the corresponding values saved with the submission.',
+            weight: 10,
+            reorder: true,
+            defaultValue: [{
+                    label: '',
+                    value: ''
+                }],
+            components: [
+                {
+                    label: 'Label',
+                    key: 'label',
+                    input: true,
+                    type: 'textfield'
+                },
+                {
+                    label: 'Value',
+                    key: 'value',
+                    input: true,
+                    type: 'textfield',
+                    allowCalculateOverride: true,
+                    calculateValue: { _camelCase: [{ var: 'row.label' }] }
+                }
+            ],
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.dataSrc' },
+                        'values'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'select',
+            input: true,
+            dataSrc: 'url',
+            data: { url: '/form?type=resource&limit=4294967295&select=_id,title' },
+            authenticate: true,
+            template: '<span>{{ item.title }}</span>',
+            valueProperty: '_id',
+            clearOnHide: false,
+            label: 'Resource',
+            key: 'data.resource',
+            lazyLoad: false,
+            weight: 10,
+            tooltip: 'The resource to be used with this field.',
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.dataSrc' },
+                        'resource'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            label: 'Data Path',
+            key: 'selectValues',
+            weight: 12,
+            description: 'The object path to the iterable items.',
+            tooltip: 'The property within the source data, where iterable items reside. For example: results.items or results[0].items',
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.dataSrc' },
+                        'url'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'select',
+            input: true,
+            label: 'Value Property',
+            key: 'valueProperty',
+            skipMerge: true,
+            clearOnHide: false,
+            tooltip: 'The field to use as the value.',
+            weight: 11,
+            refreshOn: 'data.resource',
+            template: '<span>{{ item.label }}</span>',
+            valueProperty: 'key',
+            dataSrc: 'url',
+            lazyLoad: false,
+            onSetItems(component, form) {
+                const newItems = [];
+                a.eachComponent(form.components, (component, path) => {
+                    if (component.input) {
+                        newItems.push({
+                            label: component.label || component.key,
+                            key: `data.${ path }`
+                        });
+                    }
+                });
+                return newItems;
+            },
+            onChange(context) {
+                if (context && context.flags && context.flags.modified) {
+                    const valueProp = context.instance.data.valueProperty;
+                    const templateProp = valueProp ? valueProp : 'data';
+                    const template = `<span>{{ item.${ templateProp } }}</span>`;
+                    const searchField = valueProp ? `${ valueProp }__regex` : '';
+                    context.instance.root.getComponent('template').setValue(template);
+                    context.instance.root.getComponent('searchField').setValue(searchField);
+                }
+            },
+            data: { url: '/form/{{ data.data.resource }}' },
+            conditional: {
+                json: {
+                    and: [
+                        {
+                            '===': [
+                                { var: 'data.dataSrc' },
+                                'resource'
+                            ]
+                        },
+                        { var: 'data.data.resource' }
+                    ]
+                }
+            }
+        },
+        {
+            type: 'select',
+            input: true,
+            label: 'Storage Type',
+            key: 'dataType',
+            clearOnHide: true,
+            tooltip: 'The type to store the data. If you select something other than autotype, it will force it to that type.',
+            weight: 12,
+            template: '<span>{{ item.label }}</span>',
+            dataSrc: 'values',
+            data: {
+                values: [
+                    {
+                        label: 'Autotype',
+                        value: 'auto'
+                    },
+                    {
+                        label: 'String',
+                        value: 'string'
+                    },
+                    {
+                        label: 'Number',
+                        value: 'number'
+                    },
+                    {
+                        label: 'Boolean',
+                        value: 'boolean'
+                    },
+                    {
+                        label: 'Object',
+                        value: 'object'
+                    }
+                ]
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            label: 'Value Property',
+            key: 'valueProperty',
+            skipMerge: true,
+            clearOnHide: false,
+            weight: 13,
+            description: "The selected item's property to save.",
+            tooltip: 'The property of each item in the data source to use as the select value. If not specified, the item itself will be used.',
+            conditional: {
+                json: {
+                    in: [
+                        { var: 'data.dataSrc' },
+                        [
+                            'json',
+                            'url',
+                            'custom'
+                        ]
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            label: 'Select Fields',
+            key: 'selectFields',
+            tooltip: 'The properties on the resource to return as part of the options. Separate property names by commas. If left blank, all properties will be returned.',
+            placeholder: 'Comma separated list of fields to select.',
+            weight: 14,
+            conditional: {
+                json: {
+                    and: [
+                        {
+                            '===': [
+                                { var: 'data.dataSrc' },
+                                'resource'
+                            ]
+                        },
+                        {
+                            '===': [
+                                { var: 'data.valueProperty' },
+                                ''
+                            ]
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            key: 'disableLimit',
+            label: 'Disable limiting response',
+            tooltip: 'When enabled the request will not include the limit and skip options in the query string',
+            weight: 15,
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.dataSrc' },
+                        'url'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'searchField',
+            label: 'Search Query Name',
+            weight: 16,
+            description: 'Name of URL query parameter',
+            tooltip: 'The name of the search querystring parameter used when sending a request to filter results with. The server at the URL must handle this query parameter.',
+            conditional: {
+                json: {
+                    in: [
+                        { var: 'data.dataSrc' },
+                        [
+                            'url',
+                            'resource'
+                        ]
+                    ]
+                }
+            }
+        },
+        {
+            type: 'number',
+            input: true,
+            key: 'minSearch',
+            weight: 17,
+            label: 'Minimum Search Length',
+            tooltip: 'The minimum amount of characters they must type before a search is made.',
+            defaultValue: 0,
+            conditional: {
+                json: {
+                    and: [
+                        {
+                            '===': [
+                                { var: 'data.dataSrc' },
+                                'url'
+                            ]
+                        },
+                        {
+                            '!=': [
+                                { var: 'data.searchField' },
+                                ''
+                            ]
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'filter',
+            label: 'Filter Query',
+            weight: 18,
+            description: 'The filter query for results.',
+            tooltip: 'Use this to provide additional filtering using query parameters.',
+            conditional: {
+                json: {
+                    in: [
+                        { var: 'data.dataSrc' },
+                        [
+                            'url',
+                            'resource'
+                        ]
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'sort',
+            label: 'Sort Query',
+            weight: 18,
+            description: 'The sort query for results',
+            tooltip: 'Use this to provide additional sorting using query parameters',
+            conditional: {
+                json: {
+                    in: [
+                        { var: 'data.dataSrc' },
+                        [
+                            'url',
+                            'resource'
+                        ]
+                    ]
+                }
+            }
+        },
+        {
+            type: 'number',
+            input: true,
+            key: 'limit',
+            label: 'Limit',
+            weight: 18,
+            defaultValue: 100,
+            description: 'Maximum number of items to view per page of results.',
+            tooltip: 'Use this to limit the number of items to request or view.',
+            conditional: {
+                json: {
+                    in: [
+                        { var: 'data.dataSrc' },
+                        [
+                            'url',
+                            'resource'
+                        ]
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textarea',
+            input: true,
+            key: 'data.custom',
+            label: 'Custom Values',
+            editor: 'ace',
+            rows: 10,
+            weight: 14,
+            placeholder: "values = data['mykey'];",
+            tooltip: 'Write custom code to return the value options. The form data object is available.',
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.dataSrc' },
+                        'custom'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textarea',
+            input: true,
+            key: 'template',
+            label: 'Item Template',
+            editor: 'ace',
+            as: 'html',
+            rows: 3,
+            weight: 18,
+            tooltip: 'The HTML template for the result data items.',
+            allowCalculateOverride: true,
+            calculateValue: context => {
+                if (!context.data.template) {
+                    if (context.instance && context.instance._currentForm.options.editComponent) {
+                        return context.instance._currentForm.options.editComponent.template;
+                    }
+                }
+                return context.data.template;
+            }
+        },
+        {
+            type: 'select',
+            input: true,
+            key: 'refreshOn',
+            label: 'Refresh Options On',
+            weight: 19,
+            tooltip: 'Refresh data when another field changes.',
+            dataSrc: 'custom',
+            valueProperty: 'value',
+            data: {
+                custom(context) {
+                    var values = [];
+                    values.push({
+                        label: 'Any Change',
+                        value: 'data'
+                    });
+                    context.utils.eachComponent(context.instance.options.editForm.components, function (component, path) {
+                        if (component.key !== context.data.key) {
+                            values.push({
+                                label: component.label || component.key,
+                                value: path
+                            });
+                        }
+                    });
+                    return values;
+                }
+            },
+            conditional: {
+                json: {
+                    in: [
+                        { var: 'data.dataSrc' },
+                        [
+                            'url',
+                            'resource',
+                            'values'
+                        ]
+                    ]
+                }
+            }
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            weight: 20,
+            key: 'clearOnRefresh',
+            label: 'Clear Value On Refresh Options',
+            defaultValue: false,
+            tooltip: 'When the Refresh On field is changed, clear this components value.',
+            conditional: {
+                json: {
+                    in: [
+                        { var: 'data.dataSrc' },
+                        [
+                            'url',
+                            'resource',
+                            'values'
+                        ]
+                    ]
+                }
+            }
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            weight: 21,
+            key: 'searchEnabled',
+            label: 'Enable Static Search',
+            defaultValue: true,
+            tooltip: 'When checked, the select dropdown will allow for searching within the static list of items provided.'
+        },
+        {
+            label: 'Search Threshold',
+            mask: false,
+            tableView: true,
+            alwaysEnabled: false,
+            type: 'number',
+            input: true,
+            key: 'selectThreshold',
+            validate: {
+                min: 0,
+                customMessage: '',
+                json: '',
+                max: 1
+            },
+            delimiter: false,
+            requireDecimal: false,
+            encrypted: false,
+            defaultValue: 0.3,
+            weight: 22,
+            tooltip: 'At what point does the match algorithm give up. A threshold of 0.0 requires a perfect match, a threshold of 1.0 would match anything.'
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            weight: 23,
+            key: 'addResource',
+            label: 'Add Resource',
+            tooltip: 'Allows to create a new resource while entering a submission.',
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.dataSrc' },
+                        'resource'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            label: 'Add Resource Label',
+            key: 'addResourceLabel',
+            tooltip: 'Set the text of the Add Resource button.',
+            placeholder: 'Add Resource',
+            weight: 24,
+            input: true,
+            conditional: {
+                json: {
+                    and: [
+                        {
+                            '===': [
+                                { var: 'data.dataSrc' },
+                                'resource'
+                            ]
+                        },
+                        { '!!': { var: 'data.addResource' } }
+                    ]
+                }
+            }
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            weight: 25,
+            key: 'reference',
+            label: 'Save as reference',
+            tooltip: 'Using this option will save this field as a reference and link its value to the value of the origin record.',
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.dataSrc' },
+                        'resource'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            weight: 26,
+            key: 'authenticate',
+            label: 'Formio Authenticate',
+            tooltip: 'Check this if you would like to use Formio Authentication with the request.',
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.dataSrc' },
+                        'url'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            weight: 27,
+            key: 'readOnlyValue',
+            label: 'Read Only Value',
+            tooltip: 'Check this if you would like to show just the value when in Read Only mode.'
+        },
+        {
+            type: 'textarea',
+            as: 'json',
+            editor: 'ace',
+            weight: 28,
+            input: true,
+            key: 'customOptions',
+            label: 'Choices.js options',
+            tooltip: 'A raw JSON object to use as options for the Select component (Choices JS).',
+            defaultValue: {}
+        }
+    ];
+});
+define('skylark-formio/components/select/editForm/Select.edit.display',[],function () {
+    'use strict';
+    return [{
+            type: 'select',
+            input: true,
+            weight: 20,
+            tooltip: "Select the type of widget you'd like to use.",
+            key: 'widget',
+            defaultValue: 'choicesjs',
+            label: 'Widget Type',
+            dataSrc: 'values',
+            data: {
+                values: [
+                    {
+                        label: 'ChoicesJS',
+                        value: 'choicesjs'
+                    },
+                    {
+                        label: 'HTML 5',
+                        value: 'html5'
+                    }
+                ]
+            }
+        }];
+});
+define('skylark-formio/components/select/editForm/Select.edit.validation',[],function () {
+    'use strict';
+    return [{
+            weight: 50,
+            type: 'checkbox',
+            label: 'Perform server validation',
+            tooltip: 'Check this if you would like for the server to perform a validation check to ensure the selected value is an available option. This requires a Search query to ensure a record is found.',
+            key: 'validate.select',
+            input: true,
+            conditional: { json: { var: 'data.searchField' } }
+        }];
+});
+define('skylark-formio/components/select/Select.form',[
+    '../_classes/component/Component.form',
+    './editForm/Select.edit.data',
+    './editForm/Select.edit.display',
+    './editForm/Select.edit.validation'
+], function (baseEditForm, SelectEditData, SelectEditDisplay, SelectEditValidation) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([
+            {
+                key: 'display',
+                components: SelectEditDisplay
+            },
+            {
+                key: 'data',
+                components: SelectEditData
+            },
+            {
+                key: 'validation',
+                components: SelectEditValidation
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/signature/editForm/Signature.edit.data',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'multiple',
+            ignore: true
+        },
+        {
+            key: 'defaultValue',
+            ignore: true
+        },
+        {
+            key: 'dbIndex',
+            ignore: true
+        }
+    ];
+});
+define('skylark-formio/components/signature/editForm/Signature.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            type: 'textfield',
+            input: true,
+            key: 'footer',
+            label: 'Footer Label',
+            tooltip: 'The footer text that appears below the signature area.',
+            placeholder: 'Footer Label',
+            weight: 10
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'width',
+            label: 'Width',
+            tooltip: 'The width of the signature area.',
+            placeholder: 'Width',
+            weight: 50
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'height',
+            label: 'Height',
+            tooltip: 'The height of the signature area.',
+            placeholder: 'Height',
+            weight: 51
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'backgroundColor',
+            label: 'Background Color',
+            tooltip: 'The background color of the signature area.',
+            placeholder: 'Background Color',
+            weight: 52
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'penColor',
+            label: 'Pen Color',
+            tooltip: 'The ink color for the signature area.',
+            placeholder: 'Pen Color',
+            weight: 53
+        },
+        {
+            key: 'placeholder',
+            ignore: true
+        },
+        {
+            key: 'autofocus',
+            ignore: true
+        }
+    ];
+});
+define('skylark-formio/components/signature/editForm/Signature.edit.validation',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'unique',
+            ignore: true
+        },
+        {
+            key: 'validateOn',
+            ignore: true
+        }
+    ];
+});
+define('skylark-formio/components/signature/Signature.form',[
+    '../_classes/component/Component.form',
+    './editForm/Signature.edit.data',
+    './editForm/Signature.edit.display',
+    './editForm/Signature.edit.validation'
+], function (baseEditForm, SignatureEditData, SignatureEditDisplay, SignatureEditValidation) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([
+            {
+                key: 'display',
+                components: SignatureEditDisplay
+            },
+            {
+                key: 'data',
+                components: SignatureEditData
+            },
+            {
+                key: 'validation',
+                components: SignatureEditValidation
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/survey/editForm/Survey.edit.data',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'multiple',
+            ignore: true
+        },
+        {
+            type: 'datagrid',
+            input: true,
+            label: 'Questions',
+            key: 'questions',
+            tooltip: 'The questions you would like to ask in this survey question.',
+            weight: 0,
+            reorder: true,
+            defaultValue: [{
+                    label: '',
+                    value: ''
+                }],
+            components: [
+                {
+                    label: 'Label',
+                    key: 'label',
+                    input: true,
+                    type: 'textfield'
+                },
+                {
+                    label: 'Value',
+                    key: 'value',
+                    input: true,
+                    type: 'textfield',
+                    allowCalculateOverride: true,
+                    calculateValue: { _camelCase: [{ var: 'row.label' }] }
+                }
+            ]
+        },
+        {
+            type: 'datagrid',
+            input: true,
+            label: 'Values',
+            key: 'values',
+            tooltip: "The values that can be selected per question. Example: 'Satisfied', 'Very Satisfied', etc.",
+            weight: 1,
+            reorder: true,
+            defaultValue: [{
+                    label: '',
+                    value: ''
+                }],
+            components: [
+                {
+                    label: 'Label',
+                    key: 'label',
+                    input: true,
+                    type: 'textfield'
+                },
+                {
+                    label: 'Value',
+                    key: 'value',
+                    input: true,
+                    type: 'textfield',
+                    allowCalculateOverride: true,
+                    calculateValue: { _camelCase: [{ var: 'row.label' }] }
+                }
+            ]
+        }
+    ];
+});
+define('skylark-formio/components/survey/editForm/Survey.edit.display',[],function () {
+    'use strict';
+    return [{
+            key: 'placeholder',
+            ignore: true
+        }];
+});
+define('skylark-formio/components/survey/editForm/Survey.edit.validation',[],function () {
+    'use strict';
+    return [{
+            key: 'validateOn',
+            ignore: true
+        }];
+});
+define('skylark-formio/components/survey/Survey.form',[
+    '../_classes/component/Component.form',
+    './editForm/Survey.edit.data',
+    './editForm/Survey.edit.display',
+    './editForm/Survey.edit.validation'
+], function (baseEditForm, SurveyEditData, SurveyEditDisplay, SurveyEditValidation) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([
+            {
+                key: 'display',
+                components: SurveyEditDisplay
+            },
+            {
+                key: 'data',
+                components: SurveyEditData
+            },
+            {
+                key: 'validation',
+                components: SurveyEditValidation
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/table/editForm/Table.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'labelPosition',
+            ignore: true
+        },
+        {
+            key: 'placeholder',
+            ignore: true
+        },
+        {
+            key: 'description',
+            ignore: true
+        },
+        {
+            key: 'hideLabel',
+            ignore: true
+        },
+        {
+            key: 'autofocus',
+            ignore: true
+        },
+        {
+            key: 'tooltip',
+            ignore: true
+        },
+        {
+            key: 'tabindex',
+            ignore: true
+        },
+        {
+            key: 'disabled',
+            ignore: true
+        },
+        {
+            type: 'number',
+            label: 'Number of Rows',
+            key: 'numRows',
+            input: true,
+            weight: 1,
+            placeholder: 'Number of Rows',
+            tooltip: 'Enter the number or rows that should be displayed by this table.'
+        },
+        {
+            type: 'number',
+            label: 'Number of Columns',
+            key: 'numCols',
+            input: true,
+            weight: 2,
+            placeholder: 'Number of Columns',
+            tooltip: 'Enter the number or columns that should be displayed by this table.'
+        },
+        {
+            type: 'checkbox',
+            label: 'Clone Row Components',
+            key: 'cloneRows',
+            input: true,
+            weight: 3,
+            tooltip: 'Check this if you would like to "clone" the first row of components to all additional empty rows of the table.'
+        },
+        {
+            type: 'select',
+            label: 'Cell Alignment',
+            key: 'cellAlignment',
+            input: true,
+            tooltip: 'Horizontal alignment for cells of the table.',
+            dataSrc: 'values',
+            data: {
+                values: [
+                    {
+                        label: 'Left',
+                        value: 'left'
+                    },
+                    {
+                        label: 'Center',
+                        value: 'center'
+                    },
+                    {
+                        label: 'Right',
+                        value: 'right'
+                    }
+                ]
+            },
+            defaultValue: 'left',
+            weight: 3
+        },
+        {
+            type: 'checkbox',
+            label: 'Striped',
+            key: 'striped',
+            tooltip: 'This will stripe the table if checked.',
+            input: true,
+            weight: 701
+        },
+        {
+            type: 'checkbox',
+            label: 'Bordered',
+            key: 'bordered',
+            input: true,
+            tooltip: 'This will border the table if checked.',
+            weight: 702
+        },
+        {
+            type: 'checkbox',
+            label: 'Hover',
+            key: 'hover',
+            input: true,
+            tooltip: 'Highlight a row on hover.',
+            weight: 703
+        },
+        {
+            type: 'checkbox',
+            label: 'Condensed',
+            key: 'condensed',
+            input: true,
+            tooltip: 'Condense the size of the table.',
+            weight: 704
+        }
+    ];
+});
+define('skylark-formio/components/table/Table.form',[
+    '../_classes/nested/NestedComponent.form',
+    './editForm/Table.edit.display'
+], function (nestedComponentForm, TableEditDisplay) {
+    'use strict';
+    return function (...extend) {
+        return nestedComponentForm([{
+                key: 'display',
+                components: TableEditDisplay
+            }], ...extend);
+    };
+});
+define('skylark-formio/components/tabs/editForm/Tabs.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'labelPosition',
+            ignore: true
+        },
+        {
+            key: 'placeholder',
+            ignore: true
+        },
+        {
+            key: 'description',
+            ignore: true
+        },
+        {
+            key: 'hideLabel',
+            ignore: true
+        },
+        {
+            key: 'autofocus',
+            ignore: true
+        },
+        {
+            key: 'tooltip',
+            ignore: true
+        },
+        {
+            key: 'tabindex',
+            ignore: true
+        },
+        {
+            key: 'disabled',
+            ignore: true
+        },
+        {
+            key: 'components',
+            type: 'datagrid',
+            input: true,
+            label: 'Tabs',
+            weight: 50,
+            reorder: true,
+            components: [
+                {
+                    type: 'textfield',
+                    input: true,
+                    key: 'label',
+                    label: 'Label'
+                },
+                {
+                    type: 'textfield',
+                    input: true,
+                    key: 'key',
+                    label: 'Key',
+                    allowCalculateOverride: true,
+                    calculateValue: { _camelCase: [{ var: 'row.label' }] }
+                }
+            ]
+        }
+    ];
+});
+define('skylark-formio/components/tabs/Tabs.form',[
+    '../_classes/nested/NestedComponent.form',
+    './editForm/Tabs.edit.display'
+], function (nestedComponentForm, TabsEditDisplay) {
+    'use strict';
+    return function (...extend) {
+        return nestedComponentForm([{
+                key: 'display',
+                components: TabsEditDisplay
+            }], ...extend);
+    };
+});
+define('skylark-formio/components/tags/editForm/Tags.edit.data',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'multiple',
+            ignore: true
+        },
+        {
+            weight: 20,
+            type: 'textfield',
+            input: true,
+            key: 'delimeter',
+            label: 'Delimiter',
+            tooltip: 'What is used to separate the tags.</a>'
+        },
+        {
+            weight: 22,
+            type: 'number',
+            input: true,
+            key: 'maxTags',
+            label: 'Max Tags',
+            defaultValue: 0,
+            tooltip: 'The maximum amount of tags that can be added. 0 for infinity.'
+        },
+        {
+            weight: 24,
+            type: 'select',
+            input: true,
+            key: 'storeas',
+            label: 'Store As',
+            dataSrc: 'values',
+            data: {
+                values: [
+                    {
+                        label: 'String (CSV)',
+                        value: 'string'
+                    },
+                    {
+                        label: 'Array of Tags',
+                        value: 'array'
+                    }
+                ]
+            }
+        }
+    ];
+});
+define('skylark-formio/components/tags/Tags.form',[
+    '../_classes/component/Component.form',
+    './editForm/Tags.edit.data'
+], function (baseEditForm, TagsEditData) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([{
+                key: 'data',
+                components: TagsEditData
+            }], ...extend);
+    };
+});
+define('skylark-formio/components/textarea/editForm/TextArea.edit.display',[
+    'skylark-lodash',
+    '../../../Formio'
+], function (_, Formio) {
+    'use strict';
+    return [
+        {
+            key: 'inputMask',
+            ignore: true
+        },
+        {
+            key: 'allowMultipleMasks',
+            ignore: true
+        },
+        {
+            key: 'mask',
+            ignore: true
+        },
+        {
+            type: 'number',
+            input: true,
+            key: 'rows',
+            label: 'Rows',
+            weight: 210,
+            tooltip: 'This allows control over how many rows are visible in the text area.',
+            placeholder: 'Enter the amount of rows'
+        },
+        {
+            weight: 1350,
+            type: 'checkbox',
+            input: true,
+            key: 'spellcheck',
+            defaultValue: true,
+            label: 'Allow Spellcheck'
+        },
+        {
+            type: 'select',
+            input: true,
+            key: 'editor',
+            label: 'Editor',
+            tooltip: 'Select the type of WYSIWYG editor to use for this text area.',
+            dataSrc: 'values',
+            data: {
+                values: [
+                    {
+                        label: 'None',
+                        value: ''
+                    },
+                    {
+                        label: 'ACE',
+                        value: 'ace'
+                    },
+                    {
+                        label: 'CKEditor',
+                        value: 'ckeditor'
+                    },
+                    {
+                        label: 'Quill',
+                        value: 'quill'
+                    },
+                    {
+                        label: 'TinyMCE',
+                        value: 'tiny'
+                    }
+                ]
+            },
+            weight: 415
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'tinyApiKey',
+            label: 'TinyMCE Api Key',
+            weight: 415.2,
+            placeholder: 'If you have a TinyMCE APi Key, enter it here.',
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.editor' },
+                        'tiny'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            key: 'autoExpand',
+            label: 'Auto Expand',
+            tooltip: "This will make the TextArea auto expand it's height as the user is typing into the area.",
+            weight: 415,
+            conditional: {
+                json: {
+                    '==': [
+                        { var: 'data.editor' },
+                        ''
+                    ]
+                }
+            }
+        },
+        {
+            type: 'checkbox',
+            input: true,
+            key: 'isUploadEnabled',
+            label: 'Enable Image Upload',
+            weight: 415.1,
+            conditional: {
+                json: {
+                    or: [{
+                            '===': [
+                                { var: 'data.editor' },
+                                'quill'
+                            ]
+                        }]
+                }
+            }
+        },
+        {
+            type: 'select',
+            input: true,
+            key: 'uploadStorage',
+            label: 'Image Upload Storage',
+            placeholder: 'Select your file storage provider',
+            weight: 415.2,
+            tooltip: 'Which storage to save the files in.',
+            valueProperty: 'value',
+            dataSrc: 'custom',
+            data: {
+                custom() {
+                    return _.map(Formio.Providers.getProviders('storage'), (storage, key) => ({
+                        label: storage.title,
+                        value: key
+                    }));
+                }
+            },
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.isUploadEnabled' },
+                        true
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'uploadUrl',
+            label: 'Image Upload Url',
+            weight: 415.3,
+            placeholder: 'Enter the url to post the files to.',
+            tooltip: "See <a href='https://github.com/danialfarid/ng-file-upload#server-side' target='_blank'>https://github.com/danialfarid/ng-file-upload#server-side</a> for how to set up the server.",
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.uploadStorage' },
+                        'url'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textarea',
+            key: 'uploadOptions',
+            label: 'Image Upload Custom request options',
+            tooltip: 'Pass your custom xhr options(optional)',
+            rows: 5,
+            editor: 'ace',
+            input: true,
+            weight: 415.4,
+            placeholder: `{
+      "withCredentials": true
+    }`,
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.uploadStorage' },
+                        'url'
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'uploadDir',
+            label: 'Image Upload Directory',
+            placeholder: '(optional) Enter a directory for the files',
+            tooltip: 'This will place all the files uploaded in this field in the directory',
+            weight: 415.5,
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.isUploadEnabled' },
+                        true
+                    ]
+                }
+            }
+        },
+        {
+            type: 'textfield',
+            key: 'fileKey',
+            input: true,
+            label: 'File\xA0form-data\xA0Key',
+            tooltip: 'Key\xA0name\xA0that\xA0you\xA0would\xA0like\xA0to\xA0modify\xA0for\xA0the\xA0file\xA0while\xA0calling\xA0API\xA0request.',
+            rows: 5,
+            weight: 415.6,
+            placeholder: 'Enter\xA0the\xA0key\xA0name\xA0of\xA0a\xA0file\xA0for\xA0form\xA0data.',
+            conditional: {
+                json: {
+                    and: [
+                        {
+                            '===': [
+                                { var: 'data.editor' },
+                                'quill'
+                            ]
+                        },
+                        {
+                            '===': [
+                                { var: 'data.isUploadEnabled' },
+                                true
+                            ]
+                        },
+                        {
+                            '===': [
+                                { var: 'data.uploadStorage' },
+                                'url'
+                            ]
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            type: 'select',
+            input: true,
+            key: 'as',
+            label: 'Save As',
+            dataSrc: 'values',
+            tooltip: 'This setting determines how the value should be entered and stored in the database.',
+            clearOnHide: true,
+            data: {
+                values: [
+                    {
+                        label: 'String',
+                        value: 'string'
+                    },
+                    {
+                        label: 'JSON',
+                        value: 'json'
+                    },
+                    {
+                        label: 'HTML',
+                        value: 'html'
+                    }
+                ]
+            },
+            conditional: {
+                json: {
+                    or: [
+                        {
+                            '===': [
+                                { var: 'data.editor' },
+                                'quill'
+                            ]
+                        },
+                        {
+                            '===': [
+                                { var: 'data.editor' },
+                                'ace'
+                            ]
+                        }
+                    ]
+                }
+            },
+            weight: 416
+        },
+        {
+            type: 'textarea',
+            input: true,
+            editor: 'ace',
+            rows: 10,
+            as: 'json',
+            label: 'Editor Settings',
+            tooltip: 'Enter the WYSIWYG editor JSON configuration.',
+            key: 'wysiwyg',
+            customDefaultValue(value, component, row, data, instance) {
+                return instance ? instance.wysiwygDefault : '';
+            },
+            conditional: {
+                json: {
+                    or: [
+                        {
+                            '===': [
+                                { var: 'data.editor' },
+                                'ace'
+                            ]
+                        },
+                        {
+                            '===': [
+                                { var: 'data.editor' },
+                                'ckeditor'
+                            ]
+                        },
+                        {
+                            '===': [
+                                { var: 'data.editor' },
+                                'quill'
+                            ]
+                        },
+                        {
+                            '===': [
+                                { var: 'data.editor' },
+                                'tiny'
+                            ]
+                        }
+                    ]
+                }
+            },
+            weight: 417
+        }
+    ];
+});
+define('skylark-formio/components/textarea/editForm/TextArea.edit.validation',[],function () {
+    'use strict';
+    return [
+        {
+            weight: 125,
+            key: 'validate.minWords',
+            label: 'Minimum Word Length',
+            placeholder: 'Minimum Word Length',
+            type: 'number',
+            tooltip: 'The minimum amount of words that can be added to this field.',
+            input: true
+        },
+        {
+            weight: 126,
+            key: 'validate.maxWords',
+            label: 'Maximum Word Length',
+            placeholder: 'Maximum Word Length',
+            type: 'number',
+            tooltip: 'The maximum amount of words that can be added to this field.',
+            input: true
+        }
+    ];
+});
+define('skylark-formio/components/textarea/TextArea.form',[
+    '../textfield/TextField.form',
+    './editForm/TextArea.edit.display',
+    './editForm/TextArea.edit.validation'
+], function (textEditForm, TextAreaEditDisplay, TextAreaEditValidation) {
+    'use strict';
+    return function (...extend) {
+        return textEditForm([
+            {
+                key: 'display',
+                components: TextAreaEditDisplay
+            },
+            {
+                key: 'validation',
+                components: TextAreaEditValidation
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/time/editForm/Time.edit.data',[],function () {
+    'use strict';
+    return [{
+            type: 'textfield',
+            input: true,
+            key: 'dataFormat',
+            label: 'Data Format',
+            placeholder: 'HH:mm:ss',
+            tooltip: 'The moment.js format for saving the value of this field.',
+            weight: 25
+        }];
+});
+define('skylark-formio/components/time/editForm/Time.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            type: 'select',
+            input: true,
+            weight: 40,
+            tooltip: "Select the type of widget you'd like to use.",
+            key: 'inputType',
+            defaultValue: 'time',
+            label: 'Input Type',
+            dataSrc: 'values',
+            data: {
+                values: [
+                    {
+                        label: 'HTML5 Time Input',
+                        value: 'time'
+                    },
+                    {
+                        label: 'Text Input with Mask',
+                        value: 'text'
+                    }
+                ]
+            }
+        },
+        {
+            type: 'textfield',
+            input: true,
+            key: 'format',
+            label: 'Format',
+            placeholder: 'Format',
+            tooltip: 'The moment.js format for showing the value of this field.',
+            weight: 50,
+            defaultValue: 'HH:mm',
+            conditional: {
+                json: {
+                    '===': [
+                        { var: 'data.inputType' },
+                        'text'
+                    ]
+                }
+            }
+        },
+        {
+            key: 'placeholder',
+            ignore: true
+        }
+    ];
+});
+define('skylark-formio/components/time/Time.form',[
+    '../_classes/component/Component.form',
+    './editForm/Time.edit.data',
+    './editForm/Time.edit.display'
+], function (baseEditForm, TimeEditData, TimeEditDisplay) {
+    'use strict';
+    return function (...extend) {
+        return baseEditForm([
+            {
+                key: 'data',
+                components: TimeEditData
+            },
+            {
+                key: 'display',
+                components: TimeEditDisplay
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/tree/Tree.form',['../_classes/component/Component.form'], function (componentEditForm) {
+    'use strict';
+    return function (...extend) {
+        return componentEditForm(...extend);
+    };
+});
+define('skylark-formio/components/unknown/editForm/Unknown.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'customComponentDescription',
+            label: 'Custom component description',
+            input: false,
+            tag: 'p',
+            content: 'Custom components can be used to render special fields or widgets inside your app. ' + 'For information on how to display in an app, see ' + '<a href="http://help.form.io/userguide/#custom" target="_blank">' + 'custom component documentation' + '</a>.',
+            type: 'htmlelement',
+            weight: 5
+        },
+        {
+            type: 'textarea',
+            as: 'json',
+            editor: 'ace',
+            weight: 10,
+            input: true,
+            key: 'componentJson',
+            label: 'Custom Element JSON',
+            tooltip: 'Enter the JSON for this custom element.'
+        }
+    ];
+});
+define('skylark-formio/components/unknown/Unknown.form',['./editForm/Unknown.edit.display'], function (UnknownEditDisplay) {
+    'use strict';
+    return function () {
+        return {
+            components: [{
+                    type: 'tabs',
+                    key: 'tabs',
+                    components: [{
+                            label: 'Custom',
+                            key: 'display',
+                            weight: 0,
+                            components: UnknownEditDisplay
+                        }]
+                }]
+        };
+    };
+});
+define('skylark-formio/components/url/editForm/Url.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'inputMask',
+            ignore: true
+        },
+        {
+            key: 'allowMultipleMasks',
+            ignore: true
+        },
+        {
+            key: 'showWordCount',
+            ignore: true
+        },
+        {
+            key: 'showCharCount',
+            ignore: true
+        }
+    ];
+});
+define('skylark-formio/components/url/editForm/Url.edit.data',[],function () {
+    'use strict';
+    return [{
+            key: 'case',
+            ignore: true
+        }];
+});
+define('skylark-formio/components/url/Url.form',[
+    '../textfield/TextField.form',
+    './editForm/Url.edit.display',
+    './editForm/Url.edit.data'
+], function (textEditForm, UrlEditDisplay, UrlEditData) {
+    'use strict';
+    return function (...extend) {
+        return textEditForm([
+            {
+                key: 'display',
+                components: UrlEditDisplay
+            },
+            {
+                key: 'data',
+                components: UrlEditData
+            }
+        ], ...extend);
+    };
+});
+define('skylark-formio/components/well/editForm/Well.edit.display',[],function () {
+    'use strict';
+    return [
+        {
+            key: 'labelPosition',
+            ignore: true
+        },
+        {
+            key: 'placeholder',
+            ignore: true
+        },
+        {
+            key: 'description',
+            ignore: true
+        },
+        {
+            key: 'hideLabel',
+            ignore: true
+        },
+        {
+            key: 'autofocus',
+            ignore: true
+        },
+        {
+            key: 'tooltip',
+            ignore: true
+        },
+        {
+            key: 'tabindex',
+            ignore: true
+        }
+    ];
+});
+define('skylark-formio/components/well/Well.form',[
+    '../_classes/nested/NestedComponent.form',
+    './editForm/Well.edit.display'
+], function (nestedComponentForm, WellEditDisplay) {
+    'use strict';
+    return function (...extend) {
+        return nestedComponentForm([{
+                key: 'display',
+                components: WellEditDisplay
+            }], ...extend);
+    };
+});
+define('skylark-formio/components/builder',[
+    './index',
+    './address/Address.form',
+    './button/Button.form',
+    './checkbox/Checkbox.form',
+    './columns/Columns.form',
+    './container/Container.form',
+    './content/Content.form',
+    './currency/Currency.form',
+    './datagrid/DataGrid.form',
+    './datamap/DataMap.form',
+    './datetime/DateTime.form',
+    './day/Day.form',
+    './editgrid/EditGrid.form',
+    './email/Email.form',
+    './fieldset/Fieldset.form',
+    './file/File.form',
+    './form/Form.form',
+    './hidden/Hidden.form',
+    './html/HTML.form',
+    './number/Number.form',
+    './panel/Panel.form',
+    './password/Password.form',
+    './phonenumber/PhoneNumber.form',
+    './radio/Radio.form',
+    './recaptcha/ReCaptcha.form',
+    './resource/Resource.form',
+    './selectboxes/SelectBoxes.form',
+    './select/Select.form',
+    './signature/Signature.form',
+    './survey/Survey.form',
+    './table/Table.form',
+    './tabs/Tabs.form',
+    './tags/Tags.form',
+    './textarea/TextArea.form',
+    './textfield/TextField.form',
+    './time/Time.form',
+    './tree/Tree.form',
+    './unknown/Unknown.form',
+    './url/Url.form',
+    './well/Well.form'
+], function (Components, AddressForm, ButtonForm, CheckboxForm, ColumnsForm, ContainerForm, ContentForm, CurrencyForm, DataGridForm, DataMapForm, DateTimeForm, DayForm, EditGridForm, EmailForm, FieldsetForm, FileForm, FormForm, HiddenForm, HtmlElementForm, NumberForm, PanelForm, PasswordForm, PhoneNumberForm, RadioForm, ReCaptchaForm, ResourceForm, SelectboxesForm, SelectForm, SignatureForm, SurveyForm, TableForm, TabsForm, TagsForm, TextAreaForm, TextfieldForm, TimeForm, TreeForm, UnknownForm, UrlForm, WellForm) {
+    'use strict';
+    Components.address.editForm = AddressForm;
+    Components.button.editForm = ButtonForm;
+    Components.checkbox.editForm = CheckboxForm;
+    Components.columns.editForm = ColumnsForm;
+    Components.container.editForm = ContainerForm;
+    Components.content.editForm = ContentForm;
+    Components.currency.editForm = CurrencyForm;
+    Components.datagrid.editForm = DataGridForm;
+    Components.datamap.editForm = DataMapForm;
+    Components.datetime.editForm = DateTimeForm;
+    Components.day.editForm = DayForm;
+    Components.editgrid.editForm = EditGridForm;
+    Components.email.editForm = EmailForm;
+    Components.fieldset.editForm = FieldsetForm;
+    Components.file.editForm = FileForm;
+    Components.form.editForm = FormForm;
+    Components.hidden.editForm = HiddenForm;
+    Components.htmlelement.editForm = HtmlElementForm;
+    Components.number.editForm = NumberForm;
+    Components.panel.editForm = PanelForm;
+    Components.password.editForm = PasswordForm;
+    Components.phoneNumber.editForm = PhoneNumberForm;
+    Components.radio.editForm = RadioForm;
+    Components.recaptcha.editForm = ReCaptchaForm;
+    Components.resource.editForm = ResourceForm;
+    Components.select.editForm = SelectForm;
+    Components.selectboxes.editForm = SelectboxesForm;
+    Components.signature.editForm = SignatureForm;
+    Components.survey.editForm = SurveyForm;
+    Components.table.editForm = TableForm;
+    Components.tabs.editForm = TabsForm;
+    Components.tags.editForm = TagsForm;
+    Components.textarea.editForm = TextAreaForm;
+    Components.textfield.editForm = TextfieldForm;
+    Components.time.editForm = TimeForm;
+    Components.tree.editForm = TreeForm;
+    Components.unknown.editForm = UnknownForm;
+    Components.url.editForm = UrlForm;
+    Components.well.editForm = WellForm;
+    return Components;
 });
 define('skylark-formio/WebformBuilder',[
     './Webform',
@@ -19253,11 +40980,12 @@ define('skylark-formio/WebformBuilder',[
     './utils/formUtils',
     './utils/builder',
     'skylark-lodash',
-    './templates/Templates'
+    './templates/Templates',
+    "./components/builder"
 ], function (Webform, Component, dragula, Tooltip, NativePromise, Components, Formio, a, b, BuilderUtils, _, Templates) {
     'use strict';
-    require('./components/builder');
-    return class WebformBuilder extends Component {
+
+    class WebformBuilder extends Component {
         constructor() {
             let element, options;
             if (arguments[0] instanceof HTMLElement || arguments[1]) {
@@ -20258,6 +41986,9 @@ define('skylark-formio/WebformBuilder',[
             }
         }
     };
+
+
+    return WebformBuilder
 });
 define('skylark-formio/PDFBuilder',[
     'skylark-lodash',
@@ -20804,18 +42535,170 @@ define('skylark-formio/WizardBuilder',[
         }
     };
 });
-define('skylark-formio/main',[
-	"./Formio",
-	"./Form",
-	"./Webform",
-	"./WebformBuilder",
-	"./PDF",
-	"./PDFBuilder",
-	"./Wizard",
-	"./WizardBuilder"
+define('skylark-formio/builders/Builders',[
+    'skylark-lodash',
+    '../PDFBuilder',
+    '../WebformBuilder',
+    '../WizardBuilder'
+], function (_, pdf, webform, wizard) {
+    'use strict';
+    class Builders {
+        static addBuilder(name, builder) {
+            Builders.builders[name] = builder;
+        }
+        static addBuilders(builders) {
+            Builders.builders = _.merge(Builders.builders, builders);
+        }
+        static getBuilder(name) {
+            return Builders.builders[name];
+        }
+        static getBuilders() {
+            return Builders.builders;
+        }
+    };
+    Builders.builders = {
+        pdf,
+        webform,
+        wizard
+    };
 
-],function(){
-	
+    return Builders;
+});
+define('skylark-formio/formio.form',[
+    './components/index',
+    './builders/Builders',
+    './components/Components',
+    './displays/Displays',
+    './templates/Templates',
+    './providers/index',
+    './validator/Rules',
+    './Formio',
+    './Form',
+    './utils/index'
+], function (AllComponents, Builders, Components, Displays, Templates, Providers, Rules, Formio, Form, Utils) {
+    'use strict';
+    Components.setComponents(AllComponents);
+    const registerPlugin = plugin => {
+        if (typeof plugin !== 'object') {
+            return;
+        }
+        for (const key of Object.keys(plugin)) {
+            const current = plugin.framework || Templates.framework || 'bootstrap';
+            switch (key) {
+            case 'options':
+                Formio.options = plugin.options;
+                break;
+            case 'templates':
+                for (const framework of Object.keys(plugin.templates)) {
+                    Templates.extendTemplate(framework, plugin.templates[framework]);
+                }
+                if (plugin.templates[current]) {
+                    Templates.current = plugin.templates[current];
+                }
+                break;
+            case 'components':
+                Components.setComponents(plugin.components);
+                break;
+            case 'framework':
+                Templates.framework = plugin.framework;
+                break;
+            case 'fetch':
+                for (const name of Object.keys(plugin.fetch)) {
+                    Formio.registerPlugin(plugin.fetch[name], name);
+                }
+                break;
+            case 'providers':
+                for (const type of Object.keys(plugin.providers)) {
+                    Providers.addProviders(type, plugin.providers[type]);
+                }
+                break;
+            case 'displays':
+                Displays.addDisplays(plugin.displays);
+                break;
+            case 'builders':
+                Builders.addBuilders(plugin.builders);
+                break;
+            case 'rules':
+                Rules.addRules(plugin.rules);
+                break;
+            default:
+                console.log('Unknown plugin option', key);
+            }
+        }
+    };
+    Formio.use = (...plugins) => {
+        plugins.forEach(plugin => {
+            if (Array.isArray(plugin)) {
+                plugin.forEach(p => registerPlugin(p));
+            } else {
+                registerPlugin(plugin);
+            }
+        });
+    };
+    Formio.loadModules = (path = `${ Formio.getApiUrl() }/externalModules.js`, name = 'externalModules') => {
+        Formio.requireLibrary(name, name, path, true).then(modules => {
+            Formio.use(modules);
+        });
+    };
+    Formio.Components = Components;
+    Formio.Templates = Templates;
+    Formio.Builders = Builders;
+    Formio.Utils = Utils;
+    Formio.Form = Form;
+    Formio.Displays = Displays;
+    Formio.Providers = Providers;
+    Formio.Formio = Formio;
+    return {
+        Builders,
+        Components,
+        Displays,
+        Providers,
+        Templates,
+        Utils,
+        Form,
+        Formio
+    };
+});
+define('skylark-formio/builders/index',['./Builders'], function (Builders) {
+    'use strict';
+    return Builders;
+});
+define('skylark-formio/FormBuilder',[
+    './Formio',
+    './builders/index',
+    './Form'
+], function (Formio, Builders, Form) {
+    'use strict';
+
+    class FormBuilder extends Form {
+        constructor(element, form, options) {
+            form = form || {};
+            options = options || {};
+            super(element, form, Object.assign(options, FormBuilder.options, Formio.options && Formio.options.builder ? Formio.options.builder : {}));
+        }
+        create(display) {
+            if (Builders.builders[display]) {
+                return new Builders.builders[display](this.element, this.options);
+            } else {
+                return new Builders.builders['webform'](this.element, this.options);
+            }
+        }
+    };
+
+    FormBuilder.options = {};
+    Formio.builder = (...args) => {
+        return new FormBuilder(...args).ready;
+    };
+    
+
+    return Formio.FormBuilder = FormBuilder;
+
+});
+define('skylark-formio/main',[
+	"./formio.form",
+	"./FormBuilder"
+],function(formios){
+	return formios;
 });
 define('skylark-formio', ['skylark-formio/main'], function (main) { return main; });
 

@@ -1,5 +1,5 @@
 define([
-    '..//../vendors/text-mask-addons/index',
+    '../../vendors/text-mask-addons/index',
     'skylark-lodash',
     '../../utils/utils',
     '../number/Number'

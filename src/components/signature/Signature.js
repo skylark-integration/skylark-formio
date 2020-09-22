@@ -1,5 +1,5 @@
 define([
-    '../../vendorssignature_pad/SignaturePad',
+    '../../vendors/signature_pad/SignaturePad',
     '../_classes/input/Input',
     'skylark-lodash'
 ], function (SignaturePad, Input, _) {

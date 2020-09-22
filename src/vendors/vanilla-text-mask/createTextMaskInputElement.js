@@ -6,7 +6,7 @@ define([
 ],function(utilities,constants,adjustCaretPosition,conformToMask){
 
 
-  const {convertMaskToPlaceholder, isArray, processCaretTraps} = utilities;
+  const {convertMaskToPlaceholder, isArray, processCaretTraps,isString} = utilities;
   const {strFunction} = constants;
 
   const defaultPlaceholderChar = constants.placeholderChar;

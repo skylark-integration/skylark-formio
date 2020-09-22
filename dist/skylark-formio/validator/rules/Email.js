@@ -5,5 +5,5 @@
  * @link https://github.com/skylark-integration/skylark-formio/
  * @license MIT
  */
-const Rule=require("./Rule");module.exports=class extends Rule{check(e){if(!e)return!0;return/^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/.test(e)}},Email.prototype.defaultMessage="{{field}} must be a valid email.";
+define(["./Rule"],function(e){"use strict";class t extends e{check(e){if(!e)return!0;return/^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/.test(e)}}return t.prototype.defaultMessage="{{field}} must be a valid email.",t});
 //# sourceMappingURL=../../sourcemaps/validator/rules/Email.js.map

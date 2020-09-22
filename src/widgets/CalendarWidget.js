@@ -81,14 +81,14 @@ define([
                     this.emit('blur');
                 }
             };
-            this.settings.undefined = (date, format) => {
+            this.settings.formatDate = (date, format) => {
                 if (this.settings.readOnly && format === this.settings.altFormat) {
-                    if (this.settings.saveAs === 'text' || this.undefined()) {
-                        return Flatpickr.undefined(date, format);
+                    if (this.settings.saveAs === 'text' || this.formatDate()) {
+                        return Flatpickr.formatDate(date, format);
                     }
                     return utils.formatOffset(Flatpickr.undefined.bind(Flatpickr), date, format, this.timezone);
                 }
-                return Flatpickr.undefined(date, format);
+                return Flatpickr.formatDate(date, format);
             };
             if (this._input) {
                 this.calendar = new Flatpickr(this._input, this.settings);
@@ -199,7 +199,7 @@ define([
                 return super.setValue(value);
             }
             if (value) {
-                if (this.settings.saveAs !== 'text' && this.settings.readOnly && !this.undefined()) {
+                if (this.settings.saveAs !== 'text' && this.settings.readOnly && !this.loadZones()) {
                     this.calendar.setDate(utils.momentDate(value, this.valueFormat, this.timezone).toDate(), false);
                 } else {
                     this.calendar.setDate(moment(value, this.valueMomentFormat).toDate(), false);

@@ -1,0 +1,1 @@
+define([], function() { return "<tr ref=\"row\">\n  <td>\n    {{ctx.element}}\n  </td>\n  {% if (!ctx.disabled) { %}\n  <td>\n    <button type=\"button\" class=\"btn btn-secondary\" ref=\"removeRow\">\n      <i class=\"{{ctx.iconClass('remove-circle')}}\"></i>\n    </button>\n  </td>\n  {% } %}\n</tr>\n"; });

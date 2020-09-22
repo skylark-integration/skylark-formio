@@ -1,5 +1,5 @@
 define([
-    './components',
+    './components/index',
     './builders/Builders',
     './components/Components',
     './displays/Displays',

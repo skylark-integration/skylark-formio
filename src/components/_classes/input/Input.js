@@ -1,7 +1,7 @@
 define([
     '../multivalue/Multivalue',
     '../../../utils/utils',
-    '../../../widgets',
+    '../../../widgets/index',
     'skylark-lodash'
 ], function (Multivalue, a, Widgets, _) {
     'use strict';

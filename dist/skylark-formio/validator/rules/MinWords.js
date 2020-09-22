@@ -5,5 +5,5 @@
  * @link https://github.com/skylark-integration/skylark-formio/
  * @license MIT
  */
-const Rule=require("./Rule");module.exports=class extends Rule{check(e){const t=parseInt(this.settings.length,10);return!t||!e||"string"!=typeof e||e.trim().split(/\s+/).length>=t}},MinWords.prototype.defaultMessage="{{field}} must have at least {{- settings.length}} words.";
+define(["./Rule"],function(t){"use strict";class e extends t{check(t){const e=parseInt(this.settings.length,10);return!e||!t||"string"!=typeof t||t.trim().split(/\s+/).length>=e}}return e.prototype.defaultMessage="{{field}} must have at least {{- settings.length}} words.",e});
 //# sourceMappingURL=../../sourcemaps/validator/rules/MinWords.js.map

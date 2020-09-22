@@ -1,0 +1,1 @@
+define([], function() { return "<div class=\"{{ctx.className}}\">\n  <div style=\"position: relative;\">\n    {{ ctx.wizardHeader }}\n    <div class=\"wizard-page\" ref=\"{{ctx.wizardKey}}\">\n      {{ctx.components}}\n    </div>\n    {{ ctx.wizardNav }}\n  </div>\n</div>"; });

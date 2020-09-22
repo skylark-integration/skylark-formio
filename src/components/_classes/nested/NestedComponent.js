@@ -5,8 +5,7 @@ define([
     '../../../vendors/getify/npo'
 ], function (_, Field, Components, NativePromise) {
     'use strict';
-    'use strict';
-    return class NestedComponent extends Field {
+    class NestedComponent extends Field {
         static schema(...extend) {
             return Field.schema({ tree: false }, ...extend);
         }
@@ -472,4 +471,9 @@ define([
             }, false);
         }
     };
+
+
+    Components.NestedComponent = NestedComponent;
+
+    return NestedComponent;
 });

@@ -5,5 +5,5 @@
  * @link https://github.com/skylark-integration/skylark-formio/
  * @license MIT
  */
-define(["../../utils/utils","skylark-moment","skylark-lodash"],function(t,e,s){"use strict";const i=require("./Rule");module.exports=class extends i{check(i){if(!i)return!0;if(i===this.settings.dateLimit)return!0;const n=e(i),a=t.getDateSetting(this.settings.dateLimit);return!!s.isNull(a)||(a.setHours(0,0,0,0),n.isBefore(a)||n.isSame(a))}},MaxDate.prototype.defaultMessage="{{field}} should not contain date after {{settings.dateLimit}}"});
+define(["./Rule","../../utils/utils","skylark-moment","skylark-lodash"],function(t,e,s,i){"use strict";class n extends t{check(t){if(!t)return!0;if(t===this.settings.dateLimit)return!0;const n=s(t),r=e.getDateSetting(this.settings.dateLimit);return!!i.isNull(r)||(r.setHours(0,0,0,0),n.isBefore(r)||n.isSame(r))}}return n.prototype.defaultMessage="{{field}} should not contain date after {{settings.dateLimit}}",n});
 //# sourceMappingURL=../../sourcemaps/validator/rules/MaxDate.js.map

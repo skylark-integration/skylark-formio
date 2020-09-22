@@ -1,0 +1,1 @@
+define([], function() { return "<div id=\"{{ctx.mapId}}\" style=\"min-height: 300px; height: calc(100vh - 600px);\" ref=\"gmapElement\"></div>\n"; });

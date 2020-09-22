@@ -5,5 +5,5 @@
  * @link https://github.com/skylark-integration/skylark-formio/
  * @license MIT
  */
-const Rule=require("./Rule");module.exports=class extends Rule{check(e){return!this.component.isValueHidden()&&!this.component.isEmpty(e)}},Required.prototype.defaultMessage="{{field}} is required";
+define(["./Rule"],function(e){"use strict";class t extends e{check(e){return!this.component.isValueHidden()&&!this.component.isEmpty(e)}}return t.prototype.defaultMessage="{{field}} is required",t});
 //# sourceMappingURL=../../sourcemaps/validator/rules/Required.js.map

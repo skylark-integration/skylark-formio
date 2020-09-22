@@ -8,8 +8,9 @@ define([
     './components/Components',
     './components/_classes/nesteddata/NestedDataComponent',
     './utils/utils',
-    './utils/formUtils'
-], function (_, moment, EventEmitter, i18next, Formio, NativePromise, Components, NestedDataComponent, a, b) {
+    './utils/formUtils',
+    "./i18n"
+], function (_, moment, EventEmitter, i18next, Formio, NativePromise, Components, NestedDataComponent, utils, formUtils,i18n) {
     'use strict';
     Formio.forms = {};
     Formio.registerComponent = Components.setComponent;
@@ -36,7 +37,7 @@ define([
         }
         return options;
     }
-    return class Webform extends NestedDataComponent {
+    class Webform extends NestedDataComponent {
         constructor() {
             let element, options;
             if (arguments[0] instanceof HTMLElement || arguments[1]) {
@@ -51,7 +52,7 @@ define([
             if (this.options.baseUrl) {
                 Formio.setBaseUrl(this.options.baseUrl);
             }
-            let i18n = require('./i18n').default;
+            //let i18n = require('./i18n').default;
             if (options && options.i18n && !options.i18nReady) {
                 if (options.i18n.resources) {
                     i18n = options.i18n;
@@ -415,7 +416,7 @@ define([
                 }
             }).then(submissions => {
                 if (submissions.length > 0 && !this.options.skipDraftRestore) {
-                    const draft = a.fastCloneDeep(submissions[0]);
+                    const draft = utils.fastCloneDeep(submissions[0]);
                     return this.setSubmission(draft).then(() => {
                         this.draftEnabled = true;
                         this.savingDraft = false;
@@ -428,9 +429,9 @@ define([
             });
         }
         get schema() {
-            const schema = a.fastCloneDeep(_.omit(this._form, ['components']));
+            const schema = utils.fastCloneDeep(_.omit(this._form, ['components']));
             schema.components = [];
-            this.undefined(component => schema.components.push(component.schema));
+            this.eachComponent(component => schema.components.push(component.schema));
             return schema;
         }
         mergeData(_this, _that) {
@@ -549,7 +550,7 @@ define([
         }
         hasRequiredFields() {
             let result = false;
-            b.eachComponent(this.form.components, component => {
+            formUtils.eachComponent(this.form.components, component => {
                 if (component.validate.required) {
                     result = true;
                     return true;
@@ -706,7 +707,7 @@ define([
             this.loading = false;
             this.submitting = false;
             this.setPristine(true);
-            this.setValue(a.fastCloneDeep(submission), {
+            this.setValue(utils.fastCloneDeep(submission), {
                 noValidate: true,
                 noCheck: true
             });
@@ -794,10 +795,10 @@ define([
                         saved: false
                     });
                 }
-                const submission = a.fastCloneDeep(this.submission || {});
+                const submission = utils.fastCloneDeep(this.submission || {});
                 submission.metadata = submission.metadata || {};
                 _.defaults(submission.metadata, {
-                    timezone: _.get(this, '_submission.metadata.timezone', a.currentTimezone()),
+                    timezone: _.get(this, '_submission.metadata.timezone', utils.currentTimezone()),
                     offset: parseInt(_.get(this, '_submission.metadata.offset', moment().utcOffset()), 10),
                     referrer: document.referrer,
                     browserName: navigator.appName,
@@ -930,4 +931,7 @@ define([
     Webform.setBaseUrl = Formio.setBaseUrl;
     Webform.setApiUrl = Formio.setApiUrl;
     Webform.setAppUrl = Formio.setAppUrl;
+
+
+    return Webform;
 });

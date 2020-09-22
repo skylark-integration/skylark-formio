@@ -5,5 +5,5 @@
  * @link https://github.com/skylark-integration/skylark-formio/
  * @license MIT
  */
-define(["skylark-lodash"],function(e){"use strict";const s=require("./Rule");module.exports=class extends s{check(s){const t=parseFloat(this.settings.limit);return!(!Number.isNaN(t)&&e.isNumber(s))||parseFloat(s)>=t}},Min.prototype.defaultMessage="{{field}} cannot be less than {{settings.limit}}."});
+define(["skylark-lodash","./Rule"],function(e,s){class t extends s{check(s){const t=parseFloat(this.settings.limit);return!(!Number.isNaN(t)&&e.isNumber(s))||parseFloat(s)>=t}}return t.prototype.defaultMessage="{{field}} cannot be less than {{settings.limit}}.",t});
 //# sourceMappingURL=../../sourcemaps/validator/rules/Min.js.map

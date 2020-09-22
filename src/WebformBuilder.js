@@ -10,11 +10,12 @@ define([
     './utils/formUtils',
     './utils/builder',
     'skylark-lodash',
-    './templates/Templates'
+    './templates/Templates',
+    "./components/builder"
 ], function (Webform, Component, dragula, Tooltip, NativePromise, Components, Formio, a, b, BuilderUtils, _, Templates) {
     'use strict';
-    require('./components/builder');
-    return class WebformBuilder extends Component {
+
+    class WebformBuilder extends Component {
         constructor() {
             let element, options;
             if (arguments[0] instanceof HTMLElement || arguments[1]) {
@@ -1015,4 +1016,7 @@ define([
             }
         }
     };
+
+
+    return WebformBuilder
 });

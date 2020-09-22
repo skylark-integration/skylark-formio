@@ -566,7 +566,7 @@ define(['../../../utils/utils'], function (a) {
                         label: 'Any Change',
                         value: 'data'
                     });
-                    context.utils.undefined(context.instance.options.editForm.components, function (component, path) {
+                    context.utils.eachComponent(context.instance.options.editForm.components, function (component, path) {
                         if (component.key !== context.data.key) {
                             values.push({
                                 label: component.label || component.key,

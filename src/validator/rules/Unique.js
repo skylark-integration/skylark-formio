@@ -1,11 +1,10 @@
 define([
+    "./Rule",
     '../../utils/utils',
     'skylark-lodash',
     '../../vendors/getify/npo'
-], function (a, _, NativePromise) {
-    'use strict';
-    const Rule = require('./Rule');
-    module.exports = class Unique extends Rule {
+], function (Rule,utils, _, NativePromise) {
+    class Unique extends Rule {
         check(value) {
             if (!value || _.isEmpty(value)) {
                 return true;
@@ -20,12 +19,12 @@ define([
                 const query = { form: form._id };
                 if (_.isString(value)) {
                     query[path] = {
-                        $regex: new RegExp(`^${ a.escapeRegExCharacters(value) }$`),
+                        $regex: new RegExp(`^${ utils.escapeRegExCharacters(value) }$`),
                         $options: 'i'
                     };
                 } else if (_.isPlainObject(value) && value.address && value.address['address_components'] && value.address['place_id']) {
                     query[`${ path }.address.place_id`] = {
-                        $regex: new RegExp(`^${ a.escapeRegExCharacters(value.address['place_id']) }$`),
+                        $regex: new RegExp(`^${ utils.escapeRegExCharacters(value.address['place_id']) }$`),
                         $options: 'i'
                     };
                 } else if (_.isArray(value)) {
@@ -47,4 +46,6 @@ define([
         }
     };
     Unique.prototype.defaultMessage = '{{field}} must be unique';
+
+    return Unique;
 });

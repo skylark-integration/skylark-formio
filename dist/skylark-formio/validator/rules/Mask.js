@@ -5,5 +5,5 @@
  * @link https://github.com/skylark-integration/skylark-formio/
  * @license MIT
  */
-define(["../../utils/utils"],function(e){"use strict";const t=require("./Rule");module.exports=class extends t{check(t){let s;if(this.component.isMultipleMasksField){const a=t?t.maskName:void 0,i=this.component.getMaskByName(a);i&&(s=e.getInputMask(i)),t=t?t.value:t}else s=e.getInputMask(this.settings.mask);return!t||!s||e.matchInputMask(t,s)}},Mask.prototype.defaultMessage="{{field}} does not match the mask."});
+define(["./Rule","../../utils/utils"],function(t,e){"use strict";class s extends t{check(t){let s;if(this.component.isMultipleMasksField){const a=t?t.maskName:void 0,n=this.component.getMaskByName(a);n&&(s=e.getInputMask(n)),t=t?t.value:t}else s=e.getInputMask(this.settings.mask);return!t||!s||e.matchInputMask(t,s)}}return s.prototype.defaultMessage="{{field}} does not match the mask.",s});
 //# sourceMappingURL=../../sourcemaps/validator/rules/Mask.js.map

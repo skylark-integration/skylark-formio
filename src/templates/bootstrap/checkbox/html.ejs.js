@@ -1,0 +1,1 @@
+define([], function() { return "<label class=\"{{ctx.input.labelClass}}\">\n    {{ctx.input.content}}\n    {% if (!ctx.self.labelIsHidden()) { %}<span>{{ctx.input.label}}</span>{% } %}\n</label>\n<div ref=\"value\">{% if (ctx.checked) { %}True{% } else { %}False{% } %}</div>\n"; });

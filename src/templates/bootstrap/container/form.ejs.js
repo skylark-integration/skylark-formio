@@ -1,0 +1,1 @@
+define([], function() { return "<div ref=\"{{ctx.nestedKey}}\">\n  {{ctx.children}}\n</div>\n"; });

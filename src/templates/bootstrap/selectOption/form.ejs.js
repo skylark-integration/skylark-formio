@@ -1,0 +1,1 @@
+define([], function() { return "<option {{ ctx.selected ? 'selected=\"selected\"' : '' }}\n  value=\"{{ctx.useId ? ctx.id : ctx.option.value}}\"\n  {% for (var attr in ctx.attrs) { %}\n  {{attr}}=\"{{ctx.attrs[attr]}}\"\n  {% } %}\n  >\n  {{ctx.t(ctx.option.label)}}\n</option>\n"; });

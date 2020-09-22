@@ -5,5 +5,5 @@
  * @link https://github.com/skylark-integration/skylark-formio/
  * @license MIT
  */
-const Rule=require("./Rule");module.exports=class extends Rule{check(e){const t=this.settings;let s=/\d{4}$/.exec(e);return s=s?s[0]:null,!+t||!+s||+s<=+t}},MaxYear.prototype.defaultMessage="{{field}} should not contain year greater than {{maxYear}}";
+define(["./Rule"],function(e){"use strict";class t extends e{check(e){const t=this.settings;let n=/\d{4}$/.exec(e);return n=n?n[0]:null,!+t||!+n||+n<=+t}}return t.prototype.defaultMessage="{{field}} should not contain year greater than {{maxYear}}",t});
 //# sourceMappingURL=../../sourcemaps/validator/rules/MaxYear.js.map

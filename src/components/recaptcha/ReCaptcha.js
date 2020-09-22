@@ -1,10 +1,13 @@
 define([
     '../_classes/component/Component',
     '../../Formio',
-    'lodash/get',
+    'skylark-lodash',
     '../../vendors/getify/npo'
-], function (Component, Formio, _get, NativePromise) {
+], function (Component, Formio, _, NativePromise) {
     'use strict';
+
+    var _get = _.get;
+
     return class ReCaptchaComponent extends Component {
         static schema(...extend) {
             return Component.schema({

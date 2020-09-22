@@ -5,5 +5,5 @@
  * @link https://github.com/skylark-integration/skylark-formio/
  * @license MIT
  */
-const Rule=require("./Rule");module.exports=class extends Rule{check(e){const{pattern:t}=this.settings;return!t||new RegExp(`^${t}$`).test(e)}},Pattern.prototype.defaultMessage="{{field}} does not match the pattern {{settings.pattern}}";
+define(["./Rule"],function(t){"use strict";class e extends t{check(t){const{pattern:e}=this.settings;return!e||new RegExp(`^${e}$`).test(t)}}return e.prototype.defaultMessage="{{field}} does not match the pattern {{settings.pattern}}",e});
 //# sourceMappingURL=../../sourcemaps/validator/rules/Pattern.js.map

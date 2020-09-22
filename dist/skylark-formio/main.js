@@ -5,5 +5,5 @@
  * @link https://github.com/skylark-integration/skylark-formio/
  * @license MIT
  */
-define(["./Formio","./Form","./Webform","./WebformBuilder","./PDF","./PDFBuilder","./Wizard","./WizardBuilder"],function(){});
+define(["./formio.form","./FormBuilder"],function(r){return r});
 //# sourceMappingURL=sourcemaps/main.js.map

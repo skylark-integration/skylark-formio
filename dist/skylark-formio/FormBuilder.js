@@ -5,5 +5,5 @@
  * @link https://github.com/skylark-integration/skylark-formio/
  * @license MIT
  */
-define(["./Formio","./builders","./Form"],function(e,s,t){"use strict";return class i extends t{constructor(s,t,o){t=t||{},o=o||{},super(s,t,Object.assign(o,i.options,e.options&&e.options.builder?e.options.builder:{}))}create(e){return s.builders[e]?new s.builders[e](this.element,this.options):new s.builders.webform(this.element,this.options)}}});
+define(["./Formio","./builders/index","./Form"],function(e,i,s){"use strict";class t extends s{constructor(i,s,o){s=s||{},o=o||{},super(i,s,Object.assign(o,t.options,e.options&&e.options.builder?e.options.builder:{}))}create(e){return i.builders[e]?new i.builders[e](this.element,this.options):new i.builders.webform(this.element,this.options)}}return t.options={},e.builder=((...e)=>new t(...e).ready),e.FormBuilder=t});
 //# sourceMappingURL=sourcemaps/FormBuilder.js.map

@@ -2,8 +2,8 @@ define([
     'skylark-lodash',
     'skylark-moment',
     '../_classes/input/Input',
-    '../../utils',
-    '../../widgets'
+    '../../utils/index',
+    '../../widgets/index'
 ], function (_, moment, Input, FormioUtils, Widgets) {
     'use strict';
     return class DateTimeComponent extends Input {

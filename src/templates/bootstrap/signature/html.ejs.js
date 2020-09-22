@@ -1,0 +1,1 @@
+define([], function() { return "<img style=\"width: 100%;\" ref=\"signatureImage\">\n"; });

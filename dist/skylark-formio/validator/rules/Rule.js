@@ -5,5 +5,5 @@
  * @link https://github.com/skylark-integration/skylark-formio/
  * @license MIT
  */
-module.exports=class{constructor(s,t,c){this.component=s,this.settings=t,this.config=c}check(){}};
+define([],function(){"use strict";return class{constructor(t,s,c){this.component=t,this.settings=s,this.config=c}check(){}}});
 //# sourceMappingURL=../../sourcemaps/validator/rules/Rule.js.map

@@ -1,5 +1,5 @@
 define([
-    '../../vendors/kraaden/autocompleter',
+    '../../vendors/kraaden/autocomplete',
     'skylark-lodash',
     '../../Formio',
     '../../providers/address/GoogleAddressProvider',

@@ -6,7 +6,7 @@ define([
     './providers/index',
     "skylark-lodash",
     './utils/utils',
-    '../vendors/jwt-decode/decode',
+    './vendors/jwt-decode/decode',
     './polyfills/index'
 ], function (NativePromise, fetchPonyfill, EventEmitter, cookies, Providers, _ , utils, jwtDecode) {
     'use strict';

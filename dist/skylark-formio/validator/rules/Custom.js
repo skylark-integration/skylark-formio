@@ -5,5 +5,5 @@
  * @link https://github.com/skylark-integration/skylark-formio/
  * @license MIT
  */
-const Rule=require("./Rule");module.exports=class extends Rule{check(e,t,s,o){const r=this.settings.custom;if(!r)return!0;const u=this.component.evaluate(r,{valid:!0,data:t,row:s,rowIndex:o,input:e},"valid",!0);return null===u||u}},Custom.prototype.defaultMessage="{{error}}";
+define(["./Rule"],function(t){"use strict";class e extends t{check(t,e,n,s){const r=this.settings.custom;if(!r)return!0;const o=this.component.evaluate(r,{valid:!0,data:e,row:n,rowIndex:s,input:t},"valid",!0);return null===o||o}}return e.prototype.defaultMessage="{{error}}",e});
 //# sourceMappingURL=../../sourcemaps/validator/rules/Custom.js.map

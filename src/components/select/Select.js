@@ -1,11 +1,13 @@
 define([
-    '../../utils/ChoicesWrapper',
+//    '../../utils/ChoicesWrapper',
     'skylark-lodash',
     '../../Formio',
     '../_classes/field/Field',
     '../../Form',
     '../../vendors/getify/npo'
-], function (Choices, _, Formio, Field, Form, NativePromise) {
+], function (
+   //Choices,  //TODO : lwf
+    _, Formio, Field, Form, NativePromise) {
     'use strict';
     return class SelectComponent extends Field {
         static schema(...extend) {

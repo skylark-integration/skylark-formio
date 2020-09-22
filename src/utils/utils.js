@@ -705,6 +705,25 @@ define([
         fastCloneDeep: fastCloneDeep,
         Evaluator,
         interpolate,
-        isInputComponent: isInputComponent
+        isInputComponent: isInputComponent,
+
+
+        isLayoutComponent: formUtils.isLayoutComponent,
+        eachComponent: formUtils.eachComponent,
+        matchComponent: formUtils.matchComponent,
+        getComponent: formUtils.getComponent,
+        searchComponents: formUtils.searchComponents,
+        findComponents: formUtils.findComponents,
+        findComponent: formUtils.findComponent,
+        removeComponent: formUtils.removeComponent,
+        generateFormChange: formUtils.generateFormChange,
+        applyFormChanges: formUtils.applyFormChanges,
+        flattenComponents: formUtils.flattenComponents,
+        hasCondition: formUtils.hasCondition,
+        parseFloatExt: formUtils.parseFloatExt,
+        formatAsCurrency: formUtils.formatAsCurrency,
+        escapeRegExCharacters: formUtils.escapeRegExCharacters,
+        getValue: formUtils.getValue,
+        getStrings: formUtils.getStrings
     };
 });
