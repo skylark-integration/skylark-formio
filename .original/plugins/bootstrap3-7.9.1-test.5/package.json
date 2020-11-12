@@ -44,7 +44,7 @@
     "webpack-node-externals": "^2.5.0"
   },
   "optionalDependencies": {
-    "json-logic-js": "^1.1.0"
+    "json-logic-js": "^2.0.0"
   },
   "browserify": {
     "transform": [
