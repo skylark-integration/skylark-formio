@@ -1,7 +1,7 @@
 define([
-    '../_classes/input/Input',
- //   'choices.js'
-], function (Input, Choices) {
+    'skylark-choices',
+    '../_classes/input/Input'
+], function (Choices,Input) {
     'use strict';
     //TODO: lwf
     return class TagsComponent extends Input {

@@ -27,15 +27,16 @@
   },
   "license": "MIT",
   "dependencies": {
-    "skylark-langx": "git+https://github.com/skylarklangx/skylark-langx.git#master",
-    "skylark-jquery": "git+https://github.com/skylark-integration/skylark-jquery.git#master",
-    "skylark-textmask": "git+https://github.com/skylark-integration/skylark-textmask.git#master",
-    "skylark-bootstrap3": "git+https://github.com/skylark-integration/skylark-bootstrap3.git#master",
-    "skylark-moment": "git+https://github.com/skylark-integration/skylark-moment.git#master",
-    "skylark-dragula": "git+https://github.com/skylark-integration/skylark-dragula.git#master",
-    "skylark-popper": "git+https://github.com/skylark-integration/skylark-popper.git#master",
-    "skylark-i18next": "git+https://github.com/skylark-integration/skylark-i18next.git#master",
-    "skylark-lodash": "git+https://github.com/skylark-integration/skylark-lodash.git#master"
+    "skylark-bootstrap3": "git+https://github.com/skylark-integration/skylark-bootstrap3.git",
+    "skylark-choices": "git+https://github.com/skylark-integration/skylark-choices.git",
+    "skylark-dragula": "git+https://github.com/skylark-integration/skylark-dragula.git",
+    "skylark-i18next": "git+https://github.com/skylark-integration/skylark-i18next.git",
+    "skylark-jquery": "git+https://github.com/skylark-integration/skylark-jquery.git",
+    "skylark-langx": "git+https://github.com/skylarklangx/skylark-langx.git",
+    "skylark-lodash": "git+https://github.com/skylark-integration/skylark-lodash.git",
+    "skylark-moment": "git+https://github.com/skylark-integration/skylark-moment.git",
+    "skylark-popper": "git+https://github.com/skylark-integration/skylark-popper.git",
+    "skylark-textmask": "git+https://github.com/skylark-integration/skylark-textmask.git"
   },
   "skylarkjs": {
     "directories": {

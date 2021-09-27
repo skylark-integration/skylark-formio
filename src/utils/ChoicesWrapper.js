@@ -1,4 +1,4 @@
-define(['choices.js'], function (Choices) {
+define(['skylark-choices'], function (Choices) {
     'use strict';
     Choices.prototype._generatePlaceholderValue = function () {
         if (this._isSelectElement && this.passedElement.placeholderOption) {

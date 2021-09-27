@@ -314,10 +314,22 @@ requirejs.config({
 //            location : "../../skylark-widgets-swt/src",
             main: 'main'
           },
-
+          {
+            name: 'skylark-redux',
+            location : "../node_modules/skylark-redux/dist/uncompressed/skylark-redux",
+//            location : "../../skylark-widgets-swt/src",
+            main: 'main'
+          },
+          {
+            name: 'skylark-choices',
+            location : "../node_modules/skylark-choices/dist/uncompressed/skylark-choices",
+//            location : "../../skylark-widgets-swt/src",
+            main: 'main'
+          },
           {
             name: 'skylark-formio',
-            location : "../dist/uncompressed/skylark-formio",
+            //location : "../dist/uncompressed/skylark-formio",
+            location : "../src",
             main: 'main'
           }                   
         ]
