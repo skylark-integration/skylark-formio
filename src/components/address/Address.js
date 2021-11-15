@@ -1,4 +1,5 @@
 define([
+    "skylark-langx",
     '../../vendors/kraaden/autocomplete',
     'skylark-lodash',
     '../../Formio',
@@ -6,7 +7,7 @@ define([
     '../_classes/field/Field',
     '../_classes/nested/NestedComponent',
     '../container/Container'
-], function (autocompleter, _, Formio, GoogleAddressProvider, Field, NestedComponent, ContainerComponent) {
+], function (langx,autocompleter, _, Formio, GoogleAddressProvider, Field, NestedComponent, ContainerComponent) {
     'use strict';
     const AddressComponentMode = {
         Autocomplete: 'autocomplete',
@@ -92,9 +93,9 @@ define([
         mergeSchema(component = {}) {
             let {defaultSchema} = this;
             if (component.components) {
-                defaultSchema = _.omit(defaultSchema, 'components');
+                defaultSchema = langx.omit(defaultSchema, 'components');
             }
-            return _.defaultsDeep(component, defaultSchema);
+            return langx.defaults(component, defaultSchema); //_.defaulsDeep
         }
         init() {
             this.components = this.components || [];
@@ -112,10 +113,10 @@ define([
                     const {map, provider, providerOptions} = this.component;
                     const {key, region} = map;
                     if (key) {
-                        _.set(providerOptions, 'params.key', key);
+                        langx.set(providerOptions, 'params.key', key);
                     }
                     if (region) {
-                        _.set(providerOptions, 'params.region', region);
+                        langx.set(providerOptions, 'params.region', region);
                     }
                     this.provider = this.initializeProvider(provider, providerOptions);
                 }
@@ -218,7 +219,7 @@ define([
             if (this.disabled) {
                 attr.disabled = 'disabled';
             }
-            _.defaults(attr, this.component.attributes);
+            langx.defaults(attr, this.component.attributes);
             return attr;
         }
         get templateName() {
@@ -384,7 +385,7 @@ define([
                 }
                 return this.getComponents().filter(component => component.hasValue(address)).map(component => [
                     component,
-                    _.get(address, component.key)
+                    langx.get(address, component.key)
                 ]).filter(([component, componentValue]) => !component.isEmpty(componentValue)).map(([component, componentValue]) => component.getValueAsString(componentValue)).join(', ');
             }
             return super.getValueAsString(address);

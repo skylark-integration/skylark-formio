@@ -1,4 +1,5 @@
 define([
+    "skylark-langx",
     'skylark-lodash',
     './editForm/Component.edit.conditional',
     './editForm/Component.edit.data',
@@ -8,10 +9,10 @@ define([
     './editForm/Component.edit.validation',
     './editForm/Component.edit.layout',
     './editForm/utils'
-], function (_, ComponentEditConditional, ComponentEditData, ComponentEditAPI, ComponentEditDisplay, ComponentEditLogic, ComponentEditValidation, ComponentEditLayout, EditFormUtils) {
+], function (langx,_, ComponentEditConditional, ComponentEditData, ComponentEditAPI, ComponentEditDisplay, ComponentEditLogic, ComponentEditValidation, ComponentEditLayout, EditFormUtils) {
     'use strict';
     return function (...extend) {
-        const components = _.cloneDeep([{
+        const components = langx.clone([{  //_.cloneDeep
                 type: 'tabs',
                 key: 'tabs',
                 components: [
@@ -61,7 +62,7 @@ define([
             }]).concat(extend.map(items => ({
             type: 'tabs',
             key: 'tabs',
-            components: _.cloneDeep(items)
+            components: langx.clone(items)  //_.cloneDeep
         })));
         return {
             components: _.unionWith(components, EditFormUtils.unifyComponents).concat({

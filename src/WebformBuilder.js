@@ -1,4 +1,5 @@
 define([
+    'skylark-langx/langx',
     './Webform',
     './components/_classes/component/Component',
     'skylark-dragula',
@@ -12,7 +13,7 @@ define([
     'skylark-lodash',
     './templates/Templates',
     "./components/builder"
-], function (Webform, Component, dragula, Tooltip, NativePromise, Components, Formio, a, b, BuilderUtils, _, Templates) {
+], function (langx,Webform, Component, dragula, Tooltip, NativePromise, Components, Formio, a, b, BuilderUtils, _, Templates) {
     'use strict';
 
     class WebformBuilder extends Component {
@@ -41,7 +42,7 @@ define([
             }
             this.dragDropEnabled = true;
             this.builder = _.defaultsDeep({}, this.options.builder, this.defaultGroups);
-            _.each(this.defaultGroups, (config, key) => {
+            langx.each(this.defaultGroups, (config, key) => {
                 if (config === false) {
                     this.builder[key] = false;
                 }
@@ -258,7 +259,7 @@ define([
             return true;
         }
         addExistingResourceFields(resources) {
-            _.each(resources, (resource, index) => {
+            langx.each(resources, (resource, index) => {
                 const resourceKey = `resource-${ resource.name }`;
                 const subgroup = {
                     key: resourceKey,
@@ -274,10 +275,10 @@ define([
                         return;
                     let componentName = component.label;
                     if (!componentName && component.key) {
-                        componentName = _.upperFirst(component.key);
+                        componentName = langx.upperFirst(component.key);
                     }
                     subgroup.componentOrder.push(component.key);
-                    subgroup.components[component.key] = _.merge(a.fastCloneDeep(Components.components[component.type].builderInfo), {
+                    subgroup.components[component.key] = _.merge(a.fastCloneDeep(Components.components[component.type].builderInfo), { //_.merge
                         key: component.key,
                         title: componentName,
                         group: 'resource',
@@ -987,7 +988,7 @@ define([
             if (!component || !component.group || !this.groups[component.group]) {
                 return;
             }
-            component = _.clone(component);
+            component = langx.clone(component); //_.clone lwf
             const groupInfo = this.groups[component.group];
             if (!groupInfo.components.hasOwnProperty(component.key)) {
                 groupInfo.components[component.key] = component;

@@ -1,14 +1,15 @@
 define([
+    "skylark-langx",
     '../multivalue/Multivalue',
     '../../../utils/utils',
     '../../../widgets/index',
     'skylark-lodash'
-], function (Multivalue, a, Widgets, _) {
+], function (langx,Multivalue, a, Widgets, _) {
     'use strict';
     return class Input extends Multivalue {
         constructor(component, options, data) {
             super(component, options, data);
-            this.triggerUpdateValueAt = _.debounce(this.updateValueAt.bind(this), 100);
+            this.triggerUpdateValueAt = langx.debounce(this.updateValueAt.bind(this), 100);
         }
         static schema(...extend) {
             return Multivalue.schema({ widget: { type: 'input' } }, ...extend);
@@ -29,7 +30,7 @@ define([
             if (this.disabled) {
                 attr.disabled = 'disabled';
             }
-            _.defaults(attr, this.component.attributes);
+            langx.defaults(attr, this.component.attributes);
             return {
                 id: this.key,
                 type: 'input',
@@ -39,7 +40,7 @@ define([
             };
         }
         get maskOptions() {
-            return _.map(this.component.inputMasks, mask => {
+            return langx.map(this.component.inputMasks, mask => {
                 return {
                     label: mask.label,
                     value: mask.label
@@ -50,7 +51,7 @@ define([
             return this.component.allowMultipleMasks && !!this.component.inputMasks && !!this.component.inputMasks.length;
         }
         getMaskByName(maskName) {
-            const inputMask = _.find(this.component.inputMasks, inputMask => {
+            const inputMask = langx.find(this.component.inputMasks, inputMask => {
                 return inputMask.label === maskName;
             });
             return inputMask ? inputMask.mask : undefined;
@@ -65,8 +66,8 @@ define([
             }));
         }
         get remainingWords() {
-            const maxWords = _.parseInt(_.get(this.component, 'validate.maxWords'), 10);
-            const wordCount = _.words(this.dataValue).length;
+            const maxWords = parseInt(langx.get(this.component, 'validate.maxWords'), 10); //_.parseInt
+            const wordCount = langx.words(this.dataValue).length;
             return maxWords - wordCount;
         }
         renderElement(value, index) {
@@ -116,15 +117,15 @@ define([
         }
         updateValueAt(value, flags, index) {
             flags = flags || {};
-            if (_.get(this.component, 'showWordCount', false)) {
+            if (langx.get(this.component, 'showWordCount', false)) {
                 if (this.refs.wordcount && this.refs.wordcount[index]) {
-                    const maxWords = _.parseInt(_.get(this.component, 'validate.maxWords', 0), 10);
-                    this.setCounter('words', this.refs.wordcount[index], _.words(value).length, maxWords);
+                    const maxWords = parseInt(langx.get(this.component, 'validate.maxWords', 0), 10);//_.parseInt
+                    this.setCounter('words', this.refs.wordcount[index], langx.words(value).length, maxWords);
                 }
             }
-            if (_.get(this.component, 'showCharCount', false)) {
+            if (langx.get(this.component, 'showCharCount', false)) {
                 if (this.refs.charcount && this.refs.charcount[index]) {
-                    const maxChars = _.parseInt(_.get(this.component, 'validate.maxLength', 0), 10);
+                    const maxChars = parseInt(langx.get(this.component, 'validate.maxLength', 0), 10); //_.parseInt
                     this.setCounter('characters', this.refs.charcount[index], value.length, maxChars);
                 }
             }

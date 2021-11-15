@@ -1,0 +1,91 @@
+<html>
+  <head>
+  <link rel="stylesheet" href="./bs3/fontawesome/css/font-awesome.css">
+    <link rel='stylesheet' href='./bs3/bootstrap/css/bootstrap.css'>
+    <link rel='stylesheet' href='../skins/default/formio.form.css'>
+    <link rel='stylesheet' href='../skins/default/formio.builder.css'>
+    <script type="text/javascript" src="./require.js" data-main="./main.js"></script>
+    <script type='text/javascript'>
+      function initPage($,formios) {
+        var jsonElement = document.getElementById('json');
+        var formElement = document.getElementById('formio');
+        var subJSON = document.getElementById('subjson');
+        var builder = new formios.Formio.FormBuilder(document.getElementById("builder"), {
+          display: 'form',
+          components: [],
+          settings: {
+            pdf: {
+              "id": "1ec0f8ee-6685-5d98-a847-26f67b67d6f0",
+              "src": "https://files.form.io/pdf/5692b91fd1028f01000407e3/file/1ec0f8ee-6685-5d98-a847-26f67b67d6f0"
+            }
+          }
+        }, {
+          baseUrl: 'https://examples.form.io'
+        });
+
+        var onForm = function(form) {
+          form.on('change', function() {
+            subJSON.innerHTML = '';
+            subJSON.appendChild(document.createTextNode(JSON.stringify(form.submission, null, 4)));
+          });
+        };
+
+        var onBuild = function(build) {
+          jsonElement.innerHTML = '';
+          formElement.innerHTML = '';
+          jsonElement.appendChild(document.createTextNode(JSON.stringify(builder.instance.schema, null, 4)));
+          Formio.createForm(formElement, builder.instance.form).then(onForm);
+        };
+
+        var onReady = function() {
+          var jsonElement = document.getElementById('json');
+          var formElement = document.getElementById('formio');
+          builder.instance.on('saveComponent', onBuild);
+          builder.instance.on('editComponent', onBuild);
+        };
+
+        var setDisplay = function(display) {
+          builder.setDisplay(display).then(onReady);
+        };
+
+        // Handle the form selection.
+        var formSelect = document.getElementById('form-select');
+        formSelect.addEventListener("change", function() {
+          setDisplay(this.value);
+        });
+}
+
+    </script>
+  </head>
+  <body>
+    <div class="row">
+      <div class="col-sm-8">
+        <h3 class="text-center text-muted">The <a href="https://github.com/formio/formio.js" target="_blank">Form Builder</a> allows you to build a <select class="form-control" id="form-select" style="display: inline-block; width: 150px;"><option value="form">Form</option><option value="wizard">Wizard</option><option value="pdf">PDF</option></select></h3>
+        <div id="builder"></div>
+      </div>
+      <div class="col-sm-4">
+        <h3 class="text-center text-muted">as JSON Schema</h3>
+        <div class="card card-body bg-light jsonviewer">
+          <pre id="json"></pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="row mt-4">
+      <div class="col-sm-8 offset-sm-2">
+        <h3 class="text-center text-muted">which <a href="https://github.com/formio/ngFormio" target="_blank">Renders as a Form</a> in your Application</h3>
+        <div id="formio" class="card card-body bg-light"></div>
+      </div>
+      <div class="clearfix"></div>
+    </div>
+    <div class="row mt-4">
+      <div class="col-sm-8 offset-sm-2">
+        <h3 class="text-center text-muted">which creates a Submission JSON</h3>
+        <div class="card card-body bg-light jsonviewer">
+          <pre id="subjson"></pre>
+        </div>
+      </div>
+      <div class="clearfix"></div>
+    </div>
+  </body>
+</html>

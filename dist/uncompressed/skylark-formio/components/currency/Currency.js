@@ -1,9 +1,10 @@
 define([
+    "skylark-langx",
     '../../vendors/text-mask-addons/index',
     'skylark-lodash',
     '../../utils/utils',
     '../number/Number'
-], function (textMasks, _, utils, NumberComponent) {
+], function (langx,textMasks, _, utils, NumberComponent) {
     'use strict';
     return class CurrencyComponent extends NumberComponent {
         static schema(...extend) {
@@ -30,7 +31,7 @@ define([
             super(component, options, data);
         }
         createNumberMask() {
-            const decimalLimit = _.get(this.component, 'decimalLimit', 2);
+            const decimalLimit = langx.get(this.component, 'decimalLimit', 2);
             const affixes = utils.getCurrencyAffixes({
                 currency: this.component.currency,
                 decimalLimit: decimalLimit,
@@ -42,11 +43,11 @@ define([
             return textMasks.createNumberMask({
                 prefix: this.prefix,
                 suffix: this.suffix,
-                thousandsSeparatorSymbol: _.get(this.component, 'thousandsSeparator', this.delimiter),
-                decimalSymbol: _.get(this.component, 'decimalSymbol', this.decimalSeparator),
+                thousandsSeparatorSymbol: langx.get(this.component, 'thousandsSeparator', this.delimiter),
+                decimalSymbol: langx.get(this.component, 'decimalSymbol', this.decimalSeparator),
                 decimalLimit: decimalLimit,
-                allowNegative: _.get(this.component, 'allowNegative', true),
-                allowDecimal: _.get(this.component, 'allowDecimal', true)
+                allowNegative: langx.get(this.component, 'allowNegative', true),
+                allowDecimal: langx.get(this.component, 'allowDecimal', true)
             });
         }
         get defaultSchema() {
@@ -61,7 +62,7 @@ define([
         addZerosAndFormatValue(value) {
             if (!value && value !== 0)
                 return;
-            const decimalLimit = _.get(this.component, 'decimalLimit', 2);
+            const decimalLimit = langx.get(this.component, 'decimalLimit', 2);
             let integerPart;
             let decimalPart = '';
             let decimalPartNumbers = [];

@@ -13,9 +13,7 @@
     "build": "slib build ."
   },
   "files": [
-    "demo/",
     "dist/",
-    "src/",
     "skins/"
   ],
   "repository": {
@@ -27,6 +25,7 @@
   },
   "license": "MIT",
   "dependencies": {
+    "skylark-ace": "git+https://github.com/skylark-integration/skylark-ace.git",
     "skylark-bootstrap3": "git+https://github.com/skylark-integration/skylark-bootstrap3.git",
     "skylark-choices": "git+https://github.com/skylark-integration/skylark-choices.git",
     "skylark-dragula": "git+https://github.com/skylark-integration/skylark-dragula.git",

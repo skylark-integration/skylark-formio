@@ -1,7 +1,7 @@
 define([
     './utils',
     '../../../../utils/utils'
-], function (EditFormUtils, a) {
+], function (EditFormUtils, utils) {
     'use strict';
     return [
         {
@@ -38,7 +38,7 @@ define([
                     valueProperty: 'value',
                     data: {
                         custom(context) {
-                            return a.getContextComponents(context);
+                            return utils.getContextComponents(context);
                         }
                     }
                 },

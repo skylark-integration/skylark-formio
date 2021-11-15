@@ -1,4 +1,5 @@
 define([
+    "skylark-langx",
     '../../../vendors/vanilla-text-mask/conformToMask',
     '../../../vendors/getify/npo',
     '../../../vendors/tooltip-js/Tooltip',
@@ -11,7 +12,7 @@ define([
     '../../../utils/utils',
     '../../../Element',
     '../componentModal/ComponentModal'
-], function (conformToMask, NativePromise, Tooltip, _, isMobile, Formio, FormioUtils, Validator, Templates, utils, Element, ComponentModal) {
+], function (langx,conformToMask, NativePromise, Tooltip, _, isMobile, Formio, FormioUtils, Validator, Templates, utils, Element, ComponentModal) {
     'use strict';
     const CKEDITOR = 'https://cdn.form.io/ckeditor/16.0.0/ckeditor.js';
     const QUILL_URL = 'https://cdn.form.io/quill/1.3.7';
@@ -19,7 +20,7 @@ define([
     const TINYMCE_URL = 'https://cdn.tiny.cloud/1/no-api-key/tinymce/5/tinymce.min.js';
     return class Component extends Element {
         static schema(...sources) {
-            return _.merge({
+            return langx.mixin({  //_.merge 
                 input: true,
                 key: '',
                 placeholder: '',
@@ -90,7 +91,7 @@ define([
             this._hasCondition = null;
             this.refs = {};
             if (component && this.options.components && this.options.components[component.type]) {
-                _.merge(component, this.options.components[component.type]);
+                langx.mixin(component, this.options.components[component.type]); //_.merge
             }
             this.validator = Validator;
             this.path = '';
@@ -125,7 +126,7 @@ define([
             this._parentDisabled = false;
             let lastChanged = null;
             let triggerArgs = [];
-            const _triggerChange = _.debounce((...args) => {
+            const _triggerChange = langx.debounce((...args) => {
                 if (this.root) {
                     this.root.changing = false;
                 }
@@ -133,7 +134,7 @@ define([
                 if (!args[1] && lastChanged) {
                     args[1] = lastChanged;
                 }
-                if (_.isEmpty(args[0]) && lastChanged) {
+                if (langx.isEmpty(args[0]) && lastChanged) {
                     args[0] = lastChanged.flags;
                 }
                 lastChanged = null;
@@ -151,7 +152,7 @@ define([
                 }
                 return _triggerChange(...triggerArgs);
             };
-            this.triggerRedraw = _.debounce(this.redraw.bind(this), 100);
+            this.triggerRedraw = langx.debounce(this.redraw.bind(this), 100);
             this.tooltips = [];
             this.invalid = false;
             if (this.component) {
@@ -225,7 +226,7 @@ define([
             return Component.schema();
         }
         get key() {
-            return _.get(this.component, 'key', '');
+            return langx.get(this.component, 'key', '');
         }
         set parentVisible(value) {
             if (this._parentVisible !== value) {
@@ -344,13 +345,13 @@ define([
             if (!defaultSchema) {
                 return schema;
             }
-            _.each(schema, (val, key) => {
-                if (!_.isArray(val) && _.isObject(val) && defaultSchema.hasOwnProperty(key)) {
+            langx.forEach(schema, (val, key) => { //_.each
+                if (!langx.isArray(val) && langx.isObject(val) && defaultSchema.hasOwnProperty(key)) {
                     const subModified = this.getModifiedSchema(val, defaultSchema[key], true);
-                    if (!_.isEmpty(subModified)) {
+                    if (!langx.isEmpty(subModified)) {
                         modified[key] = subModified;
                     }
-                } else if (_.isArray(val)) {
+                } else if (langx.isArray(val)) {
                     if (val.length !== 0) {
                         modified[key] = val;
                     }
@@ -511,7 +512,7 @@ define([
             return NativePromise.resolve(true);
         }
         get submissionTimezone() {
-            this.options.submissionTimezone = this.options.submissionTimezone || _.get(this.root, 'options.submissionTimezone');
+            this.options.submissionTimezone = this.options.submissionTimezone || langx.get(this.root, 'options.submissionTimezone');
             return this.options.submissionTimezone;
         }
         loadRefs(element, refs) {
@@ -627,7 +628,7 @@ define([
             }
         }
         checkRefresh(refreshData, changed) {
-            const changePath = _.get(changed, 'instance.calculatedPath', false);
+            const changePath = langx.get(changed, 'instance.calculatedPath', false);
             if (changePath && this.calculatedPath === changePath) {
                 return;
             }
@@ -651,7 +652,7 @@ define([
         }
         refresh(value) {
             if (this.hasOwnProperty('refreshOnValue')) {
-                this.refreshOnChanged = !_.isEqual(value, this.refreshOnValue);
+                this.refreshOnChanged = !langx.isEqual(value, this.refreshOnValue);
             } else {
                 this.refreshOnChanged = true;
             }
@@ -715,7 +716,7 @@ define([
             if (Array.isArray(value)) {
                 return value.join(', ');
             }
-            if (_.isPlainObject(value)) {
+            if (langx.isPlainObject(value)) {
                 return JSON.stringify(value);
             }
             if (value === null || value === undefined) {
@@ -734,9 +735,9 @@ define([
             this.onChange(...args);
         }
         itemValue(data, forceUseValue = false) {
-            if (_.isObject(data)) {
+            if (langx.isObject(data)) {
                 if (this.valueProperty) {
-                    return _.get(data, this.valueProperty);
+                    return langx.get(data, this.valueProperty);
                 }
                 if (forceUseValue) {
                     return data.value;
@@ -801,7 +802,7 @@ define([
         }
         get customStyle() {
             let customCSS = '';
-            _.each(this.component.style, (value, key) => {
+            langx.forEach(this.component.style, (value, key) => { //_.each
                 if (value !== '') {
                     customCSS += `${ key }:${ value };`;
                 }
@@ -947,7 +948,7 @@ define([
                 const result = FormioUtils.checkTrigger(newComponent, logic.trigger, row, data, this.root ? this.root._form : {}, this);
                 return (result ? this.applyActions(newComponent, logic.actions, result, row, data) : false) || changed;
             }, false);
-            if (!_.isEqual(this.component, newComponent)) {
+            if (!langx.isEqual(this.component, newComponent)) {
                 this.component = newComponent;
                 this.disabled = this.shouldDisabled;
                 changed = true;
@@ -979,7 +980,7 @@ define([
                 case 'property': {
                         FormioUtils.setActionProperty(newComponent, action, result, row, data, this);
                         const property = action.property.value;
-                        if (!_.isEqual(_.get(this.component, property), _.get(newComponent, property))) {
+                        if (!langx.isEqual(langx.get(this.component, property), langx.get(newComponent, property))) {
                             changed = true;
                         }
                         break;
@@ -987,13 +988,13 @@ define([
                 case 'value': {
                         const oldValue = this.getValue();
                         const newValue = this.evaluate(action.value, {
-                            value: _.clone(oldValue),
+                            value: langx.clone(oldValue),
                             data,
                             row,
                             component: newComponent,
                             result
                         }, 'value');
-                        if (!_.isEqual(oldValue, newValue)) {
+                        if (!langx.isEqual(oldValue, newValue)) {
                             this.setValue(newValue);
                             if (this.viewOnly) {
                                 this.dataValue = newValue;
@@ -1004,14 +1005,14 @@ define([
                     }
                 case 'mergeComponentSchema': {
                         const schema = this.evaluate(action.schemaDefinition, {
-                            value: _.clone(this.getValue()),
+                            value: langx.clone(this.getValue()),
                             data,
                             row,
                             component: newComponent,
                             result
                         }, 'schema');
-                        _.assign(newComponent, schema);
-                        if (!_.isEqual(this.component, newComponent)) {
+                        langx.mixin(newComponent, schema); //_.assign
+                        if (!langx.isEqual(this.component, newComponent)) {
                             changed = true;
                         }
                         break;
@@ -1196,11 +1197,11 @@ define([
             };
         }
         addCKE(element, settings, onChange) {
-            settings = _.isEmpty(settings) ? {} : settings;
+            settings = langx.isEmpty(settings) ? {} : settings;
             settings.base64Upload = true;
             settings.mediaEmbed = { previewsInData: true };
-            settings = _.merge(this.wysiwygDefault.ckeditor, _.get(this.options, 'editors.ckeditor.settings', {}), settings);
-            return Formio.requireLibrary('ckeditor', 'ClassicEditor', _.get(this.options, 'editors.ckeditor.src', CKEDITOR), true).then(() => {
+            settings = langx.mixin(this.wysiwygDefault.ckeditor, langx.get(this.options, 'editors.ckeditor.settings', {}), settings); //_.merge
+            return Formio.requireLibrary('ckeditor', 'ClassicEditor', langx.get(this.options, 'editors.ckeditor.src', CKEDITOR), true).then(() => {
                 if (!element.parentNode) {
                     return NativePromise.reject();
                 }
@@ -1248,15 +1249,22 @@ define([
             });
         }
         addAce(element, settings, onChange) {
-            settings = _.merge(this.wysiwygDefault.ace, _.get(this.options, 'editors.ace.settings', {}), settings || {});
-            return Formio.requireLibrary('ace', 'ace', _.get(this.options, 'editors.ace.src', ACE_URL), true).then(editor => {
-                editor = editor.edit(element);
+            settings = langx.mixin(this.wysiwygDefault.ace, langx.get(this.options, 'editors.ace.settings', {}), settings || {}); //_.merge
+            //return Formio.requireLibrary('ace', 'ace', langx.get(this.options, 'editors.ace.src', ACE_URL), true).then(editor => { // modified by lwf
+            var d = new langx.Deferred();
+            require(["skylark-ace"],function(ace){    
+                let editor = ace.edit(element);
                 editor.removeAllListeners('change');
                 editor.setOptions(settings);
                 editor.getSession().setMode(`ace/mode/${ settings.mode }`);
                 editor.on('change', () => onChange(editor.getValue()));
-                return editor;
+                //return editor;
+                d.resolve(editor)
+            },function(e){
+                d.reject(e);
             });
+
+            return d.promise;
         }
         addTiny(element, settings, onChange) {
             return Formio.requireLibrary('tinymce', 'tinymce', TINYMCE_URL.replace('no-api-key', settings.tinyApiKey), true).then(editor => {
@@ -1282,7 +1290,7 @@ define([
             return this.root ? this.root.data : this.data;
         }
         get rootPristine() {
-            return _.get(this, 'root.pristine', false);
+            return langx.get(this, 'root.pristine', false);
         }
         get dataValue() {
             if (!this.key || !this.visible && this.component.clearOnHide && !this.rootPristine) {
@@ -1295,7 +1303,7 @@ define([
                 }
                 return empty;
             }
-            return _.get(this._data, this.key);
+            return langx.get(this._data, this.key);
         }
         set dataValue(value) {
             if (!this.allowData || !this.key || !this.visible && this.component.clearOnHide && !this.rootPristine) {
@@ -1314,7 +1322,7 @@ define([
         splice(index) {
             if (this.hasValue()) {
                 const dataValue = this.dataValue || [];
-                if (_.isArray(dataValue) && dataValue.hasOwnProperty(index)) {
+                if (langx.isArray(dataValue) && dataValue.hasOwnProperty(index)) {
                     dataValue.splice(index, 1);
                     this.dataValue = dataValue;
                     this.triggerChange();
@@ -1349,7 +1357,7 @@ define([
                     defaultValue = '';
                 }
             }
-            return _.cloneDeep(defaultValue);
+            return langx.clone(defaultValue); //_.cloneDeep
         }
         getValue() {
             if (!this.hasInput || this.viewOnly || !this.refs.input || !this.refs.input.length) {
@@ -1461,7 +1469,7 @@ define([
             if (newValue !== undefined && newValue !== null && !this.hasValue()) {
                 return true;
             }
-            return !_.isEqual(newValue, oldValue);
+            return !langx.isEqual(newValue, oldValue);
         }
         updateOnChange(flags = {}, changed = false) {
             if (!flags.noUpdateEvent && changed) {
@@ -1487,7 +1495,7 @@ define([
                 firstPass = true;
                 this.calculatedValue = null;
             }
-            if (allowOverride && this.calculatedValue && !_.isEqual(dataValue, this.convertNumberOrBoolToString(this.calculatedValue))) {
+            if (allowOverride && this.calculatedValue && !langx.isEqual(dataValue, this.convertNumberOrBoolToString(this.calculatedValue))) {
                 return false;
             }
             const calculatedValue = this.evaluate(this.component.calculateValue, {
@@ -1495,7 +1503,7 @@ define([
                 data,
                 row: row || this.data
             }, 'value');
-            if (allowOverride && firstPass && !this.isEmpty(dataValue) && !_.isEqual(dataValue, this.convertNumberOrBoolToString(calculatedValue))) {
+            if (allowOverride && firstPass && !this.isEmpty(dataValue) && !langx.isEqual(dataValue, this.convertNumberOrBoolToString(calculatedValue))) {
                 this.calculatedValue = calculatedValue;
                 return true;
             }
@@ -1531,7 +1539,7 @@ define([
             if (!this.hasInput || !dirty && this.pristine) {
                 return '';
             }
-            return _.map(Validator.checkComponent(this, data), 'message').join('\n\n');
+            return langx.map(Validator.checkComponent(this, data), 'message').join('\n\n');
         }
         isValid(data, dirty) {
             return !this.invalidMessage(data, dirty);
@@ -1589,11 +1597,11 @@ define([
             return this.dataValue;
         }
         isEmpty(value = this.dataValue) {
-            const isEmptyArray = _.isArray(value) && value.length === 1 ? _.isEqual(value[0], this.emptyValue) : false;
-            return value == null || value.length === 0 || _.isEqual(value, this.emptyValue) || isEmptyArray;
+            const isEmptyArray = langx.isArray(value) && value.length === 1 ? langx.isEqual(value[0], this.emptyValue) : false;
+            return value == null || value.length === 0 || langx.isEqual(value, this.emptyValue) || isEmptyArray;
         }
         isEqual(valueA, valueB = this.dataValue) {
-            return this.isEmpty(valueA) && this.isEmpty(valueB) || _.isEqual(valueA, valueB);
+            return this.isEmpty(valueA) && this.isEmpty(valueB) || langx.isEqual(valueA, valueB);
         }
         validateMultiple() {
             return true;
@@ -1711,7 +1719,7 @@ define([
             }
         }
         selectOptions(select, tag, options, defaultValue) {
-            _.each(options, option => {
+            langx.forEach(options, option => {  //_.each
                 const attrs = { value: option.value };
                 if (defaultValue !== undefined && option.value === defaultValue) {
                     attrs.selected = 'selected';
@@ -1723,7 +1731,7 @@ define([
         }
         setSelectValue(select, value) {
             const options = select.querySelectorAll('option');
-            _.each(options, option => {
+            langx.forEach(options, option => { //_.each
                 if (option.value === value) {
                     option.setAttribute('selected', 'selected');
                 } else {
@@ -1768,7 +1776,7 @@ define([
                     this.on(event, (...args) => {
                         const newComponent = utils.fastCloneDeep(this.originalComponent);
                         if (this.applyActions(newComponent, logic.actions, args)) {
-                            if (!_.isEqual(this.component, newComponent)) {
+                            if (!langx.isEqual(this.component, newComponent)) {
                                 this.component = newComponent;
                             }
                             this.redraw();
@@ -1826,7 +1834,7 @@ define([
                     this.resolve();
                 }.bind(Component.externalLibraries[name]);
             }
-            const plugin = _.get(window, property);
+            const plugin = langx.get(window, property);
             if (plugin) {
                 Component.externalLibraries[name].resolve(plugin);
             } else {
@@ -1866,7 +1874,7 @@ define([
                 });
                 if (polling) {
                     setTimeout(function checkLibrary() {
-                        const plugin = _.get(window, property);
+                        const plugin = langx.get(window, property);
                         if (plugin) {
                             Component.externalLibraries[name].resolve(plugin);
                         } else {

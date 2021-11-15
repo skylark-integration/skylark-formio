@@ -1,12 +1,12 @@
 define([
+    'skylark-langx',
     './EventEmitter',
     './Formio',
     './utils/utils',
     'skylark-i18next',
-    'skylark-lodash',
     'skylark-moment',
     './vendors/vanilla-text-mask/maskInput'
-], function (EventEmitter, Formio, FormioUtils, i18next, _, moment, maskInput) {
+], function (langx,EventEmitter, Formio, FormioUtils, i18next,  moment, maskInput) {
     'use strict';
     return class Element {
         constructor(options) {
@@ -50,7 +50,7 @@ define([
                 return;
             }
             const type = `${ this.options.namespace }.${ event }`;
-            _.each(this.events.listeners(type), listener => {
+            langx.forEach(this.events.listeners(type), listener => { //_.each
                 if (listener && listener.id === this.id) {
                     this.events.off(type, listener);
                 }
@@ -89,7 +89,7 @@ define([
                 }
             });
             if (indexes.length) {
-                _.pullAt(this.eventHandlers, indexes);
+                langx.pullAt(this.eventHandlers, indexes);
             }
             return this;
         }
@@ -102,8 +102,8 @@ define([
             this.eventHandlers = [];
         }
         removeAllEvents(includeExternal) {
-            _.each(this.events._events, (events, type) => {
-                _.each(events, listener => {
+            langx.forEach(this.events._events, (events, type) => {//_.each
+                langx.forEach(events, listener => {//_.each
                     if (listener && this.id === listener.id && (includeExternal || listener.internal)) {
                         this.events.off(type, listener);
                     }
@@ -203,7 +203,7 @@ define([
             if (!element) {
                 return;
             }
-            _.each(attr, (value, key) => {
+            langx.forEach(attr, (value, key) => {//_.each
                 if (typeof value !== 'undefined') {
                     if (key.indexOf('on') === 0) {
                         this.addEventListener(element, key.substr(2).toLowerCase(), value);
@@ -250,7 +250,7 @@ define([
         }
         evalContext(additional) {
             return Object.assign({
-                _,
+                "_" : langx,  // modified by lwf
                 utils: FormioUtils,
                 util: FormioUtils,
                 user: Formio.getUser(),
@@ -259,7 +259,7 @@ define([
                 self: this,
                 token: Formio.getToken({ decode: true }),
                 config: this.root && this.root.form && this.root.form.config ? this.root.form.config : {}
-            }, additional, _.get(this.root, 'options.evalContext', {}));
+            }, additional, langx.get(this.root, 'options.evalContext', {}));
         }
         interpolate(string, data) {
             return FormioUtils.interpolate(string, this.evalContext(data));
