@@ -5,6 +5,8 @@
     <link rel='stylesheet' href='../skins/default/formio.form.css'>
     <link rel='stylesheet' href='../skins/default/formio.builder.css'>
     <script type="text/javascript" src="./require.js" data-main="./main.js"></script>
+    <style>
+    </style>
     <script type='text/javascript'>
       function initPage($,formios) {
         var jsonElement = document.getElementById('json');
@@ -53,7 +55,9 @@
         formSelect.addEventListener("change", function() {
           setDisplay(this.value);
         });
-}
+        
+        onReady();
+      }
 
     </script>
   </head>

@@ -69541,11 +69541,15 @@ define('skylark-dragula/dragula',[
 
     function getElementBehindPoint (point, x, y) {
       var p = point || {};
-      var state = p.className;
+      //var state = p.className;
+      //var d = p.style.display;
+      //p.style.display = "none";
       var el;
-      p.className += ' gu-hide';
+      //p.className += ' gu-hide';
+      //p.offsetHeight;
       el = doc.elementFromPoint(x, y);
-      p.className = state;
+      //p.className = state;
+      //p.style.display = d;
       return el;
     }
 
@@ -74375,7 +74379,7 @@ define('skylark-formio/displays/Displays',[
     '../Wizard'
 ], function (_, pdf, webform, wizard) {
     'use strict';
-    return class Displays {
+    class Displays {
         static addDisplay(name, display) {
             Displays.displays[name] = display;
         }
@@ -74394,6 +74398,8 @@ define('skylark-formio/displays/Displays',[
         webform,
         wizard
     };
+
+    return Displays;
 });
 define('skylark-formio/displays/index',['./Displays'], function (Displays) {
     'use strict';

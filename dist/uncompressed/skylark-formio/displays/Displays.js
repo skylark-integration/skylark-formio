@@ -5,7 +5,7 @@ define([
     '../Wizard'
 ], function (_, pdf, webform, wizard) {
     'use strict';
-    return class Displays {
+    class Displays {
         static addDisplay(name, display) {
             Displays.displays[name] = display;
         }
@@ -24,4 +24,6 @@ define([
         webform,
         wizard
     };
+
+    return Displays;
 });
