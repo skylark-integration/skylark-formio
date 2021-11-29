@@ -221,7 +221,21 @@ requirejs.config({
      location : "../node_modules/skylark-domx-velm/dist/uncompressed/skylark-domx-velm",
       main: 'main'
    },
-            
+   {
+     name : "skylark-domx-plugins-base",
+     location : "../node_modules/skylark-domx-plugins-base/dist/uncompressed/skylark-domx-plugins-base",
+      main: 'main'
+   },
+   {
+     name : "skylark-domx-plugins-scrolls",
+     location : "../node_modules/skylark-domx-plugins-scrolls/dist/uncompressed/skylark-domx-plugins-scrolls",
+      main: 'main'
+   },
+   {
+     name : "skylark-domx-plugins-dnd",
+     location : "../node_modules/skylark-domx-plugins-dnd/dist/uncompressed/skylark-domx-plugins-dnd",
+      main: 'main'
+   },
    {
      name : "skylark-domx",
      location : "../node_modules/skylark-domx/dist/uncompressed/skylark-domx",

@@ -227,7 +227,7 @@ define('skylark-langx-arrays/compact',[
 ],function(arrays,filter){
 
     function compact(array) {
-        return filter.call(array, function(item) {
+        return filter(array, function(item) {
             return item != null;
         });
     }
@@ -10940,6 +10940,28 @@ define('skylark-langx-strings/dasherize',[
 	
 	return strings.dasherize = dasherize;
 });
+define('skylark-langx-strings/deserialize-value',[
+	"./strings"
+],function(strings){
+    function deserializeValue(value) {
+        try {
+            return value ?
+                value == "true" ||
+                (value == "false" ? false :
+                    value == "null" ? null :
+                    +value + "" == value ? +value :
+                    /^[\[\{]/.test(value) ? JSON.parse(value) :
+                    value) : value;
+        } catch (e) {
+            return value;
+        }
+    }
+
+
+
+	
+	return strings.deserializeValue = deserializeValue;
+});
 define('skylark-langx-strings/escape-html',[
 	"./strings"
 ],function(strings){
@@ -11266,6 +11288,7 @@ define('skylark-langx-strings/main',[
 	"./base64",
 	"./camel-case",
 	"./dasherize",
+	"./deserialize-value",
 	"./escape-html",
 	"./generate-uuid",
 	"./lower-first",
@@ -62325,69 +62348,50 @@ define('skylark-domx-noder/noder',[
     "skylark-langx-scripter",
     "skylark-domx-browser"
 ], function(skylark, types, arrays, strings,scripter,browser) {
-    var isIE = !!navigator.userAgent.match(/Trident/g) || !!navigator.userAgent.match(/MSIE/g),
-        fragmentRE = /^\s*<(\w+|!)[^>]*>/,
-        singleTagRE = /^<(\w+)\s*\/?>(?:<\/\1>|)$/,
-        div = document.createElement("div"),
-        table = document.createElement('table'),
-        tableBody = document.createElement('tbody'),
-        tableRow = document.createElement('tr'),
-        containers = {
-            'tr': tableBody,
-            'tbody': table,
-            'thead': table,
-            'tfoot': table,
-            'td': tableRow,
-            'th': tableRow,
-            '*': div
-        },
-        rootNodeRE = /^(?:body|html)$/i,
-        rscriptType = ( /^$|^module$|\/(?:java|ecma)script/i ),
+    var  
         map = Array.prototype.map,
         slice = Array.prototype.slice;
 
 
+    /**
+     * Generate id
+     * @param   {HTMLElement} el
+     * @returns {String}
+     * @private
+     */
+    function generateId(el) {
+        var str = el.tagName + el.className + el.src + el.href + el.textContent,
+            i = str.length,
+            sum = 0;
 
-    function normalizeContent(content) {
-        if (typeof content === 'function') {
-            content = content();
+        while (i--) {
+            sum += str.charCodeAt(i);
         }
-        return map.call(types.isArrayLike(content) ? content : [content],value => {
-            if (typeof value === 'function') {
-                value = value();
-            }
-            if (isElement(value) || isTextNode(value) || isFragment(value)) {
-                return value;
-            }
-            if (typeof value === 'string' && /\S/.test(value)) {
-                return document.createTextNode(value);
-            }
-        }).filter(value => value);
+
+        return sum.toString(36);
     }
 
-    function ensureNodes(content, copyByClone) {
-        var nodes = normalizeContent(content);
 
-
-        //if (!types.isArrayLike(nodes)) {
-        //    nodes = [nodes];
-        //}
-        if (copyByClone) {
-            nodes = map.call(nodes, function(node) {
-                return node.cloneNode(true);
-            });
-        }
-        return arrays.flatten(nodes);
+    function noder() {
+        return noder;
     }
 
-    function nodeName(elm, chkName) {
-        var name = elm.nodeName && elm.nodeName.toLowerCase();
-        if (chkName !== undefined) {
-            return name === chkName.toLowerCase();
-        }
-        return name;
-    };
+    Object.assign(noder, {
 
+
+        blur : function(el) {
+            el.blur();
+        },
+
+
+        generateId
+    });
+
+    return skylark.attach("domx.noder" , noder);
+});
+define('skylark-domx-noder/active',[
+	"./noder"
+],function(noder){
 
     function activeElement(doc) {
         doc = doc || document;
@@ -62417,7 +62421,13 @@ define('skylark-domx-noder/noder',[
 
         return el;
     };
-
+	return noder.active = activeElement;
+});
+define('skylark-domx-noder/_enhance_place_content',[
+    "skylark-langx-types",
+    "skylark-langx-arrays",
+	"./noder"
+],function(types,arrays,noder){
     function enhancePlaceContent(placing,node) {
         if (types.isFunction(placing)) {
             return placing.apply(node,[]);
@@ -62438,6 +62448,101 @@ define('skylark-domx-noder/noder',[
         }
         return placing;
     }
+
+	return enhancePlaceContent;
+});
+define('skylark-domx-noder/is-element',[
+	"./noder"
+],function(noder){
+ 
+    function isElement(node) {
+        return node && node.nodeType === 1;
+    }
+
+	
+	return noder.isElement = isElement;
+});
+define('skylark-domx-noder/is-text-node',[
+	"./noder"
+],function(noder){
+ 
+    function isTextNode(node) {
+        return node && node.nodeType === 3;
+    }
+
+	
+	return noder.isTextNode = isTextNode;
+});
+define('skylark-domx-noder/is-fragment',[
+	"./noder"
+],function(noder){
+ 
+    function isFragment(node) {
+        return node && node.nodeType === 11;
+    }
+
+	return noder.isFragment = isFragment;
+});
+define('skylark-domx-noder/_normalize_content',[
+    "skylark-langx-types",
+	"./noder",
+    "./is-element",
+    "./is-text-node",
+    "./is-fragment"
+],function(types,noder,isElement,isTextNode,isFragment){
+    var  
+        map = Array.prototype.map;
+        
+    function normalizeContent(content) {
+        if (typeof content === 'function') {
+            content = content();
+        }
+        return map.call(types.isArrayLike(content) ? content : [content],value => {
+            if (typeof value === 'function') {
+                value = value();
+            }
+            if (isElement(value) || isTextNode(value) || isFragment(value)) {
+                return value;
+            }
+            if (typeof value === 'string' && /\S/.test(value)) {
+                return document.createTextNode(value);
+            }
+        }).filter(value => value);
+    }
+
+	return normalizeContent;
+});
+define('skylark-domx-noder/_ensure_nodes',[
+    "skylark-langx-arrays",
+	"./noder",
+    "./_normalize_content"
+],function(arrays,noder,normalizeContent){
+    var  
+        map = Array.prototype.map;
+
+    function ensureNodes(content, copyByClone) {
+        var nodes = normalizeContent(content);
+
+
+        //if (!types.isArrayLike(nodes)) {
+        //    nodes = [nodes];
+        //}
+        if (copyByClone) {
+            nodes = map.call(nodes, function(node) {
+                return node.cloneNode(true);
+            });
+        }
+        return arrays.flatten(nodes);
+    }
+
+	return ensureNodes;
+});
+define('skylark-domx-noder/after',[
+	"./noder",
+    "./_enhance_place_content",
+    "./_ensure_nodes"
+],function(noder,enhancePlaceContent,ensureNodes){
+ 
     function after(node, placing, copyByClone) {
         placing = enhancePlaceContent(placing,node);
         var refNode = node,
@@ -62457,6 +62562,15 @@ define('skylark-domx-noder/noder',[
         return this;
     }
 
+	
+	return noder.after = after;
+});
+define('skylark-domx-noder/append',[
+    "./noder",
+    "./_enhance_place_content",
+    "./_ensure_nodes"
+],function(noder,enhancePlaceContent,ensureNodes){
+ 
     function append(node, placing, copyByClone) {
         placing = enhancePlaceContent(placing,node);
         var parentNode = node,
@@ -62466,6 +62580,15 @@ define('skylark-domx-noder/noder',[
         }
         return this;
     }
+    
+    return noder.append = append;
+});
+define('skylark-domx-noder/before',[
+    "./noder",
+    "./_enhance_place_content",
+    "./_ensure_nodes"
+],function(noder,enhancePlaceContent,ensureNodes){
+ 
 
     function before(node, placing, copyByClone) {
         placing = enhancePlaceContent(placing,node);
@@ -62479,17 +62602,85 @@ define('skylark-domx-noder/noder',[
         }
         return this;
     }
+
+	
+	return noder.before = before;
+});
+define('skylark-domx-noder/body',[
+	"./noder"
+],function(noder){
+	function body() {
+		return  document.body;
+	}
+	
+	return noder.body = body;
+});
+define('skylark-domx-noder/clone',[
+	"./noder"
+],function(noder){
+ 
     /*   
-     * Get the children of the specified node, including text and comment nodes.
-     * @param {HTMLElement} elm
+     * Create a deep copy of the set of matched elements.
+     * @param {HTMLElement} node
+     * @param {Boolean} deep
      */
-    function contents(elm) {
-        if (nodeName(elm, "iframe")) {
-            return elm.contentDocument;
-        }
-        return elm.childNodes;
+    function clone(node, deep) {
+        return node.cloneNode(deep);
     }
 
+	
+	return noder.clone = clone;
+});
+define('skylark-domx-noder/is-child-of',[
+	"./noder"
+],function(noder){
+    /*   
+     * Check to see if a dom node is a descendant of another dom node.
+     * @param {Node} node
+     * @param {Node} parent
+     * @param {Node} directly
+     */
+    function isChildOf(node, parent, directly) {
+        if (directly) {
+            return node.parentNode === parent;
+        }
+        if (document.documentElement.contains) {
+            return parent.contains(node);
+        }
+        while (node) {
+            if (parent === node) {
+                return true;
+            }
+
+            node = node.parentNode;
+        }
+
+        return false;
+    }
+	
+	return noder.isChildOf = isChildOf;
+});
+define('skylark-domx-noder/contains',[
+	"./noder",
+    "./is-child-of"
+],function(noder,isChildOf){
+ 
+    /*   
+     * Check to see if a dom node is a descendant of another dom node .
+     * @param {String} node
+     * @param {Node} child
+     */
+    function contains(node, child) {
+        return isChildOf(child, node);
+    }
+	
+	return noder.contains = contains;
+});
+define('skylark-domx-noder/create-element',[
+    "skylark-langx-types",
+	"./noder"
+],function(types,noder){
+ 
     /*   
      * Create a element and set attributes on it.
      * @param {HTMLElement} tag
@@ -62526,20 +62717,47 @@ define('skylark-domx-noder/noder',[
             }
         }
         if (parent) {
-            append(parent, node);
+            noder.append(parent, node);
         }
         return node;
     }
 
-function removeSelfClosingTags(xml) {
-    var split = xml.split("/>");
-    var newXml = "";
-    for (var i = 0; i < split.length - 1;i++) {
-        var edsplit = split[i].split("<");
-        newXml += split[i] + "></" + edsplit[edsplit.length - 1].split(" ")[0] + ">";
+	
+	return noder.createElement = createElement;
+});
+define('skylark-domx-noder/create-fragment',[
+    "skylark-langx-strings",
+	"./noder",
+    "./create-element"
+],function(strings,noder,createElement){
+    var fragmentRE = /^\s*<(\w+|!)[^>]*>/,
+        singleTagRE = /^<(\w+)\s*\/?>(?:<\/\1>|)$/,
+        div = document.createElement("div"),
+        table = document.createElement('table'),
+        tableBody = document.createElement('tbody'),
+        tableRow = document.createElement('tr'),
+        containers = {
+            'tr': tableBody,
+            'tbody': table,
+            'thead': table,
+            'tfoot': table,
+            'td': tableRow,
+            'th': tableRow,
+            '*': div
+        },
+        slice = Array.prototype.slice;
+
+
+    function removeSelfClosingTags(xml) {
+        var split = xml.split("/>");
+        var newXml = "";
+        for (var i = 0; i < split.length - 1;i++) {
+            var edsplit = split[i].split("<");
+            newXml += split[i] + "></" + edsplit[edsplit.length - 1].split(" ")[0] + ">";
+        }
+        return newXml + split[split.length-1];
     }
-    return newXml + split[split.length-1];
-}
+
 
     /*   
      * Create a DocumentFragment from the HTML fragment.
@@ -62567,42 +62785,13 @@ function removeSelfClosingTags(xml) {
         return dom;
     }
 
-    /*   
-     * Create a deep copy of the set of matched elements.
-     * @param {HTMLElement} node
-     * @param {Boolean} deep
-     */
-    function clone(node, deep) {
-        var self = this,
-            clone;
-
-        // TODO: Add feature detection here in the future
-        if (!isIE || node.nodeType !== 1 || deep) {
-            return node.cloneNode(deep);
-        }
-
-        // Make a HTML5 safe shallow copy
-        if (!deep) {
-            clone = document.createElement(node.nodeName);
-
-            // Copy attribs
-            each(self.getAttribs(node), function(attr) {
-                self.setAttrib(clone, attr.nodeName, self.getAttrib(node, attr.nodeName));
-            });
-
-            return clone;
-        }
-    }
-
-    /*   
-     * Check to see if a dom node is a descendant of another dom node .
-     * @param {String} node
-     * @param {Node} child
-     */
-    function contains(node, child) {
-        return isChildOf(child, node);
-    }
-
+	
+	return noder.createFragment = createFragment;
+});
+define('skylark-domx-noder/create-text-node',[
+	"./noder"
+],function(noder){
+ 
     /*   
      * Create a new Text node.
      * @param {String} text
@@ -62612,6 +62801,13 @@ function removeSelfClosingTags(xml) {
         return document.createTextNode(text);
     }
 
+
+	return noder.createTextNode = createTextNode;
+});
+define('skylark-domx-noder/doc',[
+	"./noder"
+],function(noder){
+ 
     /*   
      * Get the current document object.
      */
@@ -62619,6 +62815,12 @@ function removeSelfClosingTags(xml) {
         return document;
     }
 
+	return noder.doc = doc;
+});
+define('skylark-domx-noder/empty',[
+	"./noder"
+],function(noder){
+ 
     /*   
      * Remove all child nodes of the set of matched elements from the DOM.
      * @param {Object} node
@@ -62630,30 +62832,13 @@ function removeSelfClosingTags(xml) {
         }
         return this;
     }
-
-    var fulledEl = null;
-
-    function fullscreen(el) {
-        if (el === false) {
-            return browser.exitFullscreen.apply(document);
-        } else if (el) {
-            return el[browser.support.fullscreen.requestFullscreen]();
-            fulledEl = el;
-        } else {
-            return (
-                document.fullscreenElement ||
-                document.webkitFullscreenElement ||
-                document.mozFullScreenElement ||
-                document.msFullscreenElement
-            )
-        }
-    }
-
-    function isFullscreen(el) {
-        return fullscreen() === el;
-    }
-
-
+	
+	return noder.empty = empty;
+});
+define('skylark-domx-noder/focusable',[
+	"./noder"
+],function(noder){
+ 
     // Selectors
     function focusable( element, hasTabindex ) {
         var map, mapName, img, focusableIfVisible, fieldset,
@@ -62691,32 +62876,55 @@ function removeSelfClosingTags(xml) {
 
         return focusableIfVisible && $( element ).is( ":visible" ) && visible( $( element ) );
     };
+	
+	return noder.focusable = focusable;
+});
+define('skylark-domx-noder/from-point',[
+	"./noder"
+],function(noder){
 
     function fromPoint(x,y) {
         return document.elementFromPoint(x,y);
     }
 
-    /**
-     * Generate id
-     * @param   {HTMLElement} el
-     * @returns {String}
-     * @private
-     */
-    function generateId(el) {
-        var str = el.tagName + el.className + el.src + el.href + el.textContent,
-            i = str.length,
-            sum = 0;
+	
+	return noder.fromPoint = fromPoint;
+});
+define('skylark-domx-noder/fullscreen',[
+    "skylark-domx-browser",
+	"./noder"
+],function(browser,noder){
 
-        while (i--) {
-            sum += str.charCodeAt(i);
+    var fulledEl = null;
+
+    function fullscreen(el) {
+        if (el === false) {
+            return browser.exitFullscreen.apply(document);
+        } else if (el) {
+            return el[browser.support.fullscreen.requestFullscreen]();
+            fulledEl = el;
+        } else {
+            return (
+                document.fullscreenElement ||
+                document.webkitFullscreenElement ||
+                document.mozFullScreenElement ||
+                document.msFullscreenElement
+            )
         }
-
-        return sum.toString(36);
     }
-
-
-   var rxhtmlTag = /<(?!area|br|col|embed|hr|img|input|link|meta|param)(([\w:]+)[^>]*)\/>/gi;
+	
+	return noder.fullscreen = fullscreen;
+});
+define('skylark-domx-noder/html',[
+    "skylark-langx-types",
+    "skylark-langx-scripter",
+	"./noder",
+    "./empty"
+],function(types,scripter,noder,empty){
  
+   var rxhtmlTag = /<(?!area|br|col|embed|hr|img|input|link|meta|param)(([\w:]+)[^>]*)\/>/gi,
+       rscriptType = ( /^$|^module$|\/(?:java|ecma)script/i );
+
     /*   
      * Get the HTML contents of the first element in the set of matched elements.
      * @param {HTMLElement} node
@@ -62764,45 +62972,22 @@ function removeSelfClosingTags(xml) {
         }
     }
 
-    /*   
-     * Check to see if a dom node is a descendant of another dom node.
-     * @param {Node} node
-     * @param {Node} parent
-     * @param {Node} directly
-     */
-    function isChildOf(node, parent, directly) {
-        if (directly) {
-            return node.parentNode === parent;
-        }
-        if (document.documentElement.contains) {
-            return parent.contains(node);
-        }
-        while (node) {
-            if (parent === node) {
-                return true;
-            }
 
-            node = node.parentNode;
-        }
-
-        return false;
+	return noder.html = html;
+});
+define('skylark-domx-noder/is-active',[
+	"./noder"
+],function(noder){
+    function isActive (elem) {
+            return elem === document.activeElement && (elem.type || elem.href);
     }
 
-    /*   
-     * Check to see if a dom node is a document.
-     * @param {Node} node
-     */
-    function isDocument(node) {
-        return node != null && node.nodeType == node.DOCUMENT_NODE
-    }
-
-    /*   
-     * Check to see if a dom node is in the document
-     * @param {Node} node
-     */
-    function isInDocument(node) {
-      return (node === document.body) ? true : document.body.contains(node);
-    }        
+	
+	return noder.isActive = isActive;
+});
+define('skylark-domx-noder/is-block-node',[
+	"./noder"
+],function(noder){
 
     var blockNodes = ["div", "p", "ul", "ol", "li", "blockquote", "hr", "pre", "h1", "h2", "h3", "h4", "h5", "table"];
 
@@ -62813,77 +62998,118 @@ function removeSelfClosingTags(xml) {
         return new RegExp("^(" + (blockNodes.join('|')) + ")$").test(node.nodeName.toLowerCase());
     }
 
-    function isActive (elem) {
-            return elem === document.activeElement && (elem.type || elem.href);
+
+	
+	return noder.isBlockNode = isBlockNode;
+});
+define('skylark-domx-noder/is-doc',[
+	"./noder"
+],function(noder){
+    /*   
+     * Check to see if a dom node is a document.
+     * @param {Node} node
+     */
+    function isDocument(node) {
+        return node != null && node.nodeType == node.DOCUMENT_NODE
     }
 
-
-    function isTextNode(node) {
-        return node && node.nodeType === 3;
+	
+	return noder.isDoc = isDocument;
+});
+define('skylark-domx-noder/is-editable',[
+	"./noder"
+],function(noder){
+ 
+    function isEditable (el) {
+      if (!el) { return false; } // no parents were editable
+      if (el.contentEditable === 'false') { return false; } // stop the lookup
+      if (el.contentEditable === 'true') { return true; } // found a contentEditable element in the chain
+      return isEditable(el.parentNode); // contentEditable is set to 'inherit'
     }
 
-    function isFragment(node) {
-        return node && node.nodeType === 11;
+	
+	return noder.isEditable = isEditable;
+});
+define('skylark-domx-noder/is-fullscreen',[
+	"./noder",
+    "./fullscreen"
+],function(noder,fullscreen){
+ 
+    function isFullscreen(el) {
+        return fullscreen() === el;
     }
+	
+	return noder.isFullscreen = isFullscreen;
+});
+define('skylark-domx-noder/is-in-document',[
+	"./noder"
+],function(noder){
+    /*   
+     * Check to see if a dom node is in the document
+     * @param {Node} node
+     */
+    function isInDocument(node) {
+      return (node === document.body) ? true : document.body.contains(node);
+    }     
 
-
-    function isElement(node) {
-        return node && node.nodeType === 1;
-    }
-
-    function isInFrame() {
+	
+	return noder.isInDocument = isInDocument;
+});
+define('skylark-domx-noder/is-in-frame',[
+	"./noder"
+],function(noder){
+     function isInFrame() {
         try {
             return window.parent !== window.self;
         } catch (x) {
             return true;
         }
     }
-
-    /*   
-     * Get the owner document object for the specified element.
-     * @param {Node} elm
-     */
-    function ownerDoc(elm) {
-        if (!elm) {
-            return document;
-        }
-
-        if (elm.nodeType == 9) {
-            return elm;
-        }
-
-        return elm.ownerDocument;
+	
+	return noder.isInFrame = isInFrame;
+});
+define('skylark-domx-noder/is-input',[
+	"./noder",
+    "./is-editable"
+],function(noder,isEditable){
+ 
+    function isInput (el) { 
+        return el.tagName === 'INPUT' || 
+               el.tagName === 'TEXTAREA' || 
+               el.tagName === 'SELECT' || 
+               isEditable(el); 
     }
-
-    /*   
-     *
-     * @param {Node} elm
-     */
-    function ownerWindow(elm) {
-        var doc = ownerDoc(elm);
-        return doc.defaultView || doc.parentWindow;
-    }
-
-    /*   
-     * insert one or more nodes as the first children of the specified node.
-     * @param {Node} node
-     * @param {Node or ArrayLike} placing
-     * @param {Boolean Optional} copyByClone
-     */
-    function prepend(node, placing, copyByClone) {
-        var parentNode = node,
-            refNode = parentNode.firstChild,
-            nodes = ensureNodes(placing, copyByClone);
-        for (var i = 0; i < nodes.length; i++) {
-            if (refNode) {
-                parentNode.insertBefore(nodes[i], refNode);
-            } else {
-                parentNode.appendChild(nodes[i]);
-            }
+	
+	return noder.isInput = isInput;
+});
+define('skylark-domx-noder/is-window',[
+    "skylark-langx-types",
+    "./noder"
+],function(types,noder){
+   
+    return noder.isWindow = types.isWindow;
+	
+});
+define('skylark-domx-noder/node-name',[
+	"./noder"
+],function(noder){
+ 
+    function nodeName(elm, chkName) {
+        var name = elm.nodeName && elm.nodeName.toLowerCase();
+        if (chkName !== undefined) {
+            return name === chkName.toLowerCase();
         }
-        return this;
-    }
-
+        return name;
+    };
+	
+	return noder.nodeName = nodeName;
+});
+define('skylark-domx-noder/offset-parent',[
+	"./noder"
+],function(noder){
+ 
+    var  rootNodeRE = /^(?:body|html)$/i;
+    
     /*   
      *
      * @param {Node} elm
@@ -62895,269 +63121,8 @@ function removeSelfClosingTags(xml) {
         }
         return parent;
     }
-
-    /*   
-     * Remove the set of matched elements from the DOM.
-     * @param {Node} node
-     */
-    function remove(node) {
-        if (node && node.parentNode) {
-            try {
-                node.parentNode.removeChild(node);
-            } catch (e) {
-                console.warn("The node is already removed", e);
-            }
-        }
-        return this;
-    }
-
-    function removeChild(node,children) {
-        if (!types.isArrayLike(children)) {
-            children = [children];
-        }
-        for (var i=0;i<children.length;i++) {
-            node.removeChild(children[i]);
-        }
-
-        return this;
-    }
-
-    function scrollParent( elm, includeHidden ) {
-        var position = document.defaultView.getComputedStyle(elm).position,
-            excludeStaticParent = position === "absolute",
-            overflowRegex = includeHidden ? /(auto|scroll|hidden)/ : /(auto|scroll)/,
-            scrollParent = this.parents().filter( function() {
-                var parent = $( this );
-                if ( excludeStaticParent && parent.css( "position" ) === "static" ) {
-                    return false;
-                }
-                return overflowRegex.test( parent.css( "overflow" ) + parent.css( "overflow-y" ) +
-                    parent.css( "overflow-x" ) );
-            } ).eq( 0 );
-
-        return position === "fixed" || !scrollParent.length ?
-            $( this[ 0 ].ownerDocument || document ) :
-            scrollParent;
-    };
-
-
-    function reflow(elm) {
-        if (!elm) {
-          elm = document;
-        }
-        elm.offsetHeight;
-
-        return this;      
-    }
-
-    /*   
-     * Replace an old node with the specified node.
-     * @param {Node} node
-     * @param {Node} oldNode
-     */
-    function replace(node, oldNode) {
-        oldNode.parentNode.replaceChild(node, oldNode);
-        return this;
-    }
-
-
-    function selectable(elem, selectable) {
-        if (elem === undefined || elem.style === undefined)
-            return;
-        elem.onselectstart = selectable ? function () {
-            return false;
-        } : function () {
-        };
-        elem.style.MozUserSelect = selectable ? 'auto' : 'none';
-        elem.style.KhtmlUserSelect = selectable ? 'auto' : 'none';
-        elem.unselectable = selectable ? 'on' : 'off';
-    }
-
-    /*   
-     * traverse the specified node and its descendants, perform the callback function on each
-     * @param {Node} node
-     * @param {Function} fn
-     */
-    function traverse(node, fn) {
-        fn(node)
-        for (var i = 0, len = node.childNodes.length; i < len; i++) {
-            traverse(node.childNodes[i], fn);
-        }
-        return this;
-    }
-
-    /*   
-     *
-     * @param {Node} node
-     */
-    function reverse(node) {
-        var firstChild = node.firstChild;
-        for (var i = node.children.length - 1; i > 0; i--) {
-            if (i > 0) {
-                var child = node.children[i];
-                node.insertBefore(child, firstChild);
-            }
-        }
-    }
-
-    /*   
-     * Wrap an HTML structure around each element in the set of matched elements.
-     * @param {Node} node
-     * @param {Node} wrapperNode
-     */
-    function wrapper(node, wrapperNode) {
-        if (types.isString(wrapperNode)) {
-            wrapperNode = this.createFragment(wrapperNode).firstChild;
-        }
-        node.parentNode.insertBefore(wrapperNode, node);
-        wrapperNode.appendChild(node);
-    }
-
-    /*   
-     * Wrap an HTML structure around the content of each element in the set of matched
-     * @param {Node} node
-     * @param {Node} wrapperNode
-     */
-    function wrapperInner(node, wrapperNode) {
-        var childNodes = slice.call(node.childNodes);
-        node.appendChild(wrapperNode);
-        for (var i = 0; i < childNodes.length; i++) {
-            wrapperNode.appendChild(childNodes[i]);
-        }
-        return this;
-    }
-
-    /*   
-     * Remove the parents of the set of matched elements from the DOM, leaving the matched
-     * @param {Node} node
-     */
-    function unwrap(node) {
-        var child, parent = node.parentNode;
-        if (parent) {
-            if (this.isDoc(parent.parentNode)) return;
-            parent.parentNode.insertBefore(node, parent);
-        }
-    }
-
-
-
-    function isInput (el) { 
-        return el.tagName === 'INPUT' || 
-               el.tagName === 'TEXTAREA' || 
-               el.tagName === 'SELECT' || 
-               isEditable(el); 
-    }
-    
-    function isEditable (el) {
-      if (!el) { return false; } // no parents were editable
-      if (el.contentEditable === 'false') { return false; } // stop the lookup
-      if (el.contentEditable === 'true') { return true; } // found a contentEditable element in the chain
-      return isEditable(el.parentNode); // contentEditable is set to 'inherit'
-    }
-
-    function noder() {
-        return noder;
-    }
-
-    Object.assign(noder, {
-        active  : activeElement,
-
-        after: after,
-
-        append: append,
-
-        before: before,
-
-        blur : function(el) {
-            el.blur();
-        },
-
-        body: function() {
-            return document.body;
-        },
-
-        clone: clone,
-
-        contains: contains,
-
-        contents: contents,
-
-        createElement: createElement,
-
-        createFragment: createFragment,
-
-        createTextNode: createTextNode,
-
-        doc: doc,
-
-        empty: empty,
-
-        generateId,
-
-        fullscreen: fullscreen,
-
-        focusable: focusable,
-
-        fromPoint,
-
-        html: html,
-
-        isActive,
-
-        isChildOf,
-
-        isDocument,
-
-        isEditable,
-        
-        isElement,
-
-        isFragment,
-
-        isFullscreen,
-
-        isInDocument,
-
-        isInFrame,
-
-        isInput,
-
-        isTextNode,
-
-        isWindow: types.isWindow,
-
-        nodeName : nodeName,
-
-        offsetParent: offsetParent,
-
-        ownerDoc: ownerDoc,
-
-        ownerWindow: ownerWindow,
-
-        prepend: prepend,
-
-        reflow: reflow,
-
-        remove: remove,
-
-        removeChild : removeChild,
-
-        replace: replace,
-
-        selectable,
-
-        traverse: traverse,
-
-        reverse: reverse,
-
-        wrapper: wrapper,
-
-        wrapperInner: wrapperInner,
-
-        unwrap: unwrap
-    });
-
-    return skylark.attach("domx.noder" , noder);
+	
+	return noder.offsetParent = offsetParent;
 });
 define('skylark-domx-styler/styler',[
     "skylark-langx/skylark",
@@ -63464,6 +63429,202 @@ define('skylark-domx-noder/overlay',[
 
     return noder.overlay = overlay;
  });
+define('skylark-domx-noder/owner-doc',[
+	"./noder"
+],function(noder){
+ 
+    /*   
+     * Get the owner document object for the specified element.
+     * @param {Node} elm
+     */
+    function ownerDoc(elm) {
+        if (!elm) {
+            return document;
+        }
+
+        if (elm.nodeType == 9) {
+            return elm;
+        }
+
+        return elm.ownerDocument;
+    }
+
+	
+	return noder.ownerDoc = ownerDoc;
+});
+define('skylark-domx-noder/owner-window',[
+	"./noder",
+    "./owner-doc"
+],function(noder,ownerDoc){
+ 
+    /*   
+     *
+     * @param {Node} elm
+     */
+    function ownerWindow(elm) {
+        var doc = ownerDoc(elm);
+        return doc.defaultView || doc.parentWindow;
+    }
+
+	return noder.ownerWindow = ownerWindow;
+});
+define('skylark-domx-noder/prepend',[
+    "./noder",
+    "./_enhance_place_content",
+    "./_ensure_nodes"
+],function(noder,enhancePlaceContent,ensureNodes){
+
+    /*   
+     * insert one or more nodes as the first children of the specified node.
+     * @param {Node} node
+     * @param {Node or ArrayLike} placing
+     * @param {Boolean Optional} copyByClone
+     */
+    function prepend(node, placing, copyByClone) {
+        var parentNode = node,
+            refNode = parentNode.firstChild,
+            nodes = ensureNodes(placing, copyByClone);
+        for (var i = 0; i < nodes.length; i++) {
+            if (refNode) {
+                parentNode.insertBefore(nodes[i], refNode);
+            } else {
+                parentNode.appendChild(nodes[i]);
+            }
+        }
+        return this;
+    }
+
+	
+	return noder.prepend = prepend;
+});
+define('skylark-domx-noder/reflow',[
+	"./noder"
+],function(noder){
+ 
+    function reflow(elm) {
+        if (!elm) {
+          elm = document;
+        }
+        elm.offsetHeight;
+
+        return this;      
+    }
+	
+	return noder.reflow = reflow;
+});
+define('skylark-domx-noder/remove-child',[
+    "skylark-langx-types",
+	"./noder"
+],function(types,noder){
+ 
+
+    function removeChild(node,children) {
+        if (!types.isArrayLike(children)) {
+            children = [children];
+        }
+        for (var i=0;i<children.length;i++) {
+            node.removeChild(children[i]);
+        }
+
+        return this;
+    }
+
+	
+	return noder.removeChild = removeChild;
+});
+define('skylark-domx-noder/remove',[
+	"./noder"
+],function(noder){
+ 
+    /*   
+     * Remove the set of matched elements from the DOM.
+     * @param {Node} node
+     */
+    function remove(node) {
+        if (node && node.parentNode) {
+            try {
+                node.parentNode.removeChild(node);
+            } catch (e) {
+                console.warn("The node is already removed", e);
+            }
+        }
+        return this;
+    }
+	
+	return noder.remove = remove;
+});
+define('skylark-domx-noder/replace',[
+	"./noder"
+],function(noder){
+     /*   
+     * Replace an old node with the specified node.
+     * @param {Node} node
+     * @param {Node} oldNode
+     */
+    function replace(node, oldNode) {
+        oldNode.parentNode.replaceChild(node, oldNode);
+        return this;
+    }
+
+	return noder.replace = replace;
+});
+define('skylark-domx-noder/reverse',[
+	"./noder"
+],function(noder){
+    /*   
+     *
+     * @param {Node} node
+     */
+    function reverse(node) {
+        var firstChild = node.firstChild;
+        for (var i = node.children.length - 1; i > 0; i--) {
+            if (i > 0) {
+                var child = node.children[i];
+                node.insertBefore(child, firstChild);
+            }
+        }
+    }
+	
+	return noder.reverse = reverse;
+});
+define('skylark-domx-noder/root',[
+	"./noder"
+],function(noder){
+	function root() {
+		return  document.documentElement;
+	}
+	
+	return noder.root = root;
+});
+define('skylark-domx-noder/scrolling-element',[
+	"./noder"
+],function(noder){
+	function scrollingElement() {
+		return document.scrollingElement || document.documentElement;
+	}
+	
+	return noder.scrollingElement = scrollingElement;
+});
+define('skylark-domx-noder/selectable',[
+	"./noder"
+],function(noder){
+ 
+
+    function selectable(elem, selectable) {
+        if (elem === undefined || elem.style === undefined)
+            return;
+        elem.onselectstart = selectable ? function () {
+            return false;
+        } : function () {
+        };
+        elem.style.MozUserSelect = selectable ? 'auto' : 'none';
+        elem.style.KhtmlUserSelect = selectable ? 'auto' : 'none';
+        elem.unselectable = selectable ? 'on' : 'off';
+    }
+
+	
+	return noder.selectable = selectable;
+});
 define('skylark-domx-noder/throb',[
     "skylark-langx/langx",
     "skylark-domx-styler",
@@ -63543,9 +63704,135 @@ define('skylark-domx-noder/throb',[
 
     return noder.throb = throb;
 });
+define('skylark-domx-noder/traverse',[
+	"./noder"
+],function(noder){
+ 
+    /*   
+     * traverse the specified node and its descendants, perform the callback function on each
+     * @param {Node} node
+     * @param {Function} fn
+     */
+    function traverse(node, fn) {
+        fn(node)
+        for (var i = 0, len = node.childNodes.length; i < len; i++) {
+            traverse(node.childNodes[i], fn);
+        }
+        return this;
+    }
+	
+	return noder.traverse = traverse;
+});
+define('skylark-domx-noder/unwrap',[
+	"./noder",
+    "./is-doc"
+],function(noder,isDoc){
+
+    /*   
+     * Remove the parents of the set of matched elements from the DOM, leaving the matched
+     * @param {Node} node
+     */
+    function unwrap(node) {
+        var child, parent = node.parentNode;
+        if (parent) {
+            if (isDoc(parent.parentNode)) return;
+            parent.parentNode.insertBefore(node, parent);
+        }
+    }
+
+	return noder.unwrap = unwrap;
+});
+define('skylark-domx-noder/wrapper-inner',[
+	"./noder"
+],function(noder){
+    var  slice = Array.prototype.slice;
+
+    /*   
+     * Wrap an HTML structure around the content of each element in the set of matched
+     * @param {Node} node
+     * @param {Node} wrapperNode
+     */
+    function wrapperInner(node, wrapperNode) {
+        var childNodes = slice.call(node.childNodes);
+        node.appendChild(wrapperNode);
+        for (var i = 0; i < childNodes.length; i++) {
+            wrapperNode.appendChild(childNodes[i]);
+        }
+        return this;
+    }
+
+	
+	return noder.wrapperInner = wrapperInner;
+});
+define('skylark-domx-noder/wrapper',[
+	"./noder"
+],function(noder){
+ 
+    /*   
+     * Wrap an HTML structure around each element in the set of matched elements.
+     * @param {Node} node
+     * @param {Node} wrapperNode
+     */
+    function wrapper(node, wrapperNode) {
+        if (types.isString(wrapperNode)) {
+            wrapperNode = this.createFragment(wrapperNode).firstChild;
+        }
+        node.parentNode.insertBefore(wrapperNode, node);
+        wrapperNode.appendChild(node);
+    }
+	
+	return noder.wrapper = wrapper;
+});
 define('skylark-domx-noder/main',[
 	"./noder",
+	"./active",
+	"./after",
+	"./append",
+	"./before",
+	"./body",
+	"./clone",
+	"./contains",
+	"./create-element",
+	"./create-fragment",
+	"./create-text-node",
+	"./doc",
+	"./empty",
+	"./focusable",
+	"./from-point",
+	"./fullscreen",
+	"./html",
+	"./is-active",
+	"./is-block-node",
+	"./is-child-of",
+	"./is-doc",
+	"./is-editable",
+	"./is-element",
+	"./is-fragment",
+	"./is-fullscreen",
+	"./is-in-document",
+	"./is-in-frame",
+	"./is-input",
+	"./is-text-node",
+	"./is-window",
+	"./node-name",
+	"./offset-parent",
 	"./overlay",
+	"./owner-doc",
+	"./owner-window",
+	"./prepend",
+	"./reflow",
+	"./remove-child",
+	"./remove",
+	"./replace",
+	"./reverse",
+	"./root",
+	"./scrolling-element",
+	"./selectable",
+	"./throb",
+	"./traverse",
+	"./unwrap",
+	"./wrapper-inner",
+	"./wrapper",
 	"./throb"
 ],function(noder){
 	return noder;
@@ -64722,6 +65009,39 @@ define('skylark-domx-finder/finder',[
         return ret;
     }
 
+
+    function scrollableParent(el, includeSelf) {
+        // skip to window
+        if (!el || !el.getBoundingClientRect) {
+            return noder.scrollingElement();
+        }
+
+        var elem = el;
+        var gotSelf = false;
+        do {
+            // we don't need to get elem css if it isn't even overflowing in the first place (performance)
+            if (elem.clientWidth < elem.scrollWidth || elem.clientHeight < elem.scrollHeight) {
+                var elemCSS = styler.css(elem);
+                if (
+                    elem.clientWidth < elem.scrollWidth && (elemCSS.overflowX == 'auto' || elemCSS.overflowX == 'scroll') ||
+                    elem.clientHeight < elem.scrollHeight && (elemCSS.overflowY == 'auto' || elemCSS.overflowY == 'scroll')
+                ) {
+                    if (!elem || !elem.getBoundingClientRect || elem === document.body) {
+                        return noder.scrollingElement();
+                    } 
+                    if (gotSelf || includeSelf) {
+                        return elem;
+                    }
+                    gotSelf = true;
+                }
+            }
+        /* jshint boss:true */
+        } while (elem = elem.parentNode);
+
+        return noder.scrollingElement();
+    }
+
+
     var finder = function() {
         return finder;
     };
@@ -64767,6 +65087,8 @@ define('skylark-domx-finder/finder',[
         previousSiblings,
 
         pseudos: local.pseudos,
+
+        scrollableParent,
 
         siblings: siblings
     });
@@ -67102,8 +67424,8 @@ define('skylark-domx-geom/posit',[
 
     return geom.posit = posit;
 });
-define('skylark-domx-geom/scrollToTop',[
-    "skylark-langx/langx",
+define('skylark-domx-geom/scroll-to-top',[
+    "skylark-langx",
     "skylark-domx-styler",
     "./geom"
 ],function(langx,styler,geom) {
@@ -67143,7 +67465,7 @@ define('skylark-domx-geom/main',[
     "skylark-domx-velm",
     "skylark-domx-query",
     "./posit",
-    "./scrollToTop"
+    "./scroll-to-top"
 ],function(langx,geom,velm,$){
    // from ./geom
     velm.delegate([
@@ -68672,276 +68994,3528 @@ define('skylark-domx-eventer/main',[
 });
 define('skylark-domx-eventer', ['skylark-domx-eventer/main'], function (main) { return main; });
 
+define('skylark-domx-plugins-base/plugins',[
+    "skylark-langx-ns"
+], function(skylark) {
+    "use strict";
+
+    var pluginKlasses = {},
+        shortcuts = {};
+
+
+    return  skylark.attach("domx.plugins",{
+        pluginKlasses,
+        shortcuts
+    });
+});
+define('skylark-langx-events/Emitter',[
+  "skylark-langx-types",
+  "skylark-langx-objects",
+  "skylark-langx-arrays",
+  "skylark-langx-klass",
+  "./events",
+  "./event",
+  "./listener"
+],function(types,objects,arrays,klass,events,Event,Listener){
+    var slice = Array.prototype.slice,
+        compact = arrays.compact,
+        isDefined = types.isDefined,
+        isPlainObject = types.isPlainObject,
+        isFunction = types.isFunction,
+        isString = types.isString,
+        isEmptyObject = types.isEmptyObject,
+        mixin = objects.mixin,
+        safeMixin = objects.safeMixin;
+
+    function parse(event) {
+        var segs = ("" + event).split(".");
+        return {
+            name: segs[0],
+            ns: segs.slice(1).join(" ")
+        };
+    }
+
+    
+    var queues  = new Map();
+
+
+    var Emitter = Listener.inherit({
+        _prepareArgs : function(e,args) {
+            if (isDefined(args)) {
+                args = [e].concat(args);
+            } else {
+                args = [e];
+            }
+            return args;
+        },
+
+        on: function(events, selector, data, callback, ctx, /*used internally*/ one) {
+            var self = this,
+                _hub = this._hub || (this._hub = {});
+
+            if (isPlainObject(events)) {
+                ctx = callback;
+                each(events, function(type, fn) {
+                    self.on(type, selector, data, fn, ctx, one);
+                });
+                return this;
+            }
+
+            if (!isString(selector) && !isFunction(callback)) {
+                ctx = callback;
+                callback = data;
+                data = selector;
+                selector = undefined;
+            }
+
+            if (isFunction(data)) {
+                ctx = callback;
+                callback = data;
+                data = null;
+            }
+
+            if (!callback ) {
+                throw new Error("No callback function");
+            } else if (!isFunction(callback)) {
+                throw new Error("The callback  is not afunction");
+            }
+
+            if (isString(events)) {
+                events = events.split(/\s/)
+            }
+
+            events.forEach(function(event) {
+                var parsed = parse(event),
+                    name = parsed.name,
+                    ns = parsed.ns;
+
+                (_hub[name] || (_hub[name] = [])).push({
+                    fn: callback,
+                    selector: selector,
+                    data: data,
+                    ctx: ctx,
+                    ns : ns,
+                    one: one
+                });
+            });
+
+            return this;
+        },
+
+        one: function(events, selector, data, callback, ctx) {
+            return this.on(events, selector, data, callback, ctx, 1);
+        },
+
+        emit: function(e /*,argument list*/ ) {
+            if (!this._hub) {
+                return this;
+            }
+
+            var self = this;
+
+            if (isString(e)) {
+                e = new Event(e); //new CustomEvent(e);
+            }
+
+            Object.defineProperty(e,"target",{
+                value : this
+            });
+
+            var args = slice.call(arguments, 1);
+
+            args = this._prepareArgs(e,args);
+
+            [e.type || e.name, "all"].forEach(function(eventName) {
+                var parsed = parse(eventName),
+                    name = parsed.name,
+                    ns = parsed.ns;
+
+                var listeners = self._hub[name];
+                if (!listeners) {
+                    return;
+                }
+
+                var len = listeners.length,
+                    reCompact = false;
+
+                for (var i = 0; i < len; i++) {
+                    if (e.isImmediatePropagationStopped && e.isImmediatePropagationStopped()) {
+                        return this;
+                    }
+                    var listener = listeners[i];
+                    if (ns && (!listener.ns ||  !listener.ns.startsWith(ns))) {
+                        continue;
+                    }
+
+                    if (listener.data) {
+                        e.data = mixin({}, listener.data, e.data);
+                    }
+                    if (args.length == 2 && isPlainObject(args[1])) {
+                        e.data = e.data || {};
+                        mixin(e.data,args[1]);
+                    }
+
+                    listener.fn.apply(listener.ctx, args);
+                    if (listener.one) {
+                        listeners[i] = null;
+                        reCompact = true;
+                    }
+                }
+
+                if (reCompact) {
+                    self._hub[eventName] = compact(listeners);
+                }
+
+            });
+            return this;
+        },
+
+        queueEmit : function (event) {
+            const type = event.type || event;
+            let map = queues.get(this);
+            if (!map) {
+                map = new Map();
+                queues.set(this, map);
+            }
+            const oldTimeout = map.get(type);
+            map.delete(type);
+            window.clearTimeout(oldTimeout);
+            const timeout = window.setTimeout(() => {
+                if (map.size === 0) {
+                    map = null;
+                    queues.delete(this);
+                }
+                this.trigger(event);
+            }, 0);
+            map.set(type, timeout);
+        },
+
+        listened: function(event) {
+            var evtArr = ((this._hub || (this._events = {}))[event] || []);
+            return evtArr.length > 0;
+        },
+
+        off: function(events, callback) {
+            if (!events) {
+              this._hub = null;
+              return;
+            }
+            var _hub = this._hub || (this._hub = {});
+            if (isString(events)) {
+                events = events.split(/\s/)
+            }
+
+            events.forEach(function(event) {
+                var parsed = parse(event),
+                    name = parsed.name,
+                    ns = parsed.ns;
+
+                var evts = _hub[name];
+
+                if (evts) {
+                    var liveEvents = [];
+
+                    if (callback || ns) {
+                        for (var i = 0, len = evts.length; i < len; i++) {
+                            
+                            if (callback && evts[i].fn !== callback && evts[i].fn._ !== callback) {
+                                liveEvents.push(evts[i]);
+                                continue;
+                            } 
+
+                            if (ns && (!evts[i].ns || evts[i].ns.indexOf(ns)!=0)) {
+                                liveEvents.push(evts[i]);
+                                continue;
+                            }
+                        }
+                    }
+
+                    if (liveEvents.length) {
+                        _hub[name] = liveEvents;
+                    } else {
+                        delete _hub[name];
+                    }
+
+                }
+            });
+
+            return this;
+        },
+
+        trigger  : function() {
+            return this.emit.apply(this,arguments);
+        },
+
+        queueTrigger : function (event) {
+            return this.queueEmit.apply(this,arguments);
+        }
+
+    });
+
+
+    return events.Emitter = Emitter;
+
+});
+define('skylark-domx-fx/fx',[
+    "skylark-langx/skylark",
+    "skylark-langx/langx"
+], function(skylark,langx) {
+
+    function fx() {
+        return fx;
+    }
+
+    langx.mixin(fx, {
+        off: false,
+        speeds: {
+            normal: 400,
+            fast: 200,
+            slow: 600
+        }
+    });
+
+    return skylark.attach("domx.fx", fx);
+});
+define('skylark-domx-transits/transits',[
+    "skylark-langx/skylark",
+    "skylark-langx/langx"
+], function(skylark,langx) {
+
+    function transits() {
+        return transits;
+    }
+
+    langx.mixin(transits, {
+        off: false,
+        speeds: {
+            normal: 400,
+            fast: 200,
+            slow: 600
+        }
+    });
+
+    return skylark.attach("domx.transits", transits);
+});
+define('skylark-domx-transits/transit',[
+    "skylark-langx/langx",
+    "skylark-domx-browser",
+    "skylark-domx-noder",
+    "skylark-domx-geom",
+    "skylark-domx-styler",
+    "skylark-domx-eventer",
+    "./transits"
+], function(langx, browser, noder, geom, styler, eventer,transits) {
+
+    var transitionProperty,
+        transitionDuration,
+        transitionTiming,
+        transitionDelay,
+
+        transitionEnd = browser.normalizeCssEvent('TransitionEnd'),
+
+        supportedTransforms = /^((translate|rotate|scale)(X|Y|Z|3d)?|matrix(3d)?|perspective|skew(X|Y)?)$/i,
+        transform = browser.css3PropPrefix + "transform",
+        cssReset = {};
+
+    cssReset[transitionProperty = browser.normalizeCssProperty("transition-property")] =
+        cssReset[transitionDuration = browser.normalizeCssProperty("transition-duration")] =
+        cssReset[transitionDelay = browser.normalizeCssProperty("transition-delay")] =
+        cssReset[transitionTiming = browser.normalizeCssProperty("transition-timing-function")] = "";
+
+    /*   
+     * Perform a custom animation of a set of CSS properties.
+     * @param {Object} elm  
+     * @param {Number or String} properties
+     * @param {String} ease
+     * @param {Number or String} duration
+     * @param {Function} callback
+     * @param {Number or String} delay
+     */
+    function transit(elm, properties, duration, ease, callback, delay) {
+        var key,
+            cssValues = {},
+            cssProperties = [],
+            transforms = "",
+            that = this,
+            endEvent,
+            wrappedCallback,
+            fired = false,
+            hasScrollTop = false,
+            resetClipAuto = false;
+
+        if (langx.isPlainObject(duration)) {
+            ease = duration.easing;
+            callback = duration.complete;
+            delay = duration.delay;
+            duration = duration.duration;
+        }
+
+        if (langx.isString(duration)) {
+            duration = transits.speeds[duration];
+        }
+        if (duration === undefined) {
+            duration = transits.speeds.normal;
+        }
+        duration = duration / 1000;
+        if (transits.off) {
+            duration = 0;
+        }
+
+        if (langx.isFunction(ease)) {
+            callback = ease;
+            eace = "swing";
+        } else {
+            ease = ease || "swing";
+        }
+
+        if (delay) {
+            delay = delay / 1000;
+        } else {
+            delay = 0;
+        }
+
+        // CSS transitions
+        for (key in properties) {
+            var v = properties[key];
+            if (supportedTransforms.test(key)) {
+                transforms += key + "(" + v + ") ";
+            } else {
+                if (key === "scrollTop") {
+                    hasScrollTop = true;
+                }
+                if (key == "clip" && langx.isPlainObject(v)) {
+                    cssValues[key] = "rect(" + v.top+"px,"+ v.right +"px,"+ v.bottom +"px,"+ v.left+"px)";
+                    if (styler.css(elm,"clip") == "auto") {
+                        var size = geom.size(elm);
+                        styler.css(elm,"clip","rect("+"0px,"+ size.width +"px,"+ size.height +"px,"+"0px)");  
+                        resetClipAuto = true;
+                    }
+
+                } else {
+                    cssValues[key] = v;
+                }
+                cssProperties.push(langx.dasherize(key));
+            }
+        }
+        endEvent = transitionEnd;
+
+        if (transforms) {
+            cssValues[transform] = transforms;
+            cssProperties.push(transform);
+        }
+
+        if (duration > 0) {
+            cssValues[transitionProperty] = cssProperties.join(", ");
+            cssValues[transitionDuration] = duration + "s";
+            cssValues[transitionDelay] = delay + "s";
+            cssValues[transitionTiming] = ease;
+        }
+
+        wrappedCallback = function(event) {
+            fired = true;
+            if (event) {
+                if (event.target !== event.currentTarget) {
+                    return // makes sure the event didn't bubble from "below"
+                }
+                eventer.off(event.target, endEvent, wrappedCallback)
+            } else {
+                eventer.off(elm, endEvent, wrappedCallback) // triggered by setTimeout
+            }
+            styler.css(elm, cssReset);
+            if (resetClipAuto) {
+ //               styler.css(elm,"clip","auto");
+            }
+            callback && callback.call(this);
+        };
+
+        if (duration > 0) {
+            eventer.on(elm, endEvent, wrappedCallback);
+            // transitionEnd is not always firing on older Android phones
+            // so make sure it gets fired
+            langx.debounce(function() {
+                if (fired) {
+                    return;
+                }
+                wrappedCallback.call(that);
+            }, ((duration + delay) * 1000) + 25)();
+        }
+
+        // trigger page reflow so new elements can transit
+        elm.clientLeft;
+
+        styler.css(elm, cssValues);
+
+        if (duration <= 0) {
+            langx.debounce(function() {
+                if (fired) {
+                    return;
+                }
+                wrappedCallback.call(that);
+            }, 0)();
+        }
+
+        if (hasScrollTop) {
+            geom.scrollToTop(elm, properties["scrollTop"], duration, callback);
+        }
+
+        return this;
+    }
+
+    return transits.transit = transit;
+
+});
+define('skylark-domx-animates/animates',[
+    "skylark-langx/skylark",
+    "skylark-langx/langx",
+    "skylark-domx-browser"
+], function(skylark,langx,browser) {
+
+    function animates() {
+        return animates;
+    }
+
+    langx.mixin(animates, {
+        off: false,
+        speeds: {
+            normal: 400,
+            fast: 200,
+            slow: 600
+        },
+        animationName : browser.normalizeCssProperty("animation-name"),
+        animationDuration : browser.normalizeCssProperty("animation-duration"),
+        animationDelay : browser.normalizeCssProperty("animation-delay"),
+        animationTiming : browser.normalizeCssProperty("animation-timing-function"),
+        animationEnd : browser.normalizeCssEvent('AnimationEnd'),
+
+        animateBaseClass : "animated"
+    });
+
+    return skylark.attach("domx.animates", animates);
+});
+define('skylark-domx-animates/animation',[
+    "skylark-langx/langx",
+    "skylark-domx-browser",
+    "skylark-domx-noder",
+    "skylark-domx-geom",
+    "skylark-domx-styler",
+    "skylark-domx-eventer",
+    "./animates"
+], function(langx, browser, noder, geom, styler, eventer,animates) {
+
+    var animationName = animates.animationName,
+        animationDuration = animates.animationDuration,
+        animationTiming = animates.animationTiming,
+        animationDelay = animates.animationDelay,
+
+        animationEnd = animates.animationEnd,
+
+        cssReset = {};
+
+
+    cssReset[animationName] =
+        cssReset[animationDuration] =
+        cssReset[animationDelay] =
+        cssReset[animationTiming] = "";
+
+    /*   
+     * Perform a custom animation.
+     * @param {Object} elm  
+     * @param {String} name
+     * @param {String} ease
+     * @param {Number or String} duration
+     * @param {Function} callback
+     * @param {Number or String} delay
+     */
+    function animation(elm, name, duration, ease, callback, delay) {
+        var cssValues = {};
+        if (langx.isPlainObject(duration)) {
+            ease = duration.easing;
+            callback = duration.complete;
+            delay = duration.delay;
+            duration = duration.duration;
+        }
+
+        if (langx.isString(duration)) {
+            duration = animates.speeds[duration];
+        }
+        if (duration === undefined) {
+            duration = animates.speeds.normal;
+        }
+        duration = duration / 1000;
+
+        if (langx.isFunction(ease)) {
+            callback = ease;
+            eace = "swing";
+        } else {
+            ease = ease || "swing";
+        }
+
+        if (delay) {
+            delay = delay / 1000;
+        } else {
+            delay = 0;
+        }
+        // keyframe animation
+        cssValues[animationName] = name;
+        cssValues[animationDuration] = duration + "s";
+        cssValues[animationTiming] = ease;
+
+
+        if (duration > 0) {
+            eventer.on(elm, animationEnd, callback);
+        }
+
+        // trigger page reflow so new elements can animate
+        elm.clientLeft;
+
+        styler.css(elm, cssValues);
+
+        return this;
+    }
+
+    return animates.animation = animation;
+
+});
+define('skylark-domx-fx/animate',[
+    "skylark-langx/langx",
+    "skylark-domx-transits/transit",
+    "skylark-domx-animates/animation",
+    "./fx"
+], function(langx, transit,animation,fx) {
+
+    /*   
+     * Perform a custom animation of a set of CSS properties.
+     * @param {Object} elm  
+     * @param {Number or String} properties
+     * @param {String} ease
+     * @param {Number or String} duration
+     * @param {Function} callback
+     * @param {Number or String} delay
+     */
+    function animate(elm, properties, duration, ease, callback, delay) {
+        if (langx.isString(properties)) {
+            return animation(elm,properties,duration,ease,callback,delay);
+        } else {
+            return transit(elm,properties,duration,ease,callback,delay);
+        }
+
+    }
+
+    return fx.animate = animate;
+
+});
+define('skylark-domx-transits/bounce',[
+    "skylark-langx/langx",
+    "skylark-domx-geom",
+    "skylark-domx-styler",
+    "./transits",
+    "./transit"
+],function(langx,geom,styler,transits,transit) {
+
+    function bounce(elm, options, done ) {
+        var upAnim, downAnim, refValue,
+            // Defaults:
+            mode = options.mode,
+            hide = mode === "hide",
+            show = mode === "show",
+            direction = options.direction || "up",
+            start,
+            distance = options.distance,
+            times = options.times || 5,
+
+            // Number of internal animations
+            anims = times * 2 + ( show || hide ? 1 : 0 ),
+            speed = options.duration / anims,
+            easing = options.easing,
+
+            // Utility:
+            ref = ( direction === "up" || direction === "down" ) ? "top" : "left",
+            motion = ( direction === "up" || direction === "left" ),
+            i = 0;
+
+        //createPlaceholder(elm);
+
+        var Deferred = langx.Deferred;
+        var funcs = [];
+
+        refValue = styler.css(elm,ref );
+
+        // Default distance for the BIGGEST bounce is the outer Distance / 3
+        if ( !distance ) {
+            var msize = geom.size(elm);
+            distance = (ref === "top" ? msize.height : msize.width) / 3;
+        }
+
+        start = geom.relativePosition(elm)[ref];
+
+        if ( show ) {
+            downAnim = { opacity: 1 };
+            downAnim[ ref ] = refValue;
+
+            // If we are showing, force opacity 0 and set the initial position
+            // then do the "first" animation
+            styler.css(elm, "opacity", 0 );
+            styler.css(elm, ref, start + (motion ? -distance * 2 : distance * 2 ));
+
+            funcs.push(doAnimate(elm,downAnim, speed, easing));
+        }
+
+        // Start at the smallest distance if we are hiding
+        if ( hide ) {
+            distance = distance / Math.pow( 2, times - 1 );
+        }
+
+        downAnim = {};
+        downAnim[ ref ] = refValue;
+
+
+        function doAnimate(elm,properties, duration, easing) {
+            return function() {
+                var d = new Deferred();
+
+                transit(elm,properties, duration, easing ,function(){
+                    d.resolve();
+                });
+                return d.promise;
+
+            }
+        }
+
+        // Bounces up/down/left/right then back to 0 -- times * 2 animations happen here
+        for ( ; i < times; i++ ) {
+            upAnim = {};
+            upAnim[ ref ] = start + ( motion ? -distance : distance) ;
+
+            funcs.push(doAnimate(elm,upAnim, speed, easing));
+
+            funcs.push(doAnimate(elm,downAnim, speed, easing));
+
+            distance = hide ? distance * 2 : distance / 2;
+        }
+
+        // Last Bounce when Hiding
+        if ( hide ) {
+            upAnim = { opacity: 0 };
+            upAnim[ ref ] = start + ( motion ? -1 * distance : distance) ;
+
+            funcs.push(doAnimate(elm,upAnim, speed, easing ));
+        }
+
+        funcs.push(done);
+        funcs.reduce(function(prev, curr, index, array) {
+            return prev.then(curr);
+        }, Deferred.resolve());
+
+        return this;
+    } 
+
+    return transits.bounce = bounce;
+});
+define('skylark-domx-transits/emulate-transition-end',[
+    "skylark-langx/langx",
+    "skylark-domx-browser",
+    "skylark-domx-eventer",
+    "./transits"
+],function(langx,browser,eventer,transits) {
+    
+    function emulateTransitionEnd(elm,duration) {
+        var called = false;
+        eventer.one(elm,'transitionEnd', function () { 
+            called = true;
+        })
+        var callback = function () { 
+            if (!called) {
+                eventer.trigger(elm,browser.support.transition.end) 
+            }
+        };
+        setTimeout(callback, duration);
+        
+        return this;
+    } 
+
+
+
+    return transits.emulateTransitionEnd = emulateTransitionEnd;
+});
+define('skylark-domx-transits/show',[
+    "skylark-langx/langx",
+    "skylark-domx-styler",
+    "./transits",
+    "./transit"
+],function(langx,styler,transits,transit) {
+    /*   
+     * Display an element.
+     * @param {Object} elm  
+     * @param {String} speed
+     * @param {Function} callback
+     */
+    function show(elm, speed, callback) {
+        styler.show(elm);
+        if (speed) {
+            if (!callback && langx.isFunction(speed)) {
+                callback = speed;
+                speed = "normal";
+            }
+            styler.css(elm, "opacity", 0)
+            transit(elm, { opacity: 1, scale: "1,1" }, speed, callback);
+        }
+        return this;
+    }
+
+    return transits.show = show;
+});
+define('skylark-domx-transits/hide',[
+    "skylark-langx/langx",
+    "skylark-domx-styler",
+    "./transits",
+    "./transit"
+],function(langx,styler,transits,transit) {
+    /*   
+     * Hide an element.
+     * @param {Object} elm  
+     * @param {String} speed
+     * @param {Function} callback
+     */
+    function hide(elm, speed, callback) {
+        if (speed) {
+            if (!callback && langx.isFunction(speed)) {
+                callback = speed;
+                speed = "normal";
+            }
+            transit(elm, { opacity: 0, scale: "0,0" }, speed, function() {
+                styler.hide(elm);
+                if (callback) {
+                    callback.call(elm);
+                }
+            });
+        } else {
+            styler.hide(elm);
+        }
+        return this;
+    }
+
+    return transits.hide = hide;
+});
+define('skylark-domx-transits/explode',[
+    "skylark-langx/langx",
+    "skylark-domx-styler",
+    "skylark-domx-geom",
+    "skylark-domx-noder",
+    "skylark-domx-query",
+    "./transits",
+    "./transit",
+    "./show",
+    "./hide"
+],function(langx,styler,geom,noder,$,transits,transit,show,hide) {
+
+    function explode( elm,options, done ) {
+
+		// Show and then visibility:hidden the element before calculating offset
+		styler.show(elm);
+		styler.css(elm, "visibility", "hidden" );
+
+		var i, j, left, top, mx, my,
+			rows = options.pieces ? Math.round( Math.sqrt( options.pieces ) ) : 3,
+			cells = rows,
+			mode = options.mode,
+			show = mode === "show",
+			offset = geom.pagePosition(elm),
+
+			// Width and height of a piece
+			size = geom.marginSize(elm),
+			width = Math.ceil( size.width / cells ),
+			height = Math.ceil( size.height / rows ),
+			pieces = [];
+
+		// Children transit complete:
+		function childComplete() {
+			pieces.push( this );
+			if ( pieces.length === rows * cells ) {
+				animComplete();
+			}
+		}
+
+		// Clone the element for each row and cell.
+		for ( var i = 0; i < rows; i++ ) { // ===>
+			top = offset.top + i * height;
+			my = i - ( rows - 1 ) / 2;
+
+			for ( j = 0; j < cells; j++ ) { // |||
+				left = offset.left + j * width;
+				mx = j - ( cells - 1 ) / 2;
+
+				// Create a clone of the now hidden main element that will be absolute positioned
+				// within a wrapper div off the -left and -top equal to size of our pieces
+				$(elm)
+					.clone()
+					.appendTo( "body" )
+					.wrap( "<div></div>" )
+					.css( {
+						position: "absolute",
+						visibility: "visible",
+						left: -j * width,
+						top: -i * height
+					} )
+
+					// Select the wrapper - make it overflow: hidden and absolute positioned based on
+					// where the original was located +left and +top equal to the size of pieces
+					.parent()
+						.addClass( options.explodeClass || "ui-effects-explode" )
+						.css( {
+							position: "absolute",
+							overflow: "hidden",
+							width: width,
+							height: height,
+							left: left + ( show ? mx * width : 0 ),
+							top: top + ( show ? my * height : 0 ),
+							opacity: show ? 0 : 1
+						} )
+						.transit( {
+							left: left + ( show ? 0 : mx * width ),
+							top: top + ( show ? 0 : my * height ),
+							opacity: show ? 1 : 0
+						}, options.duration || 500, options.easing, childComplete );
+			}
+		}
+
+		function animComplete() {
+			styler.css(elm, {
+				visibility: "visible"
+			} );
+			$( pieces ).remove();
+			done();
+		}
+
+		return this;
+	}
+
+
+	return transits.explode = explode;
+});
+
+define('skylark-domx-transits/fade',[
+    "skylark-langx/langx",
+    "skylark-domx-styler",
+    "./transits",
+    "./transit"
+],function(langx,styler,transits,transit) {
+    /*   
+     * Adjust the opacity of an element.
+     * @param {Object} elm  
+     * @param {Number or String} speed
+     * @param {Number or String} opacity
+     * @param {String} easing
+     * @param {Function} callback
+     */
+    function fade(elm, opacity,options, callback) {
+        if (langx.isFunction(options)) {
+            callback = options;
+            options = {};
+        }
+        options = options || {};
+        
+        transit(elm, { opacity: opacity }, options.duration, options.easing, callback);
+        return this;
+    }
+
+
+    return transits.fade = fade;
+});
+define('skylark-domx-transits/fade-in',[
+    "skylark-langx/langx",
+    "skylark-domx-styler",
+    "./transits",
+    "./fade"
+],function(langx,styler,transits,fadeTo) {
+    /*   
+     * Display an element by fading them to opaque.
+     * @param {Object} elm  
+     * @param {Number or String} duration
+     * @param {String} easing
+     * @param {Function} callback
+     */
+    function fadeIn(elm, options, callback) {
+        var target = styler.css(elm, "opacity");
+        if (target > 0) {
+            styler.css(elm, "opacity", 0);
+        } else {
+            target = 1;
+        }
+        styler.show(elm);
+
+        fadeTo(elm,  target,options, callback);
+
+        return this;
+    }
+
+
+    return transits.fadeIn = fadeIn;
+});
+define('skylark-domx-transits/fade-out',[
+    "skylark-langx/langx",
+    "skylark-domx-styler",
+    "./transits",
+    "./fade"
+],function(langx,styler,transits,fadeTo) {
+    /*   
+     * Hide an element by fading them to transparent.
+     * @param {Object} elm  
+     * @param {Number or String} duration
+     * @param {String} easing
+     * @param {Function} callback
+     */
+    function fadeOut(elm, options, callback) {
+
+        function complete() {
+            styler.css(elm,"opacity",opacity);
+            styler.hide(elm);
+            if (callback) {
+                callback.call(elm);
+            }
+        }
+
+        fadeTo(elm, 0,options,callback);
+
+        return this;
+    }
+
+    return transits.fadeOut = fadeOut;
+});
+define('skylark-domx-transits/fade-toggle',[
+    "skylark-langx/langx",
+    "skylark-domx-styler",
+    "./transits",
+    "./fade-in",
+    "./fade-out"
+],function(langx,styler,transits,fadeIn,fadeOut) {
+
+    /*   
+     * Display or hide an element by animating its opacity.
+     * @param {Object} elm  
+     * @param {Number or String} speed
+     * @param {String} ceasing
+     * @param {Function} callback
+     */
+    function fadeToggle(elm, speed, easing, callback) {
+        if (styler.isInvisible(elm)) {
+            fadeIn(elm, speed, easing, callback);
+        } else {
+            fadeOut(elm, speed, easing, callback);
+        }
+        return this;
+    }
+
+
+    return transits.fadeToggle = fadeToggle;
+});
+define('skylark-domx-transits/pulsate',[
+    "skylark-langx/langx",
+    "skylark-domx-geom",
+    "skylark-domx-styler",
+    "./transits",
+    "./transit"
+],function(langx,geom,styler,transits,transit) {
+
+	function pulsate(elm, options, done ) {
+		var 
+			mode = options.mode,
+			show = mode === "show" || !mode,
+			hide = mode === "hide",
+			showhide = show || hide,
+
+			// Showing or hiding leaves off the "last" animation
+			anims = ( ( options.times || 5 ) * 2 ) + ( showhide ? 1 : 0 ),
+			duration = options.duration / anims,
+			animateTo = 0,
+			i = 1;
+
+		if ( show || styler.isInvisible(elm) ) {
+			styler.css(elm, "opacity", 0 );
+			styler.show(elm);
+			animateTo = 1;
+		}
+
+		// Anims - 1 opacity "toggles"
+
+		var Deferred = langx.Deferred;
+		var funcs = [];
+
+		function doAnimate(elm,properties, duration, ease) {
+			return function() {
+				var d = new Deferred();
+
+				transit( elm,properties, duration, ease ,function(){
+					d.resolve();
+				});
+				return d.promise;
+
+			}
+		}
+
+
+		for ( ; i < anims; i++ ) {
+			funcs.push(doAnimate(elm,{ opacity: animateTo }, duration, options.easing ));
+			animateTo = 1 - animateTo;
+		}
+
+	    funcs.push(doAnimate(elm,{ opacity: animateTo }, duration, options.easing ));
+
+		funcs.push(done);
+		funcs.reduce(function(prev, curr, index, array) {
+	  		return prev.then(curr);
+		}, Deferred.resolve());
+
+		return this;
+
+	}
+
+	return transits.pulsate = pulsate;
+
+});
+
+define('skylark-domx-transits/shake',[
+    "skylark-langx/langx",
+    "skylark-domx-geom",
+    "skylark-domx-styler",
+    "./transits",
+    "./transit"
+],function(langx,geom,styler,transits,transit) {
+	function shake(elm, options, done ) {
+
+		var i = 1,
+			direction = options.direction || "left",
+			distance = options.distance || 20,
+			times = options.times || 3,
+			anims = times * 2 + 1,
+			speed = Math.round( options.duration / anims ),
+			ref = ( direction === "up" || direction === "down" ) ? "top" : "left",
+			positiveMotion = ( direction === "up" || direction === "left" ),
+			animation0 = {},
+			animation = {},
+			animation1 = {},
+			animation2 = {};
+
+		var Deferred = langx.Deferred;
+			start = geom.relativePosition(elm)[ref],
+			funcs = [];
+
+		function doAnimate(elm,properties, duration, ease) {
+			return function() {
+				var d = new Deferred();
+
+				transit(elm, properties, duration, ease ,function(){
+					d.resolve();
+				});
+				return d.promise;
+			}
+		}
+
+		// Animation
+		animation0[ ref ] = start;
+		animation[ ref ] = start + ( positiveMotion ? -1 : 1 ) * distance;
+		animation1[ ref ] = animation[ ref ] + ( positiveMotion ? 1 : -1 ) * distance * 2;
+		animation2[ ref ] = animation1[ ref ] + ( positiveMotion ? -1 : 1 ) * distance * 2;
+
+		// Animate
+	    funcs.push(doAnimate(elm,animation, speed, options.easing ));
+
+		// Shakes
+		for ( ; i < times; i++ ) {
+		    funcs.push(doAnimate(elm,animation1, speed, options.easing ));
+		    funcs.push(doAnimate(elm,animation2, speed, options.easing ));
+		}
+
+	    funcs.push(doAnimate(elm,animation0, speed /2 , options.easing ));
+
+		funcs.push(done);
+		funcs.reduce(function(prev, curr, index, array) {
+	  		return prev.then(curr);
+		}, Deferred.resolve());
+
+		return this;
+	}
+
+	return transits.shake = shake;
+
+});
+
+define('skylark-domx-transits/slide',[
+    "skylark-langx/langx",
+    "skylark-domx-styler",
+    "./transits",
+    "./transit"
+],function(langx,styler,transits,transit) {
+
+    function slide(elm,options,callback ) {
+    	if (langx.isFunction(options)) {
+    		callback = options;
+    		options = {};
+    	}
+    	options = options || {};
+		var direction = options.direction || "down",
+			isHide = ( direction === "up" || direction === "left" ),
+			isVert = ( direction === "up" || direction === "down" ),
+			duration = options.duration || transits.speeds.normal;
+
+
+        // get the element position to restore it then
+        var position = styler.css(elm, 'position');
+
+        if (isHide) {
+            // active the function only if the element is visible
+        	if (styler.isInvisible(elm)) {
+        		return this;
+        	}
+        } else {
+	        // show element if it is hidden
+	        styler.show(elm);        	
+	        // place it so it displays as usually but hidden
+	        styler.css(elm, {
+	            position: 'absolute',
+	            visibility: 'hidden'
+	        });
+        }
+
+
+
+        if (isVert) { // up--down
+	        // get naturally height, margin, padding
+	        var marginTop = styler.css(elm, 'margin-top');
+	        var marginBottom = styler.css(elm, 'margin-bottom');
+	        var paddingTop = styler.css(elm, 'padding-top');
+	        var paddingBottom = styler.css(elm, 'padding-bottom');
+	        var height = styler.css(elm, 'height');
+
+	        if (isHide) {  	// slideup
+	            // set initial css for animation
+	            styler.css(elm, {
+	                visibility: 'visible',
+	                overflow: 'hidden',
+	                height: height,
+	                marginTop: marginTop,
+	                marginBottom: marginBottom,
+	                paddingTop: paddingTop,
+	                paddingBottom: paddingBottom
+	            });
+
+	            // transit element height, margin and padding to zero
+	            transit(elm, {
+	                height: 0,
+	                marginTop: 0,
+	                marginBottom: 0,
+	                paddingTop: 0,
+	                paddingBottom: 0
+	            }, {
+	                // callback : restore the element position, height, margin and padding to original values
+	                duration: duration,
+	                queue: false,
+	                complete: function() {
+	                    styler.hide(elm);
+	                    styler.css(elm, {
+	                        visibility: 'visible',
+	                        overflow: 'hidden',
+	                        height: height,
+	                        marginTop: marginTop,
+	                        marginBottom: marginBottom,
+	                        paddingTop: paddingTop,
+	                        paddingBottom: paddingBottom
+	                    });
+	                    if (callback) {
+	                        callback.apply(elm);
+	                    }
+	                }
+	            });
+	        } else {     	// slidedown
+		        // set initial css for animation
+		        styler.css(elm, {
+		            position: position,
+		            visibility: 'visible',
+		            overflow: 'hidden',
+		            height: 0,
+		            marginTop: 0,
+		            marginBottom: 0,
+		            paddingTop: 0,
+		            paddingBottom: 0
+		        });
+
+		        // transit to gotten height, margin and padding
+		        transit(elm, {
+		            height: height,
+		            marginTop: marginTop,
+		            marginBottom: marginBottom,
+		            paddingTop: paddingTop,
+		            paddingBottom: paddingBottom
+		        }, {
+		            duration: duration,
+		            complete: function() {
+		                if (callback) {
+		                    callback.apply(elm);
+		                }
+		            }
+		        });
+
+	        }
+
+        } else { // left--right
+	        // get naturally height, margin, padding
+	        var marginLeft = styler.css(elm, 'margin-left');
+	        var marginRight = styler.css(elm, 'margin-right');
+	        var paddingLeft = styler.css(elm, 'padding-left');
+	        var paddingRight = styler.css(elm, 'padding-right');
+	        var width = styler.css(elm, 'width');
+
+	        if (isHide) {  	// slideleft
+	            // set initial css for animation
+	            styler.css(elm, {
+	                visibility: 'visible',
+	                overflow: 'hidden',
+	                width: width,
+	                marginLeft: marginLeft,
+	                marginRight: marginRight,
+	                paddingLeft: paddingLeft,
+	                paddingRight: paddingRight
+	            });
+
+	            // transit element height, margin and padding to zero
+	            transit(elm, {
+	                width: 0,
+	                marginLeft: 0,
+	                marginRight: 0,
+	                paddingLeft: 0,
+	                paddingRight: 0
+	            }, {
+	                // callback : restore the element position, height, margin and padding to original values
+	                duration: duration,
+	                queue: false,
+	                complete: function() {
+	                    styler.hide(elm);
+	                    styler.css(elm, {
+	                        visibility: 'visible',
+	                        overflow: 'hidden',
+	                        width: width,
+	                        marginLeft: marginLeft,
+	                        marginRight: marginRight,
+	                        paddingLeft: paddingLeft,
+	                        paddingRight: paddingRight
+	                    });
+	                    if (callback) {
+	                        callback.apply(elm);
+	                    }
+	                }
+	            });
+	        } else {     	// slideright
+		        // set initial css for animation
+		        styler.css(elm, {
+		            position: position,
+		            visibility: 'visible',
+		            overflow: 'hidden',
+		            width: 0,
+		            marginLeft: 0,
+		            marginRight: 0,
+		            paddingLeft: 0,
+		            paddingRight: 0
+		        });
+
+		        // transit to gotten width, margin and padding
+		        transit(elm, {
+		            width: width,
+		            marginLeft: marginLeft,
+		            marginRight: marginRight,
+		            paddingLeft: paddingLeft,
+		            paddingRight: paddingRight
+		        }, {
+		            duration: duration,
+		            complete: function() {
+		                if (callback) {
+		                    callback.apply(elm);
+		                }
+		            }
+		        });
+
+	        }       	
+        }
+
+        return this;
+    }
+
+    return transits.slide = slide;
+
+});
+
+define('skylark-domx-transits/slide-down',[
+    "./transits",
+    "./slide"
+],function(transits,slide) {
+    /*   
+     * Display an element with a sliding motion.
+     * @param {Object} elm  
+     * @param {Number or String} duration
+     * @param {Function} callback
+     */
+    function slideDown(elm, duration, callback) {
+        return slide(elm,{
+            direction : "down",
+            duration : duration
+        },callback);
+    }
+
+    return transits.slideDown = slideDown;
+});
+define('skylark-domx-transits/slide-up',[
+    "./transits",
+    "./slide"
+],function(transits,slide) {
+    /*   
+     * Hide an element with a sliding motion.
+     * @param {Object} elm  
+     * @param {Number or String} duration
+     * @param {Function} callback
+     */
+    function slideUp(elm, duration, callback) {
+        return slide(elm,{
+            direction : "up",
+            duration : duration
+        },callback);
+    }
+
+
+
+    return transits.slideUp = slideUp;
+});
+define('skylark-domx-transits/slide-toggle',[
+    "skylark-langx/langx",
+    "skylark-domx-geom",
+    "./transits",
+    "./slide-down",
+    "./slide-up"
+],function(langx,geom,transits,slideDown,slideUp) {
+
+    /*   
+     * Display or hide an element with a sliding motion.
+     * @param {Object} elm  
+     * @param {Number or String} duration
+     * @param {Function} callback
+     */
+    function slideToggle(elm, duration, callback) {
+
+        // if the element is hidden, slideDown !
+        if (geom.height(elm) == 0) {
+            slideDown(elm, duration, callback);
+        }
+        // if the element is visible, slideUp !
+        else {
+            slideUp(elm, duration, callback);
+        }
+        return this;
+    }
+
+    return transits.slideToggle = slideToggle;
+});
+define('skylark-domx-transits/throb',[
+    "skylark-langx/langx",
+    "skylark-domx-styler",
+    "skylark-domx-noder",
+    "./transits",
+    "./transit"
+],function(langx,styler,noder,transits,transit) {
+
+    
+    /*   
+     * Replace an old node with the specified node.
+     * @param {HTMLElement} elm
+     * @param {Node} params
+     */
+    function throb(elm, params) {
+        params = params || {};
+
+        var self = this,
+            text = params.text,
+            style = params.style,
+            time = params.time,
+            callback = params.callback,
+            timer,
+
+            throbber = noder.createElement("div", {
+                "class": params.className || "throbber"
+            }),
+            //_overlay = overlay(throbber, {
+            //    "class": 'overlay fade'
+            //}),
+            remove = function() {
+                if (timer) {
+                    clearTimeout(timer);
+                    timer = null;
+                }
+                if (throbber) {
+                    noder.remove(throbber);
+                    throbber = null;
+                }
+            },
+            update = function(params) {
+                if (params && params.text && throbber) {
+                    textNode.nodeValue = params.text;
+                }
+            };
+
+        if (params.style) {
+            styler.css(throbber,params.style);
+        }
+
+        //throb = noder.createElement("div", {
+        //   "class": params.throb && params.throb.className || "throb"
+        //}),
+        //textNode = noder.createTextNode(text || ""),
+ 
+        var content = params.content ||  '<span class="throb"></span>';
+
+        //throb.appendChild(textNode);
+        //throbber.appendChild(throb);
+
+        noder.html(throbber,content);
+        
+        elm.appendChild(throbber);
+
+        var end = function() {
+            remove();
+            if (callback) callback();
+        };
+        if (time) {
+            timer = setTimeout(end, time);
+        }
+
+        return {
+            throbber : throbber,
+            remove: remove,
+            update: update
+        };
+    }
+
+    return transits.throb = throb;
+});
+define('skylark-domx-transits/toggle',[
+    "skylark-langx/langx",
+    "skylark-domx-styler",
+    "./transits",
+    "./show",
+    "./hide"
+],function(langx,styler,transits,show,hide) {
+    /*   
+     * Display or hide an element.
+     * @param {Object} elm  
+     * @param {Number or String} speed
+     * @param {Function} callbacke
+     */
+    function toggle(elm, speed, callback) {
+        if (styler.isInvisible(elm)) {
+            show(elm, speed, callback);
+        } else {
+            hide(elm, speed, callback);
+        }
+        return this;
+    }
+
+    return transits.toggle = toggle;
+});
+define('skylark-domx-transits/main',[
+	"./transits",
+	"skylark-domx-velm",
+	"skylark-domx-query",
+    "./transit",
+    "./bounce",
+    "./emulate-transition-end",
+    "./explode",
+    "./fade-in",
+    "./fade-out",
+    "./fade",
+    "./fade-toggle",
+    "./hide",
+    "./pulsate",
+    "./shake",
+    "./show",
+    "./slide",
+    "./slide-down",
+    "./slide-toggle",
+    "./slide-up",
+    "./throb",
+    "./toggle"
+],function(transits,velm,$){
+    // from ./transits
+    velm.delegate([
+        "transit",
+        "emulateTransitionEnd",
+        "fadeIn",
+        "fadeOut",
+        "fade",
+        "fadeToggle",
+        "hide",
+        "scrollToTop",
+        "slideDown",
+        "slideToggle",
+        "slideUp",
+        "show",
+        "toggle"
+    ], transits);
+
+    $.fn.hide =  $.wraps.wrapper_every_act(transits.hide, transits);
+
+    $.fn.transit = $.wraps.wrapper_every_act(transits.transit, transits);
+    $.fn.emulateTransitionEnd = $.wraps.wrapper_every_act(transits.emulateTransitionEnd, transits);
+
+    $.fn.show = $.wraps.wrapper_every_act(transits.show, transits);
+    $.fn.hide = $.wraps.wrapper_every_act(transits.hide, transits);
+    $.fn.toogle = $.wraps.wrapper_every_act(transits.toogle, transits);
+    $.fn.fadeTo = $.wraps.wrapper_every_act(transits.fadeTo, transits);
+    $.fn.fadeIn = $.wraps.wrapper_every_act(transits.fadeIn, transits);
+    $.fn.fadeOut = $.wraps.wrapper_every_act(transits.fadeOut, transits);
+    $.fn.fadeToggle = $.wraps.wrapper_every_act(transits.fadeToggle, transits);
+
+    $.fn.slideDown = $.wraps.wrapper_every_act(transits.slideDown, transits);
+    $.fn.slideToggle = $.wraps.wrapper_every_act(transits.slideToggle, transits);
+    $.fn.slideUp = $.wraps.wrapper_every_act(transits.slideUp, transits);
+
+	return transits;
+});
+define('skylark-domx-transits', ['skylark-domx-transits/main'], function (main) { return main; });
+
+define('skylark-domx-fx/bounce',[
+    "skylark-domx-transits",
+    "./fx"
+],function(transits,fx) {
+    return fx.bounce = transits.bounce;
+});
+define('skylark-domx-fx/emulateTransitionEnd',[
+    "skylark-domx-transits",
+    "./fx"
+],function(transits,fx) {
+    return fx.emulateTransitionEnd = transits.emulateTransitionEnd;
+});
+define('skylark-domx-fx/explode',[
+    "skylark-domx-transits",
+    "./fx"
+],function(transits,fx) {
+	return fx.explode = transits.explode;
+});
+
+define('skylark-domx-fx/fadeIn',[
+    "skylark-domx-transits",
+    "./fx"
+],function(transits,fx) {
+
+    return fx.fadeIn = transits.fadeIn;
+});
+define('skylark-domx-fx/fadeOut',[
+    "skylark-domx-transits",
+    "./fx"
+],function(transits,fx) {
+
+    return fx.fadeOut = transits.fadeOut;
+});
+define('skylark-domx-fx/fade',[
+    "skylark-domx-transits",
+    "./fx"
+],function(transits,fx) {
+
+    return fx.fade = transits.fade;
+});
+define('skylark-domx-fx/fadeToggle',[
+    "skylark-domx-transits",
+    "./fx"
+],function(transits,fx) {
+
+    return fx.fadeToggle = transits.fadeToggle;
+});
+define('skylark-domx-fx/hide',[
+    "skylark-domx-transits",
+    "./fx"
+],function(transits,fx) {
+
+    return fx.hide = transits.hide;
+});
+define('skylark-domx-fx/pulsate',[
+    "skylark-domx-transits",
+    "./fx"
+],function(transits,fx) {
+
+	return fx.pulsate = transits.pulsate;
+
+});
+
+define('skylark-domx-fx/shake',[
+    "skylark-domx-transits",
+    "./fx"
+],function(transits,fx) {
+
+	return fx.shake = transits.shake;
+
+});
+
+define('skylark-domx-fx/show',[
+    "skylark-domx-transits",
+    "./fx"
+],function(transits,fx) {
+
+    return fx.show = transits.show;
+});
+define('skylark-domx-fx/slide',[
+    "skylark-domx-transits",
+    "./fx"
+],function(transits,fx) {
+
+    function slide(elm,options,callback ) {
+    	if (langx.isFunction(options)) {
+    		callback = options;
+    		options = {};
+    	}
+    	options = options || {};
+		var direction = options.direction || "down",
+			isHide = ( direction === "up" || direction === "left" ),
+			isVert = ( direction === "up" || direction === "down" ),
+			duration = options.duration || fx.speeds.normal;
+
+
+        // get the element position to restore it then
+        var position = styler.css(elm, 'position');
+
+        if (isHide) {
+            // active the function only if the element is visible
+        	if (styler.isInvisible(elm)) {
+        		return this;
+        	}
+        } else {
+	        // show element if it is hidden
+	        styler.show(elm);        	
+	        // place it so it displays as usually but hidden
+	        styler.css(elm, {
+	            position: 'absolute',
+	            visibility: 'hidden'
+	        });
+        }
+
+
+
+        if (isVert) { // up--down
+	        // get naturally height, margin, padding
+	        var marginTop = styler.css(elm, 'margin-top');
+	        var marginBottom = styler.css(elm, 'margin-bottom');
+	        var paddingTop = styler.css(elm, 'padding-top');
+	        var paddingBottom = styler.css(elm, 'padding-bottom');
+	        var height = styler.css(elm, 'height');
+
+	        if (isHide) {  	// slideup
+	            // set initial css for animation
+	            styler.css(elm, {
+	                visibility: 'visible',
+	                overflow: 'hidden',
+	                height: height,
+	                marginTop: marginTop,
+	                marginBottom: marginBottom,
+	                paddingTop: paddingTop,
+	                paddingBottom: paddingBottom
+	            });
+
+	            // animate element height, margin and padding to zero
+	            animate(elm, {
+	                height: 0,
+	                marginTop: 0,
+	                marginBottom: 0,
+	                paddingTop: 0,
+	                paddingBottom: 0
+	            }, {
+	                // callback : restore the element position, height, margin and padding to original values
+	                duration: duration,
+	                queue: false,
+	                complete: function() {
+	                    styler.hide(elm);
+	                    styler.css(elm, {
+	                        visibility: 'visible',
+	                        overflow: 'hidden',
+	                        height: height,
+	                        marginTop: marginTop,
+	                        marginBottom: marginBottom,
+	                        paddingTop: paddingTop,
+	                        paddingBottom: paddingBottom
+	                    });
+	                    if (callback) {
+	                        callback.apply(elm);
+	                    }
+	                }
+	            });
+	        } else {     	// slidedown
+		        // set initial css for animation
+		        styler.css(elm, {
+		            position: position,
+		            visibility: 'visible',
+		            overflow: 'hidden',
+		            height: 0,
+		            marginTop: 0,
+		            marginBottom: 0,
+		            paddingTop: 0,
+		            paddingBottom: 0
+		        });
+
+		        // animate to gotten height, margin and padding
+		        animate(elm, {
+		            height: height,
+		            marginTop: marginTop,
+		            marginBottom: marginBottom,
+		            paddingTop: paddingTop,
+		            paddingBottom: paddingBottom
+		        }, {
+		            duration: duration,
+		            complete: function() {
+		                if (callback) {
+		                    callback.apply(elm);
+		                }
+		            }
+		        });
+
+	        }
+
+        } else { // left--right
+	        // get naturally height, margin, padding
+	        var marginLeft = styler.css(elm, 'margin-left');
+	        var marginRight = styler.css(elm, 'margin-right');
+	        var paddingLeft = styler.css(elm, 'padding-left');
+	        var paddingRight = styler.css(elm, 'padding-right');
+	        var width = styler.css(elm, 'width');
+
+	        if (isHide) {  	// slideleft
+	            // set initial css for animation
+	            styler.css(elm, {
+	                visibility: 'visible',
+	                overflow: 'hidden',
+	                width: width,
+	                marginLeft: marginLeft,
+	                marginRight: marginRight,
+	                paddingLeft: paddingLeft,
+	                paddingRight: paddingRight
+	            });
+
+	            // animate element height, margin and padding to zero
+	            animate(elm, {
+	                width: 0,
+	                marginLeft: 0,
+	                marginRight: 0,
+	                paddingLeft: 0,
+	                paddingRight: 0
+	            }, {
+	                // callback : restore the element position, height, margin and padding to original values
+	                duration: duration,
+	                queue: false,
+	                complete: function() {
+	                    styler.hide(elm);
+	                    styler.css(elm, {
+	                        visibility: 'visible',
+	                        overflow: 'hidden',
+	                        width: width,
+	                        marginLeft: marginLeft,
+	                        marginRight: marginRight,
+	                        paddingLeft: paddingLeft,
+	                        paddingRight: paddingRight
+	                    });
+	                    if (callback) {
+	                        callback.apply(elm);
+	                    }
+	                }
+	            });
+	        } else {     	// slideright
+		        // set initial css for animation
+		        styler.css(elm, {
+		            position: position,
+		            visibility: 'visible',
+		            overflow: 'hidden',
+		            width: 0,
+		            marginLeft: 0,
+		            marginRight: 0,
+		            paddingLeft: 0,
+		            paddingRight: 0
+		        });
+
+		        // animate to gotten width, margin and padding
+		        animate(elm, {
+		            width: width,
+		            marginLeft: marginLeft,
+		            marginRight: marginRight,
+		            paddingLeft: paddingLeft,
+		            paddingRight: paddingRight
+		        }, {
+		            duration: duration,
+		            complete: function() {
+		                if (callback) {
+		                    callback.apply(elm);
+		                }
+		            }
+		        });
+
+	        }       	
+        }
+
+        return this;
+    }
+
+    return fx.slide = slide;
+
+});
+
+define('skylark-domx-fx/slideDown',[
+    "skylark-domx-transits",
+    "./fx"
+],function(transits,fx) {
+    /*   
+     * Display an element with a sliding motion.
+     * @param {Object} elm  
+     * @param {Number or String} duration
+     * @param {Function} callback
+     */
+    function slideDown(elm, duration, callback) {
+        return slide(elm,{
+            direction : "down",
+            duration : duration
+        },callback);
+    }
+
+    return fx.slideDown = slideDown;
+});
+define('skylark-domx-fx/slideToggle',[
+    "skylark-domx-transits",
+    "./fx"
+],function(transits,fx) {
+
+    /*   
+     * Display or hide an element with a sliding motion.
+     * @param {Object} elm  
+     * @param {Number or String} duration
+     * @param {Function} callback
+     */
+    function slideToggle(elm, duration, callback) {
+
+        // if the element is hidden, slideDown !
+        if (geom.height(elm) == 0) {
+            slideDown(elm, duration, callback);
+        }
+        // if the element is visible, slideUp !
+        else {
+            slideUp(elm, duration, callback);
+        }
+        return this;
+    }
+
+    return fx.slideToggle = slideToggle;
+});
+define('skylark-domx-fx/slideUp',[
+    "skylark-domx-transits",
+    "./fx"
+],function(transits,fx) {
+    /*   
+     * Hide an element with a sliding motion.
+     * @param {Object} elm  
+     * @param {Number or String} duration
+     * @param {Function} callback
+     */
+    function slideUp(elm, duration, callback) {
+        return slide(elm,{
+            direction : "up",
+            duration : duration
+        },callback);
+    }
+
+
+
+    return fx.slideUp = slideUp;
+});
+define('skylark-domx-fx/throb',[
+    "skylark-domx-noder",
+    "./fx"
+],function(noder,fx) {
+    
+    return fx.throb = noder.throb;
+});
+define('skylark-domx-fx/toggle',[
+    "skylark-domx-transits",
+    "./fx"
+],function(transits,fx) {
+    /*   
+     * Display or hide an element.
+     * @param {Object} elm  
+     * @param {Number or String} speed
+     * @param {Function} callbacke
+     */
+    function toggle(elm, speed, callback) {
+        if (styler.isInvisible(elm)) {
+            show(elm, speed, callback);
+        } else {
+            hide(elm, speed, callback);
+        }
+        return this;
+    }
+
+    return fx.toggle = toggle;
+});
+define('skylark-domx-fx/main',[
+	"./fx",
+    "./animate",
+    "./bounce",
+    "./emulateTransitionEnd",
+    "./explode",
+    "./fadeIn",
+    "./fadeOut",
+    "./fade",
+    "./fadeToggle",
+    "./hide",
+    "./pulsate",
+    "./shake",
+    "./show",
+    "./slide",
+    "./slideDown",
+    "./slideToggle",
+    "./slideUp",
+    "./throb",
+    "./toggle"
+],function(fx){
+
+	return fx;
+});
+define('skylark-domx-fx', ['skylark-domx-fx/main'], function (main) { return main; });
+
+define('skylark-domx-plugins-base/plugin',[
+    "skylark-langx-ns",
+    "skylark-langx-types",
+    "skylark-langx-objects",
+    "skylark-langx-funcs",
+    "skylark-langx-events/Emitter",
+    "skylark-domx-noder",
+    "skylark-domx-data",
+    "skylark-domx-eventer",
+    "skylark-domx-finder",
+    "skylark-domx-geom",
+    "skylark-domx-styler",
+    "skylark-domx-fx",
+    "skylark-domx-query",
+    "skylark-domx-velm",
+    "./plugins"
+], function(
+    skylark,
+    types,
+    objects,
+    funcs,
+    Emitter, 
+    noder, 
+    datax, 
+    eventer, 
+    finder, 
+    geom, 
+    styler, 
+    fx, 
+    $, 
+    elmx,
+    plugins
+) {
+    "use strict";
+
+    var slice = Array.prototype.slice,
+        concat = Array.prototype.concat;
+
+    function parentClass(ctor){
+        if (ctor.hasOwnProperty("superclass")) {
+            return ctor.superclass;
+        }
+
+        return Object.getPrototypeOf(ctor);
+    }
+
+ 
+    var Plugin =   Emitter.inherit({
+        klassName: "Plugin",
+
+        _construct : function(elm,options) {
+           this._elm = elm;
+           this._initOptions(options);
+        },
+
+        _initOptions : function(options) {
+          var ctor = this.constructor,
+              cache = ctor.cache = (ctor.hasOwnProperty("cache") ? ctor.cache : {}),
+              defaults = cache.defaults;
+          if (!defaults) {
+            var  ctors = [];
+            do {
+              ctors.unshift(ctor);
+              if (ctor === Plugin) {
+                break;
+              }
+              ctor = parentClass(ctor);
+            } while (ctor);
+
+            defaults = cache.defaults = {};
+            for (var i=0;i<ctors.length;i++) {
+              ctor = ctors[i];
+              if (ctor.prototype.hasOwnProperty("options")) {
+                objects.mixin(defaults,ctor.prototype.options,true);
+              }
+              if (ctor.hasOwnProperty("options")) {
+                objects.mixin(defaults,ctor.options,true);
+              }
+            }
+          }
+          Object.defineProperty(this,"options",{
+            value :objects.mixin({},defaults,options,true)
+          });
+
+          //return this.options = langx.mixin({},defaults,options);
+          return this.options;
+        },
+
+
+        destroy: function() {
+
+            this._destroy();
+
+            // remove all event lisener
+            this.unlistenTo();
+            // remove data 
+            datax.removeData(this._elm,this.pluginName );
+        },
+
+        _destroy: funcs.noop,
+
+        _delay: function( handler, delay ) {
+            function handlerProxy() {
+                return ( typeof handler === "string" ? instance[ handler ] : handler )
+                    .apply( instance, arguments );
+            }
+            var instance = this;
+            return setTimeout( handlerProxy, delay || 0 );
+        },
+
+        elmx : function(elm) {
+            if (elm) {
+                return elmx(elm);
+            }
+            if (!this._velm) {
+                this._velm = elmx(this._elm);
+            }
+            return this._velm;
+        },
+
+        $ : function(elm) {
+            if (elm) {
+                return $(elm,this._elm);
+            }
+            if (!this._$elm) {
+                this._$elm = $(this._elm);
+            }            
+            return this._$elm;
+        },
+
+        option: function( key, value ) {
+            var options = key;
+            var parts;
+            var curOption;
+            var i;
+
+            if ( arguments.length === 0 ) {
+
+                // Don't return a reference to the internal hash
+                return objects.mixin( {}, this.options );
+            }
+
+            if ( typeof key === "string" ) {
+
+                // Handle nested keys, e.g., "foo.bar" => { foo: { bar: ___ } }
+                options = {};
+                parts = key.split( "." );
+                key = parts.shift();
+                if ( parts.length ) {
+                    curOption = options[ key ] = objects.mixin( {}, this.options[ key ] );
+                    for ( i = 0; i < parts.length - 1; i++ ) {
+                        curOption[ parts[ i ] ] = curOption[ parts[ i ] ] || {};
+                        curOption = curOption[ parts[ i ] ];
+                    }
+                    key = parts.pop();
+                    if ( arguments.length === 1 ) {
+                        return curOption[ key ] === undefined ? null : curOption[ key ];
+                    }
+                    curOption[ key ] = value;
+                } else {
+                    if ( arguments.length === 1 ) {
+                        return this.options[ key ] === undefined ? null : this.options[ key ];
+                    }
+                    options[ key ] = value;
+                }
+            }
+
+            this._setOptions( options );
+
+            return this;
+        },
+
+        _setOptions: function( options ) {
+            var key;
+
+            for ( key in options ) {
+                this._setOption( key, options[ key ] );
+            }
+
+            return this;
+        },
+
+        _setOption: function( key, value ) {
+
+            this.options[ key ] = value;
+
+            return this;
+        },
+
+        getUID : function (prefix) {
+            prefix = prefix || "plugin";
+            do prefix += ~~(Math.random() * 1000000)
+            while (document.getElementById(prefix))
+            return prefix;
+        },
+
+        elm : function() {
+            return this._elm;
+        }
+
+    });
+
+
+    return  plugins.Plugin = Plugin;
+});
+define('skylark-domx-plugins-base/instantiate',[
+    "skylark-domx-data",
+    "./plugins",
+    "./plugin"
+], function(
+    datax, 
+    plugins,
+    Plugin
+) {
+    "use strict";
+
+    var pluginKlasses = plugins.pluginKlasses;
+
+    /*
+     * Create or get or destory a plugin instance assocated with the element.
+     */
+    function instantiate(elm,pluginName,options) {
+        var pair = pluginName.split(":"),
+            instanceDataName = pair[1];
+        pluginName = pair[0];
+
+        if (!instanceDataName) {
+            instanceDataName = pluginName;
+        }
+
+        var pluginInstance = datax.data( elm, instanceDataName );
+
+        if (options === "instance") {
+            return pluginInstance;
+        } else if (options === "destroy") {
+            if (!pluginInstance) {
+                throw new Error ("The plugin instance is not existed");
+            }
+            pluginInstance.destroy();
+            //datax.removeData( elm, pluginName);
+            pluginInstance = undefined;
+        } else {
+            if (!pluginInstance) {
+                if (options !== undefined && typeof options !== "object") {
+                    throw new Error ("The options must be a plain object");
+                }
+                var pluginKlass = pluginKlasses[pluginName]; 
+                pluginInstance = new pluginKlass(elm,options);
+                datax.data( elm, instanceDataName,pluginInstance );
+            } else if (options) {
+                pluginInstance.reset(options);
+            }
+        }
+
+        return pluginInstance;
+    }
+
+    Plugin.instantiate = function(elm,options) {
+        return instantiate(elm,this.prototype.pluginName,options);
+    };
+
+    return  plugins.instantiate = instantiate;
+});
+define('skylark-domx-plugins-base/shortcutter',[
+    "skylark-langx-types",
+    "./plugins",
+    "./instantiate"
+], function(
+    types,
+    plugins,
+    instantiate
+) {
+    "use strict";
+
+    var slice = Array.prototype.slice;
+
+    function shortcutter(pluginName,extfn) {
+       /*
+        * Create or get or destory a plugin instance assocated with the element,
+        * and also you can execute the plugin method directory;
+        */
+        return function (elm,options) {
+            var  plugin = instantiate(elm, pluginName,"instance");
+            if ( options === "instance" ) {
+              return plugin || null;
+            }
+
+            if (!plugin) {
+                plugin = instantiate(elm, pluginName,typeof options == 'object' && options || {});
+                if (typeof options != "string") {
+                  return this;
+                }
+            } 
+            if (options) {
+                var args = slice.call(arguments,1); //2
+                if (extfn) {
+                    return extfn.apply(plugin,args);
+                } else {
+                    if (typeof options == 'string') {
+                        var methodName = options;
+
+                        if ( !plugin ) {
+                            throw new Error( "cannot call methods on " + pluginName +
+                                " prior to initialization; " +
+                                "attempted to call method '" + methodName + "'" );
+                        }
+
+                        if ( !types.isFunction( plugin[ methodName ] ) || methodName.charAt( 0 ) === "_" ) {
+                            throw new Error( "no such method '" + methodName + "' for " + pluginName +
+                                " plugin instance" );
+                        }
+
+                        args = slice.call(args,1); //remove method name
+
+                        var ret = plugin[methodName].apply(plugin,args);
+                        if (ret == plugin) {
+                          ret = undefined;
+                        }
+
+                        return ret;
+                    }                
+                }                
+            }
+
+        }
+
+    }
+
+
+    return  plugins.shortcutter = shortcutter;
+});
+define('skylark-domx-plugins-base/register',[
+    "skylark-langx-types",
+    "skylark-domx-query",
+    "skylark-domx-velm",
+    "./plugins",
+    "./shortcutter"
+], function(
+    types,
+    $, 
+    elmx,
+    plugins,
+    shortcutter
+) {
+    "use strict";
+
+    var slice = Array.prototype.slice,
+        pluginKlasses = plugins.pluginKlasses,
+        shortcuts = plugins.shortcuts;
+
+    /*
+     * Register a plugin type
+     */
+    function register( pluginKlass,shortcutName,instanceDataName,extfn) {
+        var pluginName = pluginKlass.prototype.pluginName;
+        
+        pluginKlasses[pluginName] = pluginKlass;
+
+        if (shortcutName) {
+            if (instanceDataName && types.isFunction(instanceDataName)) {
+                extfn = instanceDataName;
+                instanceDataName = null;
+            } 
+            if (instanceDataName) {
+                pluginName = pluginName + ":" + instanceDataName;
+            }
+
+            var shortcut = shortcuts[shortcutName] = shortcutter(pluginName,extfn);
+                
+            $.fn[shortcutName] = function(options) {
+                var returnValue = this;
+
+                if ( !this.length && options === "instance" ) {
+                  returnValue = undefined;
+                } else {
+                  var args = slice.call(arguments);
+                  this.each(function () {
+                    var args2 = slice.call(args);
+                    args2.unshift(this);
+                    var  ret  = shortcut.apply(undefined,args2);
+                    if (ret !== undefined) {
+                        returnValue = ret;
+                    }
+                  });
+                }
+
+                return returnValue;
+            };
+
+            elmx.partial(shortcutName,function(options) {
+                var  ret  = shortcut(this._elm,options);
+                if (ret === undefined) {
+                    ret = this;
+                }
+                return ret;
+            });
+
+        }
+    }
+
+    return  plugins.register = register;
+});
+define('skylark-domx-plugins-base/main',[
+    "skylark-domx-query",
+    "skylark-domx-velm",
+	"./plugins",
+	"./instantiate",
+	"./plugin",
+	"./register",
+	"./shortcutter"
+],function($,elmx,plugins,instantiate,Plugin,register,shortcutter){
+    "use strict";
+
+    var slice = Array.prototype.slice;
+
+    $.fn.plugin = function(name,options) {
+        var args = slice.call( arguments, 1 ),
+            self = this,
+            returnValue ;
+
+        this.each(function(){
+            returnValue = instantiate.apply(self,[this,name].concat(args));
+        });
+        return returnValue;
+    };
+
+    elmx.partial("plugin",function(name,options) {
+        var args = slice.call( arguments, 1 );
+        return instantiate.apply(this,[this._elm,name].concat(args));
+    }); 
+
+	return plugins;
+});
+define('skylark-domx-plugins-base', ['skylark-domx-plugins-base/main'], function (main) { return main; });
+
+define('skylark-domx-plugins-dnd/dnd',[
+    "skylark-domx-plugins-base/plugins"
+], function(plugins) {
+
+	return plugins.dnd = {};
+});
+
+
+define('skylark-domx-plugins-scrolls/scrolls',[
+    "skylark-domx-plugins-base/plugins"
+],function (plugins) {
+    'use strict';
+
+    return plugins.scrolls = {};
+
+});
+define('skylark-domx-plugins-scrolls/auto-scroll',[
+  "skylark-langx",
+  "skylark-domx-browser",
+  "skylark-domx-eventer",
+  "skylark-domx-noder",
+  "skylark-domx-finder",
+  "skylark-domx-geom",
+  "skylark-domx-styler",
+  "skylark-domx-query",
+  "skylark-domx-plugins-base",
+  "./scrolls"
+],function(langx,browser,eventer,noder,finder,geom,styler,$,plugins,scrolls){
+
+  'use strict';
+
+	// INFINITE SCROLL CONSTRUCTOR AND PROTOTYPE
+
+  var AutoScroll = plugins.Plugin.inherit({
+        klassName: "AutoScroll",
+
+        pluginName : "lark.scrolls.autoscroll",
+
+        options : {
+			scrollSensitivity: 30,
+			scrollSpeed: 10,
+			bubbleScroll: true
+        },
+
+        _construct : function(rootEl,options) {
+	        this.overrided(rootEl,options);
+    		this.autoScrolls = [];
+
+
+			this._autoScroll = langx.debounce( (x,y) => {
+				///var _this = rootEl ? rootEl[expando] : window,
+				var	options = this.options,
+					sens = options.scrollSensitivity,
+					speed = options.scrollSpeed,
+
+					winScroller = noder.scrollingElement();
+
+				this.scrollEl = finder.scrollableParent(rootEl, true);
+
+
+				var layersOut = 0;
+				var currentParent = this.scrollEl;
+				var autoScrolls = this.autoScrolls;
+				do {
+					var	el = currentParent,
+						rect = geom.boundingRect(el),
+
+						top = rect.top,
+						bottom = rect.bottom,
+						left = rect.left,
+						right = rect.right,
+
+						width = rect.width,
+						height = rect.height,
+
+						scrollWidth,
+						scrollHeight,
+
+						css,
+
+						vx,
+						vy,
+
+						canScrollX,
+						canScrollY,
+
+						scrollPosX,
+						scrollPosY;
+
+
+					scrollWidth = el.scrollWidth;
+					scrollHeight = el.scrollHeight;
+
+					css = styler.css(el);
+
+					scrollPosX = el.scrollLeft;
+					scrollPosY = el.scrollTop;
+
+					if (el === winScroller) {
+						canScrollX = width < scrollWidth && (css.overflowX === 'auto' || css.overflowX === 'scroll' || css.overflowX === 'visible');
+						canScrollY = height < scrollHeight && (css.overflowY === 'auto' || css.overflowY === 'scroll' || css.overflowY === 'visible');
+					} else {
+						canScrollX = width < scrollWidth && (css.overflowX === 'auto' || css.overflowX === 'scroll');
+						canScrollY = height < scrollHeight && (css.overflowY === 'auto' || css.overflowY === 'scroll');
+					}
+
+					vx = canScrollX && (Math.abs(right - x) <= sens && (scrollPosX + width) < scrollWidth) - (Math.abs(left - x) <= sens && !!scrollPosX);
+
+					vy = canScrollY && (Math.abs(bottom - y) <= sens && (scrollPosY + height) < scrollHeight) - (Math.abs(top - y) <= sens && !!scrollPosY);
+
+
+					if (!autoScrolls[layersOut]) {
+						for (var i = 0; i <= layersOut; i++) {
+							if (!autoScrolls[i]) {
+								autoScrolls[i] = {};
+							}
+						}
+					}
+
+					if (autoScrolls[layersOut].vx != vx || autoScrolls[layersOut].vy != vy || autoScrolls[layersOut].el !== el) {
+						autoScrolls[layersOut].el = el;
+						autoScrolls[layersOut].vx = vx;
+						autoScrolls[layersOut].vy = vy;
+
+						clearInterval(autoScrolls[layersOut].pid);
+
+						if (el && (vx != 0 || vy != 0)) {
+							this.scrollThisInstance = true;
+							/* jshint loopfunc:true */
+							autoScrolls[layersOut].pid = setInterval((function () {
+								var scrollOffsetY = autoScrolls[this.layer].vy ? autoScrolls[this.layer].vy * speed : 0;
+								var scrollOffsetX = autoScrolls[this.layer].vx ? autoScrolls[this.layer].vx * speed : 0;
+								geom.scrollBy(autoScrolls[this.layer].el, scrollOffsetX, scrollOffsetY);
+							}).bind({layer: layersOut}), 24);
+						}
+					}
+					layersOut++;
+				} while (options.bubbleScroll && currentParent !== winScroller && (currentParent = finder.scrollableParent(currentParent, false)));
+			}, 30);
+		},
+
+		destroy: function () {
+			this._clearAutoScrolls();
+            this._cancelThrottle();
+			this._nulling();
+		},
+
+
+		handle : function(x,y) {
+			this._throttleTimeout = this._autoScroll(x,y);
+		},
+
+		_clearAutoScrolls : function () {
+			this.autoScrolls.forEach(function(autoScroll) {
+				clearInterval(autoScroll.pid);
+			});
+			this.autoScrolls = [];
+		},
+
+		_cancelThrottle : function () {
+			//clearTimeout(_throttleTimeout);
+			//_throttleTimeout = void 0;
+			if (this._throttleTimeout && this._throttleTimeout.cancel) {
+				this._throttleTimeout.cancel();
+				this._throttleTimeout = void 0;
+			}
+		},
+
+	
+		_nulling : function () {
+
+			
+			this.pointerElemChangedInterval = null;
+			this.lastPointerElemX = null;
+			this.lastPointerElemY = null;
+
+			this.scrollEl =
+			this.scrollParentEl =
+			this.autoScrolls.length = null;
+
+		}
+
+  });
+
+
+  plugins.register(AutoScroll);
+
+  return scrolls.AutoScroll = AutoScroll;	
+});
+
+define('skylark-domx-plugins-dnd/fallback/data-transfer',[],function(){
+    'use strict';
+
+    /**
+     * Object used to hold the data that is being dragged during drag and drop operations.
+     *
+     * It may hold one or more data items of different types. For more information about
+     * drag and drop operations and data transfer objects, see
+     * <a href="https://developer.mozilla.org/en-US/docs/Web/API/DataTransfer">HTML Drag and Drop API</a>.
+     *
+     * This object is created automatically by the @see:DragDropTouch singleton and is
+     * accessible through the @see:dataTransfer property of all drag events.
+     */
+
+    function DataTransfer() {
+        this._dropEffect = 'move';
+        this._effectAllowed = 'all';
+        this._data = {};
+    }
+    Object.defineProperty(DataTransfer.prototype, "dropEffect", {
+        /**
+         * Gets or sets the type of drag-and-drop operation currently selected.
+         * The value must be 'none',  'copy',  'link', or 'move'.
+         */
+        get: function () {
+            return this._dropEffect;
+        },
+        set: function (value) {
+            this._dropEffect = value;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(DataTransfer.prototype, "effectAllowed", {
+        /**
+         * Gets or sets the types of operations that are possible.
+         * Must be one of 'none', 'copy', 'copyLink', 'copyMove', 'link',
+         * 'linkMove', 'move', 'all' or 'uninitialized'.
+         */
+        get: function () {
+            return this._effectAllowed;
+        },
+        set: function (value) {
+            this._effectAllowed = value;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(DataTransfer.prototype, "types", {
+        /**
+         * Gets an array of strings giving the formats that were set in the @see:dragstart event.
+         */
+        get: function () {
+            return Object.keys(this._data);
+        },
+        enumerable: true,
+        configurable: true
+    });
+    /**
+     * Removes the data associated with a given type.
+     *
+     * The type argument is optional. If the type is empty or not specified, the data
+     * associated with all types is removed. If data for the specified type does not exist,
+     * or the data transfer contains no data, this method will have no effect.
+     *
+     * @param type Type of data to remove.
+     */
+    DataTransfer.prototype.clearData = function (type) {
+        if (type != null) {
+            delete this._data[type];
+        }
+        else {
+            this._data = null;
+        }
+    };
+    /**
+     * Retrieves the data for a given type, or an empty string if data for that type does
+     * not exist or the data transfer contains no data.
+     *
+     * @param type Type of data to retrieve.
+     */
+    DataTransfer.prototype.getData = function (type) {
+        return this._data[type] || '';
+    };
+    /**
+     * Set the data for a given type.
+     *
+     * For a list of recommended drag types, please see
+     * https://developer.mozilla.org/en-US/docs/Web/Guide/HTML/Recommended_Drag_Types.
+     *
+     * @param type Type of data to add.
+     * @param value Data to add.
+     */
+    DataTransfer.prototype.setData = function (type, value) {
+        this._data[type] = value;
+    };
+    /**
+     * Set the image to be used for dragging if a custom one is desired.
+     *
+     * @param img An image element to use as the drag feedback image.
+     * @param offsetX The horizontal offset within the image.
+     * @param offsetY The vertical offset within the image.
+     */
+    DataTransfer.prototype.setDragImage = function (img, offsetX, offsetY) {
+        this._imgCustom = img;
+        this._imgOffset = { x: offsetX, y: offsetY };
+    };
+
+    return DataTransfer;
+});
+define('skylark-domx-plugins-dnd/fallback/moused-drag-drop',[
+    "skylark-langx",
+    "skylark-domx-noder",
+    "skylark-domx-query",
+    "skylark-domx-eventer",
+    "skylark-domx-styler",
+    "skylark-domx-finder",
+    "skylark-domx-plugins-scrolls/auto-scroll",
+    "./data-transfer"
+],function(
+    langx,
+    noder,
+    $,
+    eventer,
+    styler,
+    finder,
+    AutoScroll,
+    DataTransfer
+){
+    'use strict';
+
+    var MousedDragDrop = langx.Emitter.inherit({
+        /**
+         * Initializes the single instance of the @see:MousedDragDrop class.
+         */
+        _construct : function(dnd,dragSource,ptDown) {
+            this.dnd = dnd;
+            this._dragSource  =dragSource;
+            this._ptDown = ptDown;
+
+
+            this._lastClick = 0;
+            this._isDragEnabled = true;
+            this._dataTransfer = new DataTransfer();
+
+
+
+            var $doc = $(document);
+
+            this.listenTo($doc,"mousemove",this._onMouseMove);
+            this.listenTo($doc,"mouseup",this._onMouseUp);
+
+        },
+
+        _onMouseMove : function (e) {
+            if (this._shouldCancelPressHoldMove(e)) {
+              this._reset();
+              return;
+            }
+            if (this._shouldHandleMove(e) || this._shouldHandlePressHoldMove(e)) {
+                var target = this._getTarget(e);
+
+                // start dragging
+                if (this._dragSource && !this._img && this._shouldStartDragging(e)) {
+                    this._dispatchEvent(e, 'dragstart', this._dragSource);
+                    this._createImage(e);
+                    this._dispatchEvent(e, 'dragenter', target);
+                }
+                // continue dragging
+                if (this._img) {
+                    this._lastTouch = e;
+                    e.preventDefault(); // prevent scrolling
+                    if (target != this._lastTarget) {
+                        this._dispatchEvent(this._lastTouch, 'dragleave', this._lastTarget);
+                        this._dispatchEvent(e, 'dragenter', target);
+                        this._lastTarget = target;
+                    }
+                    this._moveImage(e);
+                    this._isDropZone = this._dispatchEvent(e, 'dragover', target);
+                }
+
+                this._handleAutoScroll(e);
+
+            }
+        },
+
+        _onMouseUp : function (e) {
+            if (this._shouldHandle(e)) {
+                // finish dragging
+                this._destroyImage();
+                if (this._dragSource) {
+                    if (e.type.indexOf('cancel') < 0 && this._isDropZone) {
+                        this._dispatchEvent(this._lastTouch, 'drop', this._lastTarget);
+                    }
+                    this._dispatchEvent(this._lastTouch, 'dragend', this._dragSource);
+                }
+            }
+            this.destroy();
+        },
+
+        // ** utilities
+        // ignore events that have been handled or that involve more than one touch
+        _shouldHandle : function (e) {
+            return e &&
+                !e.defaultPrevented ;
+        },
+
+        // use regular condition outside of press & hold mode
+        _shouldHandleMove : function (e) {
+          return !MousedDragDrop._ISPRESSHOLDMODE && this._shouldHandle(e);
+        },
+
+        // allow to handle moves that involve many touches for press & hold
+        _shouldHandlePressHoldMove : function (e) {
+          return MousedDragDrop._ISPRESSHOLDMODE &&  this._isDragEnabled ;
+        },
+
+        // reset data if user drags without pressing & holding
+        _shouldCancelPressHoldMove : function (e) {
+          return MousedDragDrop._ISPRESSHOLDMODE && !this._isDragEnabled &&
+              this._getDelta(e) > MousedDragDrop._PRESSHOLDMARGIN;
+        },
+
+        // start dragging when specified delta is detected
+        _shouldStartDragging : function (e) {
+            var delta = this._getDelta(e);
+            return delta > MousedDragDrop._THRESHOLD ||
+                (MousedDragDrop._ISPRESSHOLDMODE && delta >= MousedDragDrop._PRESSHOLDTHRESHOLD);
+        },
+
+        // clear all members
+        _reset : function () {
+            this._destroyImage();
+            this._dragSource = null;
+            this._lastTouch = null;
+            this._lastTarget = null;
+            this._ptDown = null;
+            this._isDragEnabled = false;
+            this._isDropZone = false;
+            this._dataTransfer = null;
+            clearInterval(this._pressHoldInterval);
+
+
+            if (this.pointerElemChangedInterval){
+                clearInterval(this.pointerElemChangedInterval); 
+                this.pointerElemChangedInterval = null
+            } 
+            if (this.autoscroller) {
+                this.autoscroller.destroy();
+                this.autoscroller = null;               
+            }
+        },
+
+        // get point for a touch event
+        _getPoint : function (e, page) {
+             return { x: page ? e.pageX : e.clientX, y: page ? e.pageY : e.clientY };
+        },
+
+        // get distance between the current touch event and the first one
+        _getDelta : function (e) {
+            if (MousedDragDrop._ISPRESSHOLDMODE && !this._ptDown) { return 0; }
+            var p = this._getPoint(e);
+            return Math.abs(p.x - this._ptDown.x) + Math.abs(p.y - this._ptDown.y);
+        },
+
+        // get the element at a given touch event
+        _getTarget : function (e) {
+            var pt = this._getPoint(e), el = document.elementFromPoint(pt.x, pt.y);
+            while (el && getComputedStyle(el).pointerEvents == 'none') {
+                el = el.parentElement;
+            }
+            return el;
+        },
+
+        // create drag image from source element
+        _createImage : function (e) {
+            // just in case...
+            if (this._img) {
+                this._destroyImage();
+            }
+            // create drag image from custom element or drag source
+            this._imgCustom = this._dataTransfer._imgCustom;
+            this._imgOffset = this._dataTransfer._imgOffset;
+
+            var src = this._imgCustom || this._dragSource;
+            this._img = src.cloneNode(true);
+            this._copyStyle(src, this._img);
+            this._img.style.top = this._img.style.left = '-9999px';
+            // if creating from drag source, apply offset and opacity
+            if (!this._imgCustom) {
+                var rc = src.getBoundingClientRect(), 
+                    pt = this._getPoint(e);
+
+                this._imgOffset = { x: pt.x - rc.left, y: pt.y - rc.top };
+                this._img.style.opacity = MousedDragDrop._OPACITY.toString();
+            }
+            // add image to document
+            this._moveImage(e);
+            document.body.appendChild(this._img);
+        },
+
+        // dispose of drag image element
+        _destroyImage : function () {
+            if (this._img) {
+                noder.remove(this._img);
+            }
+            this._img = null;
+            this._imgCustom = null;
+        },
+
+        // move the drag image element
+        _moveImage : function (e) {
+            var _this = this;
+            langx.defer(function () {
+                if (_this._img) {
+                    var pt = _this._getPoint(e, true);
+                    styler.css(_this._img,{
+                        position : 'absolute',
+                        pointerEvents : 'none',
+                        zIndex : '999999',
+                        left : Math.round(pt.x - _this._imgOffset.x) + 'px',
+                        top : Math.round(pt.y - _this._imgOffset.y) + 'px'
+                    });
+                }
+            });
+        },
+
+        // copy properties from an object to another
+        _copyProps : function (dst, src, props) {
+            for (var i = 0; i < props.length; i++) {
+                var p = props[i];
+                dst[p] = src[p];
+            }
+        },
+
+        _copyStyle : function (src, dst) {
+            // remove potentially troublesome attributes
+            MousedDragDrop._rmvAtts.forEach(function (att) {
+                dst.removeAttribute(att);
+            });
+            // copy canvas content
+            if (src instanceof HTMLCanvasElement) {
+                var cSrc = src, cDst = dst;
+                cDst.width = cSrc.width;
+                cDst.height = cSrc.height;
+                cDst.getContext('2d').drawImage(cSrc, 0, 0);
+            }
+            // copy style (without transitions)
+            var cs = getComputedStyle(src);
+            for (var i = 0; i < cs.length; i++) {
+                var key = cs[i];
+                if (key.indexOf('transition') < 0) {
+                    dst.style[key] = cs[key];
+                }
+            }
+            dst.style.pointerEvents = 'none';
+            // and repeat for all children
+            for (var i = 0; i < src.children.length; i++) {
+                this._copyStyle(src.children[i], dst.children[i]);
+            }
+        },
+
+        _dispatchEvent : function (e, type, target) {
+            if (e && target) {
+                var evt = document.createEvent('Event'), t = e.touches ? e.touches[0] : e;
+                evt.initEvent(type, true, true);
+                evt.button = 0;
+                evt.which = evt.buttons = 1;
+                this._copyProps(evt, e, MousedDragDrop._kbdProps);
+                this._copyProps(evt, t, MousedDragDrop._ptProps);
+                evt.dataTransfer = this._dataTransfer;
+                target.dispatchEvent(evt);
+                return evt.defaultPrevented;
+            }
+            return false;
+        },
+
+        // gets an element's closest draggable ancestor
+        _closestDraggable : function (e) {
+            for (; e; e = e.parentElement) {
+                if (e.hasAttribute('data-draggable')) {
+                    return e;
+                }
+            }
+            return null;
+        },
+
+        _handleAutoScroll: function(evt) {
+            var dnd = this.dnd;
+
+            var x = evt.clientX,
+                y = evt.clientY,
+
+                elem = document.elementFromPoint(x, y);
+
+
+            // Listener for pointer element change
+            ////var ogElemScroller = finder.scrollableParent(elem, true);
+            if (
+                (
+                    !this.pointerElemChangedInterval ||
+                    x !== this.lastPointerElemX ||
+                    y !== this.lastPointerElemY
+                )
+            ) {
+
+                if (this.pointerElemChangedInterval){
+                    clearInterval(this.pointerElemChangedInterval); 
+                } 
+                // Detect for pointer elem change, emulating native DnD behaviour
+                var ogElemScroller = null ;
+                this.pointerElemChangedInterval = setInterval(function() {
+                    // could also check if scroll direction on newElem changes due to parent autoscrolling
+                    var newElem = finder.scrollableParent(document.elementFromPoint(x, y), true);
+                    if (newElem !== ogElemScroller) {
+                        ogElemScroller = newElem;
+                        if (this.autoscroller) {
+                            this.autoscroller.destroy();
+                            this.autoscroller = null;
+                        }
+                        this.autoscroller = new AutoScroll(ogElemScroller,dnd.dragging.options);
+                        this.autoscroller.handle(x,y);
+                    }
+                }, 10);
+                this.lastPointerElemX = x;
+                this.lastPointerElemY = y;
+            }
+        },
+
+
+        destroy : function() {
+            this.unlistenTo();
+            this._reset();
+        }
+    });
+
+    // constants
+    MousedDragDrop._THRESHOLD = 5; // pixels to move before drag starts
+    MousedDragDrop._OPACITY = 0.5; // drag image opacity
+    MousedDragDrop._DBLCLICK = 500; // max ms between clicks in a double click
+    MousedDragDrop._CTXMENU = 900; // ms to hold before raising 'contextmenu' event
+    MousedDragDrop._ISPRESSHOLDMODE = false; // decides of press & hold mode presence
+    MousedDragDrop._PRESSHOLDAWAIT = 400; // ms to wait before press & hold is detected
+    MousedDragDrop._PRESSHOLDMARGIN = 25; // pixels that finger might shiver while pressing
+    MousedDragDrop._PRESSHOLDTHRESHOLD = 0; // pixels to move before drag starts
+    // copy styles/attributes from drag source to drag image element
+    MousedDragDrop._rmvAtts = 'id,class,style,draggable'.split(',');
+    // synthesize and dispatch an event
+    // returns true if the event has been handled (e.preventDefault == true)
+    MousedDragDrop._kbdProps = 'altKey,ctrlKey,metaKey,shiftKey'.split(',');
+    MousedDragDrop._ptProps = 'pageX,pageY,clientX,clientY,screenX,screenY'.split(',');	
+
+    return MousedDragDrop
+});
+define('skylark-domx-plugins-dnd/manager',[
+    "skylark-langx/langx",
+    "skylark-langx-hoster/is-mobile",
+    "skylark-domx-noder",
+    "skylark-domx-data",
+    "skylark-domx-finder",
+    "skylark-domx-geom",
+    "skylark-domx-eventer",
+    "skylark-domx-styler",
+    "./dnd",
+    "./fallback/moused-drag-drop"
+], function(langx, isMobile,noder, datax, finder, geom, eventer, styler,dnd,MousedDragDrop) {
+    var on = eventer.on,
+        off = eventer.off,
+        attr = datax.attr,
+        removeAttr = datax.removeAttr,
+        offset = geom.pagePosition,
+        addClass = styler.addClass,
+        height = geom.height;
+
+
+        // This will not pass for IE9, because IE9 DnD only works on anchors
+    var  supportDraggable = ('draggable' in document.createElement('div')) && !isMobile.apple.device; //TODO move to xxx
+
+
+    var Manager = dnd.Manager = langx.Evented.inherit({
+        klassName: "Manager",
+
+        init: function() {
+
+        },
+
+        prepare: function(draggable,event) {
+            var e = eventer.create("preparing", {
+                dragSource: draggable.dragSource,
+                dragHandle: draggable.dragHandle,
+                originalEvent : event
+            });
+            draggable.trigger(e);
+            draggable.dragSource = e.dragSource;
+            draggable.dragHandle = e.dragHandle;
+
+
+            if (draggable.dragSource) {
+                this.useNativeDnd =  draggable.options.forceFallback ? false : supportDraggable;  
+                this.dragging = draggable;
+
+                datax.data(draggable.dragSource, "draggable", true);
+                if (this.useNativeDnd) {
+                    datax.attr(draggable.dragSource, "draggable", 'true');
+                } else {
+                    this._fallbacker = new MousedDragDrop(this,draggable.dragSource,draggable.startPos);
+                }
+
+                try {
+                    if (document.selection) {
+                       document.selection.empty();
+                    } else {
+                        window.getSelection().removeAllRanges();
+                    }
+                } catch (err) {
+                }
+            }
+        },
+
+        start: function(draggable, event) {
+            datax.data(draggable.dragSource, "draggable", false);
+            if (this.useNativeDnd) {
+                datax.attr(draggable.dragSource, "draggable", 'false');
+            }
+
+            var p = geom.pagePosition(draggable.dragSource);
+            this.draggingOffsetX = parseInt(event.pageX - p.left);
+            this.draggingOffsetY = parseInt(event.pageY - p.top)
+
+            var e = eventer.create("started", {
+                elm: draggable.elm,
+                dragSource: draggable.dragSource,
+                dragHandle: draggable.dragHandle,
+                ghost: null,
+
+                originalEvent : event,
+
+                transfer: {}
+            });
+
+            draggable.trigger(e);
+
+
+            this.dragging = draggable;
+
+            if (draggable.draggingClass) {
+                styler.addClass(draggable.dragSource, draggable.draggingClass);
+            }
+
+            this.draggingGhost = e.ghost;
+            if (!this.draggingGhost) {
+                this.draggingGhost = draggable.dragSource;
+            }
+
+            this.draggingTransfer = e.transfer;
+            if (this.draggingTransfer) {
+
+                langx.each(this.draggingTransfer, function(key, value) {
+                    event.dataTransfer.setData(key, value);
+                });
+            }
+
+            event.dataTransfer.setDragImage(this.draggingGhost, this.draggingOffsetX, this.draggingOffsetY);
+
+            ///event.dataTransfer.effectAllowed = "copyMove";
+
+            var e1 = eventer.create("dndStarted", {
+                elm: e.elm,
+                dragSource: e.dragSource,
+                dragHandle: e.dragHandle,
+                ghost: e.ghost,
+                transfer: e.transfer,
+                dragging : this.dragging
+            });
+
+            this.trigger(e1);
+        },
+
+        over: function() {
+
+        },
+
+        end: function(dropped) {
+            var dragging = this.dragging;
+            if (dragging) {
+                if (dragging.draggingClass) {
+                    styler.removeClass(dragging.dragSource, dragging.draggingClass);
+                }
+            }
+
+            var e2 = eventer.create("ended", {
+                originalEvent : e
+            });
+
+            this.dragging.trigger(e2);
+
+
+            var e = eventer.create("dndEnded", {});
+            this.trigger(e);
+
+
+            this.dragging = null;
+            this.draggingTransfer = null;
+            this.draggingGhost = null;
+            this.draggingOffsetX = null;
+            this.draggingOffsetY = null;
+        }
+    });
+
+    var manager = new Manager();
+
+
+    return manager;
+});
+define('skylark-domx-plugins-dnd/draggable',[
+    "skylark-langx/langx",
+    "skylark-domx-noder",
+    "skylark-domx-data",
+    "skylark-domx-finder",
+    "skylark-domx-geom",
+    "skylark-domx-eventer",
+    "skylark-domx-styler",
+    "skylark-devices-points/touch",
+    "skylark-domx-plugins-base",
+    "./dnd",
+    "./manager"
+], function(langx, noder, datax, finder, geom, eventer, styler, touch, plugins, dnd,manager) {
+    var on = eventer.on,
+        off = eventer.off,
+        attr = datax.attr,
+        removeAttr = datax.removeAttr,
+        offset = geom.pagePosition,
+        addClass = styler.addClass,
+        height = geom.height;
+
+
+
+    var Draggable = plugins.Plugin.inherit({
+        klassName: "Draggable",
+        
+        pluginName : "lark.dnd.draggable",
+
+        options : {
+            draggingClass : "dragging",
+            forceFallback : false
+        },
+
+        _construct: function(elm, options) {
+            this.overrided(elm,options);
+
+            var self = this,
+                options = this.options;
+
+            self.draggingClass = options.draggingClass;
+
+            ["preparing", "started", "ended", "moving"].forEach(function(eventName) {
+                if (langx.isFunction(options[eventName])) {
+                    self.on(eventName, options[eventName]);
+                }
+            });
+
+            touch.mousy(elm);
+
+            eventer.on(elm, {
+                "mousedown": function(e) {
+                    var options = self.options;
+                    if (options.handle) {
+                        if (langx.isFunction(options.handle)) {
+                            self.dragHandle = options.handle(e.target,self._elm);
+                        } else {
+                            self.dragHandle = finder.closest(e.target, options.handle,self._elm);
+                        }
+                        if (!self.dragHandle) {
+                            return;
+                        }
+                    }
+                    if (options.source) {
+                        if (langx.isFunction(options.source)) {
+                            self.dragSource =  options.source(e.target, self._elm);                            
+                        } else {
+                            self.dragSource = finder.closest(e.target, options.source,self._elm);                            
+                        }
+                    } else {
+                        self.dragSource = self._elm;
+                    }
+
+                    self.startPos = {
+                        x : e.clientX,
+                        y : e.clientY
+                    };
+
+                    manager.prepare(self,e);
+
+                },
+
+                "mouseup": function(e) {
+                    ///if (self.dragSource) {
+                    ///    //datax.attr(self.dragSource, "draggable", 'false');
+                    ///    self.dragSource = null;
+                    ///    self.dragHandle = null;
+                    ///}
+                },
+
+                "dragstart": function(e) {
+                    if (manager.dragging !== self) {
+                        return;
+                    }
+                    manager.start(self, e);
+                },
+
+                "dragend": function(e) {
+                    if (manager.dragging !== self) {
+                        return;
+                    }
+                    eventer.stop(e);
+
+                    if (!manager.dragging) {
+                        return;
+                    }
+
+                    manager.end(false);
+                }
+            });
+
+        }
+
+    });
+
+    plugins.register(Draggable,"draggable");
+
+    return dnd.Draggable = Draggable;
+});
+define('skylark-domx-plugins-dnd/droppable',[
+    "skylark-langx/langx",
+    "skylark-domx-noder",
+    "skylark-domx-data",
+    "skylark-domx-finder",
+    "skylark-domx-geom",
+    "skylark-domx-eventer",
+    "skylark-domx-styler",
+    "skylark-domx-plugins-base",
+    "./dnd",
+    "./manager"
+], function(langx, noder, datax, finder, geom, eventer, styler, plugins, dnd,manager) {
+    var on = eventer.on,
+        off = eventer.off,
+        attr = datax.attr,
+        removeAttr = datax.removeAttr,
+        offset = geom.pagePosition,
+        addClass = styler.addClass,
+        height = geom.height;
+
+
+    var Droppable = plugins.Plugin.inherit({
+        klassName: "Droppable",
+
+        pluginName : "lark.dnd.droppable",
+
+        options : {
+            draggingClass : "dragging"
+        },
+
+        _construct: function(elm, options) {
+            this.overrided(elm,options);
+
+            var self = this,
+                options = self.options,
+                draggingClass = options.draggingClass,
+                hoverClass,
+                activeClass,
+                acceptable = true;
+
+            ["started", "entered", "leaved", "dropped", "overing"].forEach(function(eventName) {
+                if (langx.isFunction(options[eventName])) {
+                    self.on(eventName, options[eventName]);
+                }
+            });
+
+            eventer.on(elm, {
+                "dragover": function(e) {
+                    e.stopPropagation()
+
+                    if (!acceptable) {
+                        return
+                    }
+
+                    var e2 = eventer.create("overing", {
+                        originalEvent : e,
+                        overElm: e.target,
+                        transfer: manager.draggingTransfer,
+                        acceptable: true
+                    });
+                    self.trigger(e2);
+
+                    if (e2.acceptable) {
+                        e.preventDefault() // allow drop
+
+                        ///e.dataTransfer.dropEffect = "copyMove";
+                    }
+
+                },
+
+                "dragenter": function(e) {
+                    var options = self.options,
+                        elm = self._elm;
+
+                    var e2 = eventer.create("entered", {
+                        originalEvent : e,
+                        transfer: manager.draggingTransfer
+                    });
+
+                    self.trigger(e2);
+
+                    e.stopPropagation()
+
+                    if (hoverClass && acceptable) {
+                        styler.addClass(elm, hoverClass)
+                    }
+                },
+
+                "dragleave": function(e) {
+                    var options = self.options,
+                        elm = self._elm;
+                    if (!acceptable) return false
+
+                    var e2 = eventer.create("leaved", {
+                        originalEvent : e,
+                        transfer: manager.draggingTransfer
+                    });
+
+                    self.trigger(e2);
+
+                    e.stopPropagation()
+
+                    if (hoverClass && acceptable) {
+                        styler.removeClass(elm, hoverClass);
+                    }
+                },
+
+                "drop": function(e) {
+                    var options = self.options,
+                        elm = self._elm;
+
+                    eventer.stop(e); // stops the browser from redirecting.
+
+                    if (!manager.dragging) return
+
+                    // manager.dragging.elm.removeClass('dragging');
+
+                    if (hoverClass && acceptable) {
+                        styler.addClass(elm, hoverClass)
+                    }
+
+                    var e2 = eventer.create("dropped", {
+                        originalEvent : e,
+                        transfer: manager.draggingTransfer
+                    });
+
+                    self.trigger(e2);
+
+                    manager.end(true)
+                }
+            });
+
+            manager.on("dndStarted", function(e) {
+                var e2 = eventer.create("started", {
+                    transfer: manager.draggingTransfer,
+                    acceptable: false,
+                    dragging : e.dragging 
+                });
+
+                self.trigger(e2);
+
+                acceptable = e2.acceptable;
+                hoverClass = e2.hoverClass;
+                activeClass = e2.activeClass;
+
+                if (activeClass && acceptable) {
+                    styler.addClass(elm, activeClass);
+                }
+
+            }).on("dndEnded", function(e) {
+                var e2 = eventer.create("ended", {
+                    transfer: manager.draggingTransfer,
+                    acceptable: false
+                });
+
+                self.trigger(e2);
+
+                if (hoverClass && acceptable) {
+                    styler.removeClass(elm, hoverClass);
+                }
+                if (activeClass && acceptable) {
+                    styler.removeClass(elm, activeClass);
+                }
+
+                acceptable = false;
+                activeClass = null;
+                hoverClass = null;
+            });
+
+        }
+    });
+
+    plugins.register(Droppable,"droppable");
+
+    return dnd.Droppable = Droppable;
+});
 define('skylark-langx-emitter/Emitter',[
     "skylark-langx-events"
 ],function(events){
     return events.Emitter;
 });
-define('skylark-dragula/emitter',[
-    "skylark-langx-emitter/Emitter"
-],function(Emitter){
-
-    var Emitter2 = Emitter.inherit({
-        _prepareArgs : function(e,args) {
-            return args;
-        },
-        init : function(thing, options) {
-            var opts = options || {};
-            if (thing === undefined) {
-                thing = {};
-            }
-
-            Object.assign(this,thing);
-        }
-    });
-
-    return Emitter2;
-});
-
-/*
-define([
-	"./atoa",
-	"./debounce"
-],function(atoa,debounce){
-    'use strict';
-
-	function emitter(thing, options) {
-        var opts = options || {};
-        var evt = {};
-        if (thing === undefined) {
-            thing = {};
-        }
-        thing.on = function(type, fn) {
-            if (!evt[type]) {
-                evt[type] = [fn];
-            } else {
-                evt[type].push(fn);
-            }
-            return thing;
-        };
-        thing.once = function(type, fn) {
-            fn._once = true; // thing.off(fn) still works!
-            thing.on(type, fn);
-            return thing;
-        };
-        thing.off = function(type, fn) {
-            var c = arguments.length;
-            if (c === 1) {
-                delete evt[type];
-            } else if (c === 0) {
-                evt = {};
-            } else {
-                var et = evt[type];
-                if (!et) {
-                    return thing;
-                }
-                et.splice(et.indexOf(fn), 1);
-            }
-            return thing;
-        };
-        thing.emit = function() {
-            var args = atoa(arguments);
-            return thing.emitterSnapshot(args.shift()).apply(this, args);
-        };
-        thing.emitterSnapshot = function(type) {
-            var et = (evt[type] || []).slice(0);
-            return function() {
-                var args = atoa(arguments);
-                var ctx = this || thing;
-                if (type === 'error' && opts.throws !== false && !et.length) {
-                    throw args.length === 1 ? args[0] : args;
-                }
-                et.forEach(function emitter(listen) {
-                    if (opts.async) {
-                        debounce(listen, args, ctx);
-                    } else {
-                        listen.apply(ctx, args);
-                    }
-                    if (listen._once) {
-                        thing.off(type, listen);
-                    }
-                });
-                return thing;
-            };
-        };
-        return thing;
-    }
-
-    return emitter;
-});
-
-*/;
-define('skylark-dragula/crossvent',[
-    "skylark-domx-eventer"
-],function(eventer){
-    return {
-        add : eventer.on,
-        remove : eventer.off
-    }
-
-});
-
-/*
-define([
-	"./custom-event",
-	"./eventmap"
-],function(customEvent,eventmap){
-    'use strict';
-    var global = window;
-    
-    var doc = global.document;
-    var addEvent = addEventEasy;
-    var removeEvent = removeEventEasy;
-    var hardCache = [];
-
-    if (!global.addEventListener) {
-        addEvent = addEventHard;
-        removeEvent = removeEventHard;
-    }
-
-    function addEventEasy(el, type, fn, capturing) {
-        return el.addEventListener(type, fn, capturing);
-    }
-
-    function addEventHard(el, type, fn) {
-        return el.attachEvent('on' + type, wrap(el, type, fn));
-    }
-
-    function removeEventEasy(el, type, fn, capturing) {
-        return el.removeEventListener(type, fn, capturing);
-    }
-
-    function removeEventHard(el, type, fn) {
-        var listener = unwrap(el, type, fn);
-        if (listener) {
-            return el.detachEvent('on' + type, listener);
-        }
-    }
-
-    function fabricateEvent(el, type, model) {
-        var e = eventmap.indexOf(type) === -1 ? makeCustomEvent() : makeClassicEvent();
-        if (el.dispatchEvent) {
-            el.dispatchEvent(e);
-        } else {
-            el.fireEvent('on' + type, e);
-        }
-
-        function makeClassicEvent() {
-            var e;
-            if (doc.createEvent) {
-                e = doc.createEvent('Event');
-                e.initEvent(type, true, true);
-            } else if (doc.createEventObject) {
-                e = doc.createEventObject();
-            }
-            return e;
-        }
-
-        function makeCustomEvent() {
-            return new customEvent(type, {
-                detail: model
-            });
-        }
-    }
-
-    function wrapperFactory(el, type, fn) {
-        return function wrapper(originalEvent) {
-            var e = originalEvent || global.event;
-            e.target = e.target || e.srcElement;
-            e.preventDefault = e.preventDefault || function preventDefault() {
-                e.returnValue = false;
-            };
-            e.stopPropagation = e.stopPropagation || function stopPropagation() {
-                e.cancelBubble = true;
-            };
-            e.which = e.which || e.keyCode;
-            fn.call(el, e);
-        };
-    }
-
-    function wrap(el, type, fn) {
-        var wrapper = unwrap(el, type, fn) || wrapperFactory(el, type, fn);
-        hardCache.push({
-            wrapper: wrapper,
-            element: el,
-            type: type,
-            fn: fn
-        });
-        return wrapper;
-    }
-
-    function unwrap(el, type, fn) {
-        var i = find(el, type, fn);
-        if (i) {
-            var wrapper = hardCache[i].wrapper;
-            hardCache.splice(i, 1); // free up a tad of memory
-            return wrapper;
-        }
-    }
-
-    function find(el, type, fn) {
-        var i, item;
-        for (i = 0; i < hardCache.length; i++) {
-            item = hardCache[i];
-            if (item.element === el && item.type === type && item.fn === fn) {
-                return i;
-            }
-        }
-    }
-
-    return  {
-        add: addEvent,
-        remove: removeEvent,
-        fabricate: fabricateEvent
-    };
-
-});
-
-*/;
-define('skylark-dragula/classes',[
-    "skylark-domx-styler"
-],function(styler){
-  /*
-  var cache = {};
-  var start = '(?:^|\\s)';
-  var end = '(?:\\s|$)';
-
-  function lookupClass (className) {
-    var cached = cache[className];
-    if (cached) {
-      cached.lastIndex = 0;
-    } else {
-      cache[className] = cached = new RegExp(start + className + end, 'g');
-    }
-    return cached;
-  }
-
-  function addClass (el, className) {
-    var current = el.className;
-    if (!current.length) {
-      el.className = className;
-    } else if (!lookupClass(className).test(current)) {
-      el.className += ' ' + className;
-    }
-  }
-
-  function rmClass (el, className) {
-    el.className = el.className.replace(lookupClass(className), ' ').trim();
-  }
-
-  return {
-    add: addClass,
-    rm: rmClass
-  };
-  */
-
-  return {
-    add :  styler.addClass,
-    rm : styler.removeClass
-  }
-
-});
-define('skylark-dragula/dragula',[
+define('skylark-dragula/_helpers',[
   "skylark-langx/skylark",
   "skylark-devices-points/mouse",
   "skylark-devices-points/touch",
@@ -68949,9 +72523,7 @@ define('skylark-dragula/dragula',[
   "skylark-domx-finder",
   "skylark-domx-geom",
   "skylark-domx-eventer",
-  "./emitter",
-  "./crossvent",
-  "./classes"
+  "skylark-domx-styler"
 ],function(
   skylark,
   mouse,
@@ -68960,536 +72532,11 @@ define('skylark-dragula/dragula',[
   finder,
   geom,
   eventer,
-  emitter,
-  crossvent,
-  classes
-){
-
+  styler
+ ){
     'use strict';
-    var global = window;
 
-    var doc = global.document;
-    var documentElement = doc.documentElement;
-
-    function dragula (initialContainers, options) {
-      var len = arguments.length;
-      if (len === 1 && Array.isArray(initialContainers) === false) {
-        options = initialContainers;
-        initialContainers = [];
-      }
-      var _mirror; // mirror image
-      var _source; // source container
-      var _item; // item being dragged
-      var _offsetX; // reference x
-      var _offsetY; // reference y
-      var _moveX; // reference move x
-      var _moveY; // reference move y
-      var _initialSibling; // reference sibling when grabbed
-      var _currentSibling; // reference sibling now
-      var _copy; // item used for copying
-      var _renderTimer; // timer for setTimeout renderMirrorImage
-      var _lastDropTarget = null; // last container item was over
-      var _grabbed; // holds mousedown context until first mousemove
-
-      var o = options || {};
-      if (o.moves === void 0) { o.moves = always; }
-      if (o.accepts === void 0) { o.accepts = always; }
-      if (o.invalid === void 0) { o.invalid = invalidTarget; }
-      if (o.containers === void 0) { o.containers = initialContainers || []; }
-      if (o.isContainer === void 0) { o.isContainer = never; }
-      if (o.copy === void 0) { o.copy = false; }
-      if (o.copySortSource === void 0) { o.copySortSource = false; }
-      if (o.revertOnSpill === void 0) { o.revertOnSpill = false; }
-      if (o.removeOnSpill === void 0) { o.removeOnSpill = false; }
-      if (o.direction === void 0) { o.direction = 'vertical'; }
-      if (o.ignoreInputTextSelection === void 0) { o.ignoreInputTextSelection = true; }
-      if (o.mirrorContainer === void 0) { o.mirrorContainer = doc.body; }
-
-      var drake = emitter({
-        containers: o.containers,
-        start: manualStart,
-        end: end,
-        cancel: cancel,
-        remove: remove,
-        destroy: destroy,
-        canMove: canMove,
-        dragging: false
-      });
-
-      if (o.removeOnSpill === true) {
-        drake.on('over', spillOver).on('out', spillOut);
-      }
-
-      events();
-
-      return drake;
-
-      function isContainer (el) {
-        return drake.containers.indexOf(el) !== -1 || o.isContainer(el);
-      }
-
-      function events (remove) {
-        var op = remove ? 'remove' : 'add';
-        touchy(documentElement, op, 'mousedown', grab);
-        touchy(documentElement, op, 'mouseup', release);
-      }
-
-      function eventualMovements (remove) {
-        var op = remove ? 'remove' : 'add';
-        touchy(documentElement, op, 'mousemove', startBecauseMouseMoved);
-      }
-
-      function movements (remove) {
-        var op = remove ? 'remove' : 'add';
-        crossvent[op](documentElement, 'selectstart', preventGrabbed); // IE8
-        crossvent[op](documentElement, 'click', preventGrabbed);
-      }
-
-      function destroy () {
-        events(true);
-        release({});
-      }
-
-      function preventGrabbed (e) {
-        if (_grabbed) {
-          e.preventDefault();
-        }
-      }
-
-      function grab (e) {
-        _moveX = e.clientX;
-        _moveY = e.clientY;
-
-        var ignore = whichMouseButton(e) !== 1 || e.metaKey || e.ctrlKey;
-        if (ignore) {
-          return; // we only care about honest-to-god left clicks and touch events
-        }
-        var item = e.target;
-        var context = canStart(item);
-        if (!context) {
-          return;
-        }
-        _grabbed = context;
-        eventualMovements();
-        if (e.type === 'mousedown') {
-          if (isInput(item)) { // see also: https://github.com/bevacqua/dragula/issues/208
-            item.focus(); // fixes https://github.com/bevacqua/dragula/issues/176
-          } else {
-            e.preventDefault(); // fixes https://github.com/bevacqua/dragula/issues/155
-          }
-        }
-      }
-
-      function startBecauseMouseMoved (e) {
-        if (!_grabbed) {
-          return;
-        }
-        if (whichMouseButton(e) === 0) {
-          release({});
-          return; // when text is selected on an input and then dragged, mouseup doesn't fire. this is our only hope
-        }
-        // truthy check fixes #239, equality fixes #207
-        if (e.clientX !== void 0 && e.clientX === _moveX && e.clientY !== void 0 && e.clientY === _moveY) {
-          return;
-        }
-        if (o.ignoreInputTextSelection) {
-          var clientX = getCoord('clientX', e);
-          var clientY = getCoord('clientY', e);
-          //var elementBehindCursor = doc.elementFromPoint(clientX, clientY);
-          var elementBehindCursor = noder.fromPoint(clientX,clientY);
-          if (isInput(elementBehindCursor)) {
-            return;
-          }
-        }
-
-        var grabbed = _grabbed; // call to end() unsets _grabbed
-        eventualMovements(true);
-        movements();
-        end();
-        start(grabbed);
-
-        var offset = getOffset(_item);
-        _offsetX = getCoord('pageX', e) - offset.left;
-        _offsetY = getCoord('pageY', e) - offset.top;
-
-        classes.add(_copy || _item, 'gu-transit');
-        renderMirrorImage();
-        drag(e);
-      }
-
-      function canStart (item) {
-        if (drake.dragging && _mirror) {
-          return;
-        }
-        if (isContainer(item)) {
-          return; // don't drag container itself
-        }
-        var handle = item;
-        while (getParent(item) && isContainer(getParent(item)) === false) {
-          if (o.invalid(item, handle)) {
-            return;
-          }
-          item = getParent(item); // drag target should be a top element
-          if (!item) {
-            return;
-          }
-        }
-        var source = getParent(item);
-        if (!source) {
-          return;
-        }
-        if (o.invalid(item, handle)) {
-          return;
-        }
-
-        var movable = o.moves(item, source, handle, nextEl(item));
-        if (!movable) {
-          return;
-        }
-
-        return {
-          item: item,
-          source: source
-        };
-      }
-
-      function canMove (item) {
-        return !!canStart(item);
-      }
-
-      function manualStart (item) {
-        var context = canStart(item);
-        if (context) {
-          start(context);
-        }
-      }
-
-      function start (context) {
-        if (isCopy(context.item, context.source)) {
-          _copy = context.item.cloneNode(true);
-          drake.emit('cloned', _copy, context.item, 'copy');
-        }
-
-        _source = context.source;
-        _item = context.item;
-        _initialSibling = _currentSibling = nextEl(context.item);
-
-        drake.dragging = true;
-        drake.emit('drag', _item, _source);
-      }
-
-      function invalidTarget () {
-        return false;
-      }
-
-      function end () {
-        if (!drake.dragging) {
-          return;
-        }
-        var item = _copy || _item;
-        drop(item, getParent(item));
-      }
-
-      function ungrab () {
-        _grabbed = false;
-        eventualMovements(true);
-        movements(true);
-      }
-
-      function release (e) {
-        ungrab();
-
-        if (!drake.dragging) {
-          return;
-        }
-        var item = _copy || _item;
-        var clientX = getCoord('clientX', e);
-        var clientY = getCoord('clientY', e);
-        var elementBehindCursor = getElementBehindPoint(_mirror, clientX, clientY);
-        var dropTarget = findDropTarget(elementBehindCursor, clientX, clientY);
-        if (dropTarget && ((_copy && o.copySortSource) || (!_copy || dropTarget !== _source))) {
-          drop(item, dropTarget);
-        } else if (o.removeOnSpill) {
-          remove();
-        } else {
-          cancel();
-        }
-      }
-
-      function drop (item, target) {
-        var parent = getParent(item);
-        if (_copy && o.copySortSource && target === _source) {
-          parent.removeChild(_item);
-        }
-        if (isInitialPlacement(target)) {
-          drake.emit('cancel', item, _source, _source);
-        } else {
-          drake.emit('drop', item, target, _source, _currentSibling);
-        }
-        cleanup();
-      }
-
-      function remove () {
-        if (!drake.dragging) {
-          return;
-        }
-        var item = _copy || _item;
-        var parent = getParent(item);
-        if (parent) {
-          parent.removeChild(item);
-        }
-        drake.emit(_copy ? 'cancel' : 'remove', item, parent, _source);
-        cleanup();
-      }
-
-      function cancel (revert) {
-        if (!drake.dragging) {
-          return;
-        }
-        var reverts = arguments.length > 0 ? revert : o.revertOnSpill;
-        var item = _copy || _item;
-        var parent = getParent(item);
-        var initial = isInitialPlacement(parent);
-        if (initial === false && reverts) {
-          if (_copy) {
-            if (parent) {
-              parent.removeChild(_copy);
-            }
-          } else {
-            _source.insertBefore(item, _initialSibling);
-          }
-        }
-        if (initial || reverts) {
-          drake.emit('cancel', item, _source, _source);
-        } else {
-          drake.emit('drop', item, parent, _source, _currentSibling);
-        }
-        cleanup();
-      }
-
-      function cleanup () {
-        var item = _copy || _item;
-        ungrab();
-        removeMirrorImage();
-        if (item) {
-          classes.rm(item, 'gu-transit');
-        }
-        if (_renderTimer) {
-          clearTimeout(_renderTimer);
-        }
-        drake.dragging = false;
-        if (_lastDropTarget) {
-          drake.emit('out', item, _lastDropTarget, _source);
-        }
-        drake.emit('dragend', item);
-        _source = _item = _copy = _initialSibling = _currentSibling = _renderTimer = _lastDropTarget = null;
-      }
-
-      function isInitialPlacement (target, s) {
-        var sibling;
-        if (s !== void 0) {
-          sibling = s;
-        } else if (_mirror) {
-          sibling = _currentSibling;
-        } else {
-          sibling = nextEl(_copy || _item);
-        }
-        return target === _source && sibling === _initialSibling;
-      }
-
-      function findDropTarget (elementBehindCursor, clientX, clientY) {
-        var target = elementBehindCursor;
-        while (target && !accepted()) {
-          target = getParent(target);
-        }
-        return target;
-
-        function accepted () {
-          var droppable = isContainer(target);
-          if (droppable === false) {
-            return false;
-          }
-
-          var immediate = getImmediateChild(target, elementBehindCursor);
-          var reference = getReference(target, immediate, clientX, clientY);
-          var initial = isInitialPlacement(target, reference);
-          if (initial) {
-            return true; // should always be able to drop it right back where it was
-          }
-          return o.accepts(_item, target, _source, reference);
-        }
-      }
-
-      function drag (e) {
-        if (!_mirror) {
-          return;
-        }
-        e.preventDefault();
-
-        var clientX = getCoord('clientX', e);
-        var clientY = getCoord('clientY', e);
-        var x = clientX - _offsetX;
-        var y = clientY - _offsetY;
-
-        _mirror.style.left = x + 'px';
-        _mirror.style.top = y + 'px';
-
-        var item = _copy || _item;
-        var elementBehindCursor = getElementBehindPoint(_mirror, clientX, clientY);
-        var dropTarget = findDropTarget(elementBehindCursor, clientX, clientY);
-        var changed = dropTarget !== null && dropTarget !== _lastDropTarget;
-        if (changed || dropTarget === null) {
-          out();
-          _lastDropTarget = dropTarget;
-          over();
-        }
-        var parent = getParent(item);
-        if (dropTarget === _source && _copy && !o.copySortSource) {
-          if (parent) {
-            parent.removeChild(item);
-          }
-          return;
-        }
-        var reference;
-        var immediate = getImmediateChild(dropTarget, elementBehindCursor);
-        if (immediate !== null) {
-          reference = getReference(dropTarget, immediate, clientX, clientY);
-        } else if (o.revertOnSpill === true && !_copy) {
-          reference = _initialSibling;
-          dropTarget = _source;
-        } else {
-          if (_copy && parent) {
-            parent.removeChild(item);
-          }
-          return;
-        }
-        if (
-          (reference === null && changed) ||
-          reference !== item &&
-          reference !== nextEl(item)
-        ) {
-          _currentSibling = reference;
-          dropTarget.insertBefore(item, reference);
-          drake.emit('shadow', item, dropTarget, _source);
-        }
-        function moved (type) { drake.emit(type, item, _lastDropTarget, _source); }
-        function over () { if (changed) { moved('over'); } }
-        function out () { if (_lastDropTarget) { moved('out'); } }
-      }
-
-      function spillOver (el) {
-        classes.rm(el, 'gu-hide');
-      }
-
-      function spillOut (el) {
-        if (drake.dragging) { classes.add(el, 'gu-hide'); }
-      }
-
-      function renderMirrorImage () {
-        if (_mirror) {
-          return;
-        }
-        var rect = _item.getBoundingClientRect();
-        _mirror = _item.cloneNode(true);
-        _mirror.style.width = getRectWidth(rect) + 'px';
-        _mirror.style.height = getRectHeight(rect) + 'px';
-        classes.rm(_mirror, 'gu-transit');
-        classes.add(_mirror, 'gu-mirror');
-        o.mirrorContainer.appendChild(_mirror);
-        touchy(documentElement, 'add', 'mousemove', drag);
-        classes.add(o.mirrorContainer, 'gu-unselectable');
-        drake.emit('cloned', _mirror, _item, 'mirror');
-      }
-
-      function removeMirrorImage () {
-        if (_mirror) {
-          classes.rm(o.mirrorContainer, 'gu-unselectable');
-          touchy(documentElement, 'remove', 'mousemove', drag);
-          getParent(_mirror).removeChild(_mirror);
-          _mirror = null;
-        }
-      }
-
-      function getImmediateChild (dropTarget, target) {
-        var immediate = target;
-        while (immediate !== dropTarget && getParent(immediate) !== dropTarget) {
-          immediate = getParent(immediate);
-        }
-        if (immediate === documentElement) {
-          return null;
-        }
-        return immediate;
-      }
-
-      function getReference (dropTarget, target, x, y) {
-        var horizontal = o.direction === 'horizontal';
-        var reference = target !== dropTarget ? inside() : outside();
-        return reference;
-
-        function outside () { // slower, but able to figure out any position
-          var len = dropTarget.children.length;
-          var i;
-          var el;
-          var rect;
-          for (i = 0; i < len; i++) {
-            el = dropTarget.children[i];
-            //rect = el.getBoundingClientRect();
-            rect = geom.boundingRect(el);
-            if (horizontal && (rect.left + rect.width / 2) > x) { return el; }
-            if (!horizontal && (rect.top + rect.height / 2) > y) { return el; }
-          }
-          return null;
-        }
-
-        function inside () { // faster, but only available if dropped inside a child element
-          
-          //var rect = target.getBoundingClientRect();
-          var  rect = geom.boundingRect(target);
-          if (horizontal) {
-            return resolve(x > rect.left + getRectWidth(rect) / 2);
-          }
-          return resolve(y > rect.top + getRectHeight(rect) / 2);
-          
-        }
-
-        function resolve (after) {
-          return after ? nextEl(target) : target;
-        }
-      }
-
-      function isCopy (item, container) {
-        return typeof o.copy === 'boolean' ? o.copy : o.copy(item, container);
-      }
-    }
-
-
-    
     function touchy (el, op, type, fn) {
-      /*
-      var touch = {
-        mouseup: 'touchend',
-        mousedown: 'touchstart',
-        mousemove: 'touchmove'
-      };
-      var pointers = {
-        mouseup: 'pointerup',
-        mousedown: 'pointerdown',
-        mousemove: 'pointermove'
-      };
-      var microsoft = {
-        mouseup: 'MSPointerUp',
-        mousedown: 'MSPointerDown',
-        mousemove: 'MSPointerMove'
-      };
-      if (global.navigator.pointerEnabled) {
-        crossvent[op](el, pointers[type], fn);
-      } else if (global.navigator.msPointerEnabled) {
-        crossvent[op](el, microsoft[type], fn);
-      } else {
-        crossvent[op](el, touch[type], fn);
-        crossvent[op](el, type, fn);
-      }
-      */
       if (op == "add") {
         eventer.on(el,type,fn);
       } else {
@@ -69500,8 +72547,6 @@ define('skylark-dragula/dragula',[
         el.touchInited = true;   
         touch.mousy(el);     
       }
-
-
     }
 
     function whichMouseButton (e) {
@@ -69516,89 +72561,15 @@ define('skylark-dragula/dragula',[
 
     }
 
-    function getOffset (el) {
-      /*
-      var rect = el.getBoundingClientRect();
-      return {
-        left: rect.left + getScroll('scrollLeft', 'pageXOffset'),
-        top: rect.top + getScroll('scrollTop', 'pageYOffset')
-      };
-      */
-      return geom.pagePosition(el);
-    }
 
-    /*
-    function getScroll (scrollProp, offsetProp) {
-      if (typeof global[offsetProp] !== 'undefined') {
-        return global[offsetProp];
-      }
-      if (documentElement.clientHeight) {
-        return documentElement[scrollProp];
-      }
-      return doc.body[scrollProp];
-    }
-    */
-
-    function getElementBehindPoint (point, x, y) {
-      var p = point || {};
-      //var state = p.className;
-      //var d = p.style.display;
-      //p.style.display = "none";
-      var el;
-      //p.className += ' gu-hide';
-      //p.offsetHeight;
-      el = doc.elementFromPoint(x, y);
-      //p.className = state;
-      //p.style.display = d;
-      return el;
-    }
-
-    function never () { 
-      return false; 
-    }
-    function always () { 
-      return true; 
-    }
+    
     function getRectWidth (rect) { 
       return rect.width || (rect.right - rect.left); 
     }
     function getRectHeight (rect) { 
       return rect.height || (rect.bottom - rect.top); 
     }
-    function getParent (el) { 
-      //return el.parentNode === doc ? null : el.parentNode; 
-      return finder.parent(el);
-    }
-    function isInput (el) {
-      // return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || isEditable(el); 
-      return noder.isInput(el);
-   }
-    
-    
-    function isEditable (el) {
-      /*
-      if (!el) { return false; } // no parents were editable
-      if (el.contentEditable === 'false') { return false; } // stop the lookup
-      if (el.contentEditable === 'true') { return true; } // found a contentEditable element in the chain
-      return isEditable(getParent(el)); // contentEditable is set to 'inherit'
-      */
-      return noder.isEditable(el);
-    }
-    
 
-    function nextEl (el) {
-      /*
-      return el.nextElementSibling || manually();
-      function manually () {
-        var sibling = el;
-        do {
-          sibling = sibling.nextSibling;
-        } while (sibling && sibling.nodeType !== 1);
-        return sibling;
-      }
-      */
-      return finder.nextSibling(el);
-    }
 
     function getEventHost (e) {
       // on touchend event, we have to use `e.changedTouches`
@@ -69624,6 +72595,537 @@ define('skylark-dragula/dragula',[
       }
       return host[coord];
     }
+
+    return {
+    	touchy,
+    	whichMouseButton,
+    	getRectWidth,
+    	getRectHeight,
+    	getEventHost,
+    	getCoord
+    };
+});
+define('skylark-dragula/_drake',[
+  "skylark-langx/skylark",
+  "skylark-langx-emitter/Emitter",
+  "skylark-devices-points/mouse",
+  "skylark-devices-points/touch",
+  "skylark-domx-noder",
+  "skylark-domx-finder",
+  "skylark-domx-geom",
+  "skylark-domx-eventer",
+  "skylark-domx-styler",
+  "./_helpers"
+],function(
+  skylark,
+  Emitter,
+  mouse,
+  touch,
+  noder,
+  finder,
+  geom,
+  eventer,
+  styler,
+  helpers
+){
+    'use strict';
+
+
+    var Drake = Emitter.inherit({
+        _source : null,   // source container
+        _item : null,     // item being dragged
+        _initialSibling : null, // reference sibling when grabbed
+        _currentSibling : null, // reference sibling now
+        _renderTimer : null, // timer for setTimeout renderMirrorImage
+        _copy : null, // item used for copying
+        _lastDropTarget : null, // last container item was over
+
+        _prepareArgs : function(e,args) {
+            return args;
+        },
+        init : function(options) {
+            this.containers = options.containers;
+            this.destroy = options.destroy;
+            this.options = options;
+            this.dragging = false;
+
+        },
+
+        isContainer : function(el) {
+            return this.containers.indexOf(el) !== -1 || this.options.isContainer(el);
+        },
+   
+        isCopy : function  (item, container) {
+            var o = this.options;
+            return typeof o.copy === 'boolean' ? o.copy : o.copy(item, container);
+        },
+
+
+        findDropTarget : function  (clientX, clientY) {
+            var elementBehindCursor  = noder.fromPoint(clientX, clientY),
+                target = elementBehindCursor,
+                self = this;
+
+            while (target && !accepted()) {
+              target = finder.parent(target);
+            }
+
+            return target;
+
+            function accepted () {
+              var droppable = self.isContainer(target);
+              if (droppable === false) {
+                return false;
+              }
+
+              var immediate = self.getImmediateChild(target, elementBehindCursor);
+              var reference = self.getReference(target, immediate, clientX, clientY);
+              var initial = self.isInitialPlacement(target, reference);
+              if (initial) {
+                return true; // should always be able to drop it right back where it was
+              }
+              return self.options.accepts(self._item, target, self._source, reference);
+            }
+        },
+
+        isInitialPlacement : function  (target, s) {
+            var sibling;
+            if (s !== void 0) {
+              sibling = s;
+            ///} else if (_mirror) {
+            ///  sibling = _currentSibling;
+            } else {
+              sibling = finder.nextSibling(this._copy || this._item);
+            }
+            return target === this._source && sibling === this._initialSibling;
+        },
+
+        getReference : function(dropTarget, target, x, y) {
+            var o = this.options;
+
+            var horizontal = o.direction === 'horizontal';
+
+            if (target !== dropTarget) {
+                return inside();
+            }  else {
+                return  outside();
+            }
+
+            return reference;
+
+            function outside () { // slower, but able to figure out any position
+              var len = dropTarget.children.length;
+
+              for (let i = 0; i < len; i++) {
+                let el = dropTarget.children[i];
+                //rect = el.getBoundingClientRect();
+                let rect = geom.boundingRect(el);
+                if (horizontal && (rect.left + rect.width / 2) > x) { return el; }
+                if (!horizontal && (rect.top + rect.height / 2) > y) { return el; }
+              }
+              return null;
+            }
+
+
+            function inside () { // faster, but only available if dropped inside a child element
+              
+              //var rect = target.getBoundingClientRect();
+              var  rect = geom.boundingRect(target);
+              if (horizontal) {
+                return resolve(x > rect.left + helpers.getRectWidth(rect) / 2);
+              }
+              return resolve(y > rect.top + helpers.getRectHeight(rect) / 2);
+              
+            }
+
+            function resolve (after) {
+              return after ? finder.nextSibling(target) : target;
+            }
+        },
+
+
+        getImmediateChild :   function(dropTarget, target) {
+            var immediate = target;
+            while (immediate !== dropTarget && finder.parent(immediate) !== dropTarget) {
+              immediate = finder.parent(immediate);
+            }
+            if (immediate === noder.root()) {
+              return null;
+            }
+            return immediate;
+        },
+
+        canStart : function (item) {
+            ///if (drake.dragging && _mirror) {
+            if (this.dragging) {
+              return;
+            }
+            if (this.isContainer(item)) {
+              return; // don't drag container itself
+            }
+
+            if (this.options.ignoreInputTextSelection) {
+                ///var clientX = getCoord('clientX', e);
+                ///var clientY = getCoord('clientY', e);
+                /////var elementBehindCursor = doc.elementFromPoint(clientX, clientY);
+                ///var elementBehindCursor = noder.fromPoint(clientX,clientY);
+                ///if (noder.isInput(elementBehindCursor)) {
+                if (noder.isInput(item)){
+                    return;
+                }
+            }
+
+
+            var handle = item;
+            var o = this.options;
+            while (finder.parent(item) && this.isContainer(finder.parent(item)) === false) {
+              if (o.invalid(item, handle)) {
+                return;
+              }
+              item = finder.parent(item); // drag target should be a top element
+              if (!item) {
+                return;
+              }
+            }
+            var source = finder.parent(item);
+            if (!source) {
+              return;
+            }
+            if (o.invalid(item, handle)) {
+              return;
+            }
+
+            var movable = o.moves(item, source, handle, finder.nextSibling(item));
+            if (!movable) {
+              return;
+            }
+
+            return {
+              item: item,
+              source: source
+            };
+        },
+
+        canMove : function  (item) {
+            return !! this.canStart(item);
+        },
+
+        manualStart : function (item) {
+            var context = this.canStart(item);
+            if (context) {
+                this.start(context);
+            }
+        },
+
+        start : function(context) {
+            if (this.isCopy(context.item, context.source)) {
+              this._copy = context.item.cloneNode(true);
+              this.emit('cloned', this._copy, context.item, 'copy');
+            }
+
+            this._source = context.source;
+            this._item = context.item;
+            this._initialSibling = this._currentSibling = finder.nextSibling(context.item);
+
+            this.dragging = true;
+            this.emit('drag', this._item, this._source);
+        },
+
+        over : function(clientX,clientY) {
+            var o = this.options,
+                item = this._copy || this._item,
+                self = this;
+
+
+            var elementBehindCursor = noder.fromPoint( clientX, clientY);
+            var dropTarget = this.findDropTarget(clientX, clientY);
+            var changed = dropTarget !== null && dropTarget !== this._lastDropTarget;
+            if (changed || dropTarget === null) {
+              out();
+              this._lastDropTarget = dropTarget;
+              over();
+            }
+            var parent = finder.parent(item);
+            if (dropTarget === this._source && this._copy && !o.copySortSource) {
+              if (parent) {
+                parent.removeChild(item);
+              }
+              return;
+            }
+
+            var reference;
+            var immediate = this.getImmediateChild(dropTarget, elementBehindCursor);
+            if (immediate !== null) {
+              reference = this.getReference(dropTarget, immediate, clientX, clientY);
+            } else if (o.revertOnSpill === true && !this._copy) {
+              reference = this._initialSibling;
+              dropTarget = this._source;
+            } else {
+              if (this._copy && parent) {
+                parent.removeChild(item);
+              }
+              return;
+            }
+            if (
+              (reference === null && changed) ||
+              reference !== item &&
+              reference !== finder.nextSibling(item)
+            ) {
+              this._currentSibling = reference;
+              dropTarget.insertBefore(item, reference);
+              this.emit('shadow', item, dropTarget, this._source);
+            }
+
+            
+            function moved (type) { 
+                self.emit(type, item, self._lastDropTarget, self._source); 
+            }
+            
+            function over () { 
+                if (changed) { 
+                    moved('over'); 
+                } 
+            }
+            
+            function out () { 
+                if (self._lastDropTarget) { 
+                    moved('out'); 
+                } 
+            }
+        },
+
+        end : function() {
+            if (!this.dragging) {
+              return;
+            }
+            var item = this._copy || this._item;
+            this.drop(item, finder.parent(item));
+        },
+
+        drop : function(item, target) {
+            var parent = finder.parent(item);
+            if (this._copy && this.options.copySortSource && target === this._source) {
+              parent.removeChild(this._item);
+            }
+            if (this.isInitialPlacement(target)) {
+              this.emit('cancel', item, this._source, this._source);
+            } else {
+              this.emit('drop', item, target, this._source, this._currentSibling);
+            }
+            this.cleanup();
+        },
+
+        remove : function () {
+            if (!this.dragging) {
+              return;
+            }
+            var item = this._copy || this._item;
+            var parent = finder.parent(item);
+            if (parent) {
+              parent.removeChild(item);
+            }
+            this.emit(_copy ? 'cancel' : 'remove', item, parent, this._source);
+            this.cleanup();
+        },
+
+        cancel : function  (revert) {
+            if (!this.dragging) {
+              return;
+            }
+            var o = this.options;
+
+            var reverts = arguments.length > 0 ? revert : o.revertOnSpill;
+            var item = this._copy || this._item;
+            var parent = finder.parent(item);
+            var initial = this.isInitialPlacement(parent);
+            if (initial === false && reverts) {
+              if (this._copy) {
+                if (parent) {
+                  parent.removeChild(this._copy);
+                }
+              } else {
+                this._source.insertBefore(item, this._initialSibling);
+              }
+            }
+            if (initial || reverts) {
+              this.emit('cancel', item, this._source, this._source);
+            } else {
+              this.emit('drop', item, parent, this._source, this._currentSibling);
+            }
+            this.cleanup();
+        },
+
+        cleanup : function  () {
+            var item = this._copy || this._item;
+            ///ungrab();
+            ///removeMirrorImage();
+            if (item) {
+              styler.removeClass(item, 'gu-transit');
+            }
+            if (this._renderTimer) {
+              clearTimeout(_renderTimer);
+            }
+            this.dragging = false;
+            if (this._lastDropTarget) {
+              this.emit('out', item, this._lastDropTarget, this._source);
+            }
+            this.emit('dragend', item);
+
+            this._source = 
+            this._item = 
+            this._copy = 
+            this._initialSibling = 
+            this._currentSibling = 
+            this._renderTimer = 
+            this._lastDropTarget = null;
+        }
+
+
+    });
+
+    
+    return Drake;
+});
+define('skylark-dragula/dragula',[
+  "skylark-langx/skylark",
+  "skylark-devices-points/mouse",
+  "skylark-devices-points/touch",
+  "skylark-domx-noder",
+  "skylark-domx-finder",
+  "skylark-domx-geom",
+  "skylark-domx-eventer",
+  "skylark-domx-styler",
+  "skylark-domx-plugins-dnd/draggable",
+  "skylark-domx-plugins-dnd/droppable",
+  "./_drake"
+],function(
+  skylark,
+  mouse,
+  touch,
+  noder,
+  finder,
+  geom,
+  eventer,
+  styler,
+  DndDraggable,
+  DndDroppable,
+  Drake
+){
+
+    'use strict';
+
+
+    function dragula (initialContainers, options) {
+      var len = arguments.length;
+      if (len === 1 && Array.isArray(initialContainers) === false) {
+        options = initialContainers;
+        initialContainers = [];
+      }
+
+      var o = options || {};
+      if (o.moves === void 0) { o.moves = always; }
+      if (o.accepts === void 0) { o.accepts = always; }
+      if (o.invalid === void 0) { o.invalid = invalidTarget; }
+      if (o.containers === void 0) { o.containers = initialContainers || []; }
+      if (o.isContainer === void 0) { o.isContainer = never; }
+      if (o.copy === void 0) { o.copy = false; }
+      if (o.copySortSource === void 0) { o.copySortSource = false; }
+      if (o.revertOnSpill === void 0) { o.revertOnSpill = false; }
+      if (o.removeOnSpill === void 0) { o.removeOnSpill = false; }
+      if (o.direction === void 0) { o.direction = 'vertical'; }
+      if (o.ignoreInputTextSelection === void 0) { o.ignoreInputTextSelection = true; }
+      if (o.mirrorContainer === void 0) { o.mirrorContainer = noder.body(); }
+
+      o.destroy = destroy;
+      var drake = new Drake(o);
+
+      if (o.removeOnSpill === true) {
+        drake.on('over', spillOver).on('out', spillOut);
+      }
+
+
+
+      ///var listener = listen(drake,o);
+      ///listener.events();
+
+
+
+      var _context;
+
+      drake.draggable = new  DndDraggable(noder.body(),{
+            ///source : options.items,
+            ///handle : options.handle,
+            ///draggingClass : options.draggingClass,
+            preparing : function(e) {
+                _context = drake.canStart(e.originalEvent.target);
+                if (_context) {
+                  e.dragSource = _context.item;
+                } else {
+                  e.dragSource = null;
+                }
+            },
+            started :function(e) {
+                e.ghost = e.dragSource;
+                drake.start(_context);
+
+            },
+            ended : function(e) {
+               drake.end();
+               _context = null;              
+            },
+            drake
+        });
+
+        
+        drake.droppable = new DndDroppable(noder.body(),{
+            started: function(e) {
+                if (e.dragging === drake.draggable) {
+                  e.acceptable = true;
+                  e.activeClass = "active";
+                  e.hoverClass = "over";                 
+                }
+            },
+            overing : function(e) {
+              drake.over(e.originalEvent.clientX,e.originalEvent.clientY);
+            },
+            dropped : function(e) {
+              //drake.end();
+            },
+            drake
+
+        });
+      return drake;
+
+   
+
+      function destroy () {
+        ///listener.events(true);
+        ///listener.release({});
+      }
+
+      function never () { 
+        return false; 
+      }
+      function always () { 
+        return true; 
+      }
+
+      function invalidTarget () {
+        return false;
+      }
+
+
+      function spillOver (el) {
+        styler.removeClass(el, 'gu-hide');
+      }
+
+      function spillOut (el) {
+        if (drake.dragging) { styler.addClass(el, 'gu-hide'); }
+      }
+
+    }
+
+
 
     return skylark.attach("intg.dragula",dragula);
 
