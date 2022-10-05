@@ -175,8 +175,18 @@ requirejs.config({
       main: 'main'
    },
    {
+     name : "skylark-domx-iframes",
+     location : "../node_modules/skylark-domx-iframes/dist/uncompressed/skylark-domx-iframes",
+      main: 'main'
+   },
+   {
      name : "skylark-domx-images",
      location : "../node_modules/skylark-domx-images/dist/uncompressed/skylark-domx-images",
+      main: 'main'
+   },
+   {
+     name : "skylark-domx-lists",
+     location : "../node_modules/skylark-domx-lists/dist/uncompressed/skylark-domx-lists",
       main: 'main'
    },
    {

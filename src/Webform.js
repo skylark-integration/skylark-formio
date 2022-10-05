@@ -541,7 +541,7 @@ define([
             this.element = element;
             this.loadRefs(element, { webform: 'single' });
             const childPromise = this.attachComponents(this.refs.webform);
-            this.addEventListener(this.element, 'keydown', this.executeShortcuts);
+            this.addEventListener(this.element, 'keydown', this.executeShortcuts.bind(this));
             this.currentForm = this;
             return childPromise.then(() => {
                 this.emit('render');
